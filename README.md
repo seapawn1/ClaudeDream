@@ -8,15 +8,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 ## 文件地图
 
-| 文件/目录 | 内容 |
-|---|---|
-| `.gitignore` | Git 忽略规则 |
-| `.env` | 本地环境变量，不入库 |
-| `seapawn.md` | 本地私人笔记，不入库 |
-| `.IDEO/` | 设计思考实战笔记 — 含 DesignMapping（Goal + Questions + Map + HMW + Target） |
-| `target-a-loop-trigger/` | Target A: Loop 触发 — 机制原型 |
-| `target-b-input-parsing/` | Target B: 输入读取与解析 — 功能原型 |
-| `target-c-comprehensive-judgment/` | Target C: 综合判定 ⭐ — 算法原型（核心） |
+详见 [.IDEO/README.md](.IDEO/README.md)。
 
 ## 当前状态
 
