@@ -39,11 +39,11 @@ flowchart TB
     end
 
     subgraph REFINE["🔄 提炼与更新 · 核心"]
-        R0(["三路并行输入（读取层 · Target B）"])
-        R0 --> R0a["🅐 对话路径\n读取 transcript JSONL\n→ 输出原始对话内容"]
-        R0 --> R0b["🅑 项目路径\n读取 git 历史 + 项目文件\n→ 输出项目背景与变更轨迹"]
-        R0 --> R0c["🅒 现有记忆路径\n读取 MEMORY.md + 记忆文件\n→ 输出记忆基线"]
-        R0a --> R3{{"⭐ 综合判定（判定层 · Target C）\n对话内容 × 项目状态 × 现有基线\n三路交叉印证"}}
+        R0(["顺序管线读取（Target B）"])
+        R0 --> R0a["🅐 对话内容\n原始对话文本\n（解析 transcript JSONL）"]
+        R0 --> R0b["🅑 项目状态\n项目背景 + git 变更轨迹\n（读取项目文件 + git log）"]
+        R0 --> R0c["🅒 记忆基线\nMEMORY.md + 记忆文件\n（读取记忆目录）"]
+        R0a --> R3{{"⭐ 综合判定（Target C）\n对话内容 × 项目状态 × 记忆基线\n三路交叉印证"}}
         R0b --> R3
         R0c --> R3
         R3 -->|"🆕 新信息"| R4a["创建记忆"]
