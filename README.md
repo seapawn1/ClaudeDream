@@ -8,7 +8,12 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 ## 文件地图
 
-详见 [.IDEO/README.md](.IDEO/README.md)。
+| 文件/目录 | 内容 |
+|---|---|
+| `.gitignore` | Git 忽略规则 |
+| `.env` | 本地环境变量，不入库 |
+| `seapawn.md` | 本地私人笔记，不入库 |
+| `.IDEO/` | 设计工作区 — [文件地图](.IDEO/README.md) · [DesignMapping](.IDEO/DesignMapping.md) · 原型目录 |
 
 ## 当前状态
 
