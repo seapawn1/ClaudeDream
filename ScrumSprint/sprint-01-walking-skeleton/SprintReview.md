@@ -80,3 +80,43 @@ claudedream-plugin/
 | E1 | 真实命令名是 `/claudedream:claudedream`（双段） | 插件命名空间机制 `plugin:skill` 决定。SprintBacklog 写的是 `/claudedream`。功能不受影响，但命令略啰嗦——是否重命名 skill 或调整插件名，归 PO 定。 |
 | R3（承接） | Product Backlog 措辞 `run claudedream` vs 实际 `/claudedream:claudedream` | 仍待 PO 决定是否同步 Product Goal / PB-Base-1 AC 措辞。 |
 | N1 | 语义触发薄版无防误触发 | 已知接受项（SprintBacklog R2）。`description` 已写「不要因对话提到记忆就自动启动」以降误触，但不承诺零误触；完整方案待 PB-Auto-1 补 IDEO。 |
+
+
+六 · 待做（PO review 后承接）
+Sprint 1 Increment 已交付后，PO 在 review 中追加的两块工作，尚未执行。记录待办步骤与已查清的机制事实，供后续承接。
+
+6.1 三处统一改名 → claude-dream
+PO 决定把插件相关命名统一为 claude-dream（原为 claudedream / claudedream-plugin，不一致）。范围：
+
+对象	现值	目标值
+插件目录	claudedream-plugin/	claude-dream/
+manifest name（plugin.json）	claudedream	claude-dream
+skill 目录名（= skill 名）	skills/claudedream/	skills/claude-dream/
+SKILL.md frontmatter name + 正文自指	claudedream / /claudedream	claude-dream / /claude-dream
+连锁影响：改名后真实命令从 /claudedream:claudedream → /claude-dream:claude-dream。
+
+待 PO 一并处理的措辞同步（这些是 PO 在 Backlog/IDEO 拍板的命令措辞，不随本次机械改名自动改）：
+
+ScrumSprint/ProductBacklog.md：Product Goal、PB-Base-1/2、PB-Auto-1.1 里的 /claudedream
+ScrumSprint/sprint-01-walking-skeleton/SprintBacklog.md：Sprint Goal 等处 /claudedream
+ScrumSprint/Architecture.md、.IDEO/DesignSprint/*：run claudedream（历史记录，是否改由 PO 定）
+本文件（SprintReview）第一~五节中的 claudedream-plugin/、/claudedream:claudedream
+改完必须：重跑 plugin validate + headless 真机验证命令名与三格流程（等同 W3/W7 重验一遍）。
+
+6.2 安装与分发（已查清官方机制）
+超出 Sprint 1 Goal 的新能力。目标：本项目自动用 + 可分发给别的项目/别人。三种加载机制事实：
+
+机制	做法	范围	适用
+A · --plugin-dir	启动加 --plugin-dir ./claude-dream	仅当前会话	开发调试（Sprint 1 已用）
+B · skills-directory	插件放进 .claude/skills/ 下	自动加载，无需 install/marketplace	本项目/个人自动用
+C · marketplace	建 marketplace.json → /plugin install	可跨项目、可分发	分发
+关键澄清：settings.json 不能直接指定本地插件目录加载；其 enabledPlugins / extraKnownMarketplaces 是配合 marketplace（机制 C） 用的。
+
+建议路径（机制 C 一箭双雕，待 PO 拍板）：
+
+建 marketplace catalog .claude-plugin/marketplace.json，列出 claude-dream 插件及 source（本地路径或 GitHub repo）。
+本项目 .claude/settings.json 写 extraKnownMarketplaces + enabledPlugins，团队 clone 后被提示安装。
+别人：/plugin marketplace add <源> → /plugin install claude-dream@<marketplace>。
+已知坑：project-scope 的 @skills-dir 插件只从「启动 Claude Code 的那个目录」的 .claude/skills/ 加载，不向上找仓库根——从子目录启动会漏。
+
+Scrum 定位：6.2 是新产品能力，宜作为新 PBI 进 Product Backlog 由 PO 排优先级，而非直接在本 Sprint 追加。
