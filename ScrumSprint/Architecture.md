@@ -69,16 +69,3 @@ flowchart TB
     INJECT --> ACCUM
     INJECT --> RIGHT
 ```
-
-## 实现同步（Sprint 2 反哺）
-
-> Map 为概念层（不变），此节记录实现层的具体化。随 Sprint 推进保持同步。
-
-| Map 节点 | Sprint 2 具体化 |
-|---|---|
-| R2 · 项目状态感知 | Claude Code 原生加载 README/CLAUDE.md + git 感知，Skill 用提示词确认——不重复 Bash cat |
-| R3 · 记忆基线 | Read 工具静默加载记忆文件；Bash grep 提取游标（`modified` + `originSessionId`） |
-| R4 · 对话内容 | `claude-code-log --detail low --format md --compact` 降噪（98.2%），落盘 `.claude-dream-context.md` |
-| R0 · 汇总→C | B 交接两样：① agent 上下文（项目+记忆+对话）② `.claude-dream-context.md`（持久化文件） |
-
-**设计分工**（Review 确立）：Bash → 游标提取 + 外部工具调用；Read → 文件静默加载；Claude Code 原生能力 → 不重复造轮子。
