@@ -9,6 +9,7 @@
 | 文件/目录 | 内容 |
 |---|---|
 | `DesignMapping.md` | Design Sprint Monday — Goal, Questions, Map, HMW, Target |
+| `DesignReview.md` | Design Sprint Review — 全流程回顾、验证结果、展望 |
 | `README.md` | 本文件 — 笔记空间说明 + 文件地图 |
 | `target-a-loop-trigger/` | Target A: Loop 触发 — [TargetMapping](target-a-loop-trigger/TargetMapping.md) · README |
 | `target-b-input-parsing/` | Target B: 输入读取与解析 — [TargetMapping](target-b-input-parsing/TargetMapping.md) · README |
@@ -21,3 +22,4 @@
 | **A: Loop 触发** | ✅ Review 完成 | 手动触发，自动 loop 延后 |
 | **B: 输入读取** | ✅ Review 完成 | 顺序管线，Map B/C 边界重新厘清 |
 | **C: 综合判定** ⭐ | ✅ Review 完成 | Memory Compiler（compiler compile 模型 + git 漂移）— 四分类原型验证通过 |
+| **整体 Design Sprint** | ✅ Design Review 完成 | 全流程 Define → Ideate → Prototype → Test → Review 闭环 |
