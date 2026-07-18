@@ -6,3 +6,5 @@ __pycache__/
 .venv/
 *.pyc
 setting.local.json
+*.code-workspace
+.claude/worktrees/
