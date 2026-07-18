@@ -24,4 +24,5 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | 2026-07-18 | Target A 草图 ✅ | 决策：手动触发，自动 loop 延后；草图写入 TargetMapping.md |
 | 2026-07-18 | 方案类比 ✅ | auto-dream · auto-memory · claude-memory-compiler 入库 |
 | 2026-07-18 | 记忆系统 ✅ | 首个记忆文件创建，MEMORY.md 索引就绪 |
-| 下一步 | Target B / C | 输入读取 → 综合判定原型 |
+| 2026-07-18 | Target B 草图 ✅ | 顺序管线方案选定，Map B/C 边界厘清；草图写入 TargetMapping.md |
+| 下一步 | Target C | 综合判定原型 |
