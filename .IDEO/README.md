@@ -18,6 +18,6 @@
 
 | Target | 阶段 | 备注 |
 |---|---|---|
-| **A: Loop 触发** | ✅ 方案草图完成 | 手动触发，自动 loop 延后 |
-| **B: 输入读取** | ✅ 方案草图完成 | 顺序管线，Map B/C 边界重新厘清 |
-| **C: 综合判定** ⭐ | ✅ 原型已验证 | Memory Compiler（compiler compile 模型 + git 漂移）— 四分类验证通过 |
+| **A: Loop 触发** | ✅ Review 完成 | 手动触发，自动 loop 延后 |
+| **B: 输入读取** | ✅ Review 完成 | 顺序管线，Map B/C 边界重新厘清 |
+| **C: 综合判定** ⭐ | ✅ Review 完成 | Memory Compiler（compiler compile 模型 + git 漂移）— 四分类原型验证通过 |
