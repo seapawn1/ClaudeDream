@@ -76,9 +76,13 @@
 | 与 B 边界契合 | 该工具只做「读取 + 降噪 + 结构化」，不做概念提取——天然卡在 B/C 边界（B 只读不判）上 | 源码：无 Extract 语义 |
 | 多会话 / 压缩识别 | 支持项目级目录聚合、跨会话时间排序、`--from-date/--to-date` 自然语言过滤；能解析 `/compact` 边界（`CompactedSummaryMessage` / `compact_boundary`） | `models.py` |
 | 本机运行时（实测 2026-07-19） | ❌ 无 `uv`/`uvx`（含常见安装路径）；✅ 有 Python 3.11.5 + `pip`/`pip3`（在 PATH）+ `py` launcher。→ **uvx 一行方案当场否掉**，接入收敛为 pip 装 / vendored 两选一 | git-bash 实测 |
-| ⚠️ 残余不确定性 | 上述 PATH 是 git-bash 的；**插件 skill 执行时的 shell 环境可能不同**。W1 第一步须实测确认，不得假设 | — |
-| 对话素材充分性 | `~/.claude/projects/d--ClaudeDream/` 下数十个 jsonl（6KB–1.4MB），足够验证「多会话 + 大文件降噪」 | 实测 |
-| 上次做梦游标 | 无现成机制。约定从记忆文件 frontmatter 的 sources（session id / 时间）推断上次处理边界——本 Sprint W6 落地 | DoD「双源追踪」延伸 |
+| ⚠️ 残余不确定性 | ~~上述 PATH 是 git-bash 的；插件 skill 执行时的 shell 环境可能不同~~ → ✅ W1 已解除：skill 环境与 git-bash 一致，Python 3.11.5 + pip 均可用 | — |
+| W1 实测结论（2026-07-19） | ✅ `claude-code-log` v1.5.0 **已全局安装**（pip editable install，文件在 site-packages），`PATH` 可见、命令可直接调用。**不需要重新安装、不需要 vendored**。接入方式：`claude-code-log <dir> --detail low --format md --compact -o -`（stdout 输出、stderr 分离） | 本会话实测 |
+| W2 接入方式 | **直接 CLI 调用**。命令模板：`claude-code-log "$TRANSCRIPT_DIR" --detail low --format md --compact -o - 2>/dev/null`。已落盘于 [SKILL.md](../../claude-dream/skills/claude-dream/SKILL.md) 格 3.3 | — |
+| W3 降噪验证 | ✅ 277KB jsonl：`full` 4,452 行 → `low` 79 行（**98.2% 降噪**）；6MB jsonl → 2,678 行干净对话。compact 模式下 `<summary>`（/compact 摘要段）保留。`--detail low` 剥除工具调用噪音、保留对话交互+WebSearch/WebFetch/Task——输出即「喂给下游 LLM 的 condensed Markdown」 | 本会话实测 |
+| ⚠️ `--from-date` ISO 格式偏差 | `--from-date "2026-07-19"` 仅返回 header（4 行），同日自然语言 `"today"` 返回 10,605 行。dateparser 对 ISO 日期（YYYY-MM-DD）解析有时区/零点偏差。**对策**：游标日期向前偏移一天（`date -d "$CURSOR_DATE -1 day"`）或改用自然语言；偏差在 1 天内，对本 Sprint「增量做梦」精度无实质影响 | 本会话实测 |
+| 对话素材充分性 | `~/.claude/projects/d--ClaudeDream/` 下 **39 个 jsonl**（1.5KB–6MB），全量 `--detail low` 输出 ~10,600 行干净 Markdown——充分验证「多会话 + 大文件降噪」 | 实测 |
+| 上次做梦游标 | 无现成机制。约定从记忆文件 frontmatter 的 `modified` / `originSessionId` 推断上次处理边界——本 Sprint W6 落地。实测：最新 `modified` = `2026-07-18T18:42:56.867Z`，游标推断可用 | DoD「双源追踪」延伸 |
 
 ### 4.2 PO 拍板
 
@@ -88,9 +92,10 @@
 
 | # | 事项 | 状态 | 应对 |
 |---|---|---|---|
-| R1 | 探路结果反向影响后续体量：若 pip 路线在 skill 环境受阻、须退 vendored，PB-Base-5/6 工作量上涨，5 条全纳入的 Sprint 可能超载 | 已识别 | W1-W3 探路优先；一旦确认受阻，立即与 PO 重新协商 scope（Scrum 允许 Sprint 内 scope 协商，Sprint Goal 不变） |
-| R2 | 插件 skill 执行环境的 shell/PATH 未必等于 git-bash 探测结果 | 已识别 | W1 第一步实测确认，不假设 |
-| R3 | vendored 代价：claude-code-log 解析核心（models.py 2239 行 + factories/ + converter/dag + pydantic 依赖）盘根错节，无法只摘几个文件；vendored＝把整包连依赖打进插件，且要手动跟上游同步、会腐烂 | 已识别 | 优先 pip 路线；vendored 作为兜底，选它时须在 Review 明确标注维护代价 |
+| ~~R1~~ | ~~探路结果反向影响后续体量~~ | ✅ 已关闭 | pip 路线在 skill 环境可用，无需 vendored，scope 不变 |
+| ~~R2~~ | ~~插件 skill 执行环境的 shell/PATH 未必等于 git-bash 探测结果~~ | ✅ 已关闭 | W1 实测确认：skill 环境与 git-bash 一致，Python 3.11.5 + pip 均可用 |
+| ~~R3~~ | ~~vendored 代价~~ | ✅ 已关闭 | 无需 vendored——claude-code-log 已全局安装、可直接调用 |
+| R7 | `--from-date` ISO 格式有时区/零点偏差（`"2026-07-19"` 仅返回 4 行，`"today"` 返回 10,605 行） | 已识别 | 游标日期向前偏移一天或改用自然语言；偏差 ≤1 天，对增量做梦精度无实质影响 |
 | R4 | 「上次做梦游标」无现成机制，靠 sources 推断，可能不精确 | 已接受 | 本 Sprint 先做能用的推断（W6）；精确化留后续 |
 | R5 | DiaryAgent 是异构项目，其 jsonl / 记忆 / git 形态可能与 ClaudeDream 不同，暴露本项目验不出的问题 | 已识别（是特性非缺陷） | W9-W10 换环境验证的正是这个——两段式设计就为把「工具可用」与「跨项目可用」分开验 |
 | R6 | 首次做梦无游标：ClaudeDream 现有记忆是上轮 Design Sprint 手写/原型产物（带 `originSessionId`/`modified`，可作准游标），但 DiaryAgent 大概率零记忆＝真·冷启动 | 已识别（设计决策，非坑） | 无游标＝全量首读所有会话（W6/W7 两态）。本项目验「有基线增量」、DiaryAgent 验「首次全量」，两模式真机各覆盖一次。若全量会话过多需上限兜底，留后续 |
