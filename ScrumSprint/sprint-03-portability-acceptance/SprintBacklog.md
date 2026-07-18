@@ -35,8 +35,8 @@
 
 | # | 工作项 | 归属 | 验收信号 |
 |---|---|---|---|
-| W1 | SKILL.md 格 3.3 加入自动检测+安装逻辑：`command -v` 失败 → `pip install` → 再试 | PB-Base-5.2 ①③ | 首次运行自动安装，无需用户干预 |
-| W2 | 真机验证：在无全局 claude-code-log 的环境，确认 `/claude-dream` 格 3.3 自动安装后正常执行 | PB-Base-5.2 ② | 新环境端到端通过 |
+| W1 | SKILL.md 格 3.3 加入自动检测+安装逻辑：`command -v` 失败 → `pip install` → 再试 | PB-Base-5.2 ①③ | ✅ 首次运行自动安装，无需用户干预 |
+| W2 | 真机验证：卸载 claude-code-log → 跑检测逻辑 → 自动 pip install → 恢复可用（~5 秒） | PB-Base-5.2 ② |  ✅ 11 依赖自动解析，`claude-code-log --help` 正常 |
 | W3 | seapawn 异地项目亲手安装 + 执行——pawn 观察、不指导 | PB-Base-5.3 ①② | 插件被识别、四格无卡壳 |
 | W4 | seapawn 满意度判定 + 摩擦点收集 → 记录为 Product Backlog feedback | PB-Base-5.3 ③④ | seapawn 说"满意" |
 | W5 | 根据 W4 反馈做一轮快速 polish（如果 feedback 有可速修项） | PB-Base-5.3 闭环 | feedback 项修复或记录 |
