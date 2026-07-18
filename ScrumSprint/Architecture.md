@@ -31,8 +31,8 @@ flowchart TB
         R1["① 确认项目"]
         R2["② 项目状态感知\n项目背景 + git 轨迹"]
         R3["③ 记忆基线\nMEMORY.md + 记忆文件"]
-        R4["④ 对话内容\ntranscript JSONL"]
-        R1 & R2 & R3 & R4 --> R0(["⑤ 汇总 → C:\n四路结构化摘要"])
+        R4["④ 对话内容\ntranscript JSONL\n（python 工具降噪）"]
+        R1 & R2 & R3 & R4 --> R0(["⑤ 汇总 → C:\n当前背景上下文\n（原样拼装，不摘要）"])
     end
 
     subgraph COMPILE["🔄 编译 · Target C · Memory Compiler"]
