@@ -2,12 +2,19 @@
 
 一个 Claude Code 插件，升级 Claude Code 的记忆系统，使 agent 免于腐烂，与用户和项目保持同步。
 
-
 # DiaryAgent
 
 一个研究如何"自动写日记"的智能体项目，目的是让 Agent 每晚自动生成当天日记，方便日后回顾。
 
 # 项目方法论：Scrum Sprint / IDEO design thinking
+
+## 核心纪律
+
+**务必仔细检查，总是遵守。**
+
+- **不假设**：没有来源就标为推测，不假设答案。
+- **不藏困惑**：关键不确定要摊开，不隐藏困惑。
+- **不急于执行**：先和用户深度交流，不急于行动。
 
 ## 核心声明
 
@@ -36,32 +43,3 @@ Various processes, techniques and methods can be employed within the framework. 
 ## IDEO Guide
 
 IDEO Design Thinking is an iterative, human-centered process for understanding users, challenging assumptions, reframing problems, and creating solutions through prototyping and testing.
-
-# 项目资产索引
-
-## 目录结构
-
-| 目录 | 内容 |
-|---|---|
-| `.IDEO/DesignSprint/` | 设计 Sprint 完整闭环（Define → Prototype → Test → Review），含三 Target 方案、Map、Memory Compiler 原型 |
-| `ScrumSprint/` | 当前开发 Sprint 工作空间 |
-| `reference/agent-memory/` | 方案类比参考：auto-dream · auto-memory · claude-memory-compiler |
-
-## 架构决策
-
-**核心方案：Memory Compiler。** 以 claude-memory-compiler 的 compile → index → log 模型为主基座，融合 auto-dream 信任边界、auto-memory 排除清单、ClaudeDream 原创 git 漂移感知。
-
-**三 Target：**
-- **A（Loop 触发）** — 手动触发 `run claudedream`，自动定时延后
-- **B（输入读取）** — 四路输入（项目状态感知 + 记忆基线 + 对话内容）→ 汇总给 C
-- **C（综合判定）** — Memory Compiler：Gate → Extract → Cross-Reference → Classify → Output
-
-**关键边界：** B 只取数据不判定，C 负责全部语义判断。确定性层（hash gate、lint）与语义层（Compile prompt）分离。
-
-## 起点指引
-
-新会话启动后：
-1. 读 `ScrumSprint/README.md` 了解当前正在做什么
-2. 读 `.IDEO/DesignSprint/DesignReview.md` 了解完整设计决策
-3. 读 `README.md` 了解文件地图和当前状态
-
