@@ -12,7 +12,8 @@
 | [DefinitionOfDone.md](DefinitionOfDone.md) | **DoD** —— Increment 的全局质量底线（PO 已认可） |
 | [Architecture.md](Architecture.md) | 架构地图 —— 摘抄自 DesignMapping，供 Backlog「架构定位」对照 |
 | [sprint-01-walking-skeleton/](sprint-01-walking-skeleton/SprintBacklog.md) | **Sprint 1** —— Walking Skeleton：[Backlog](sprint-01-walking-skeleton/SprintBacklog.md) · [Review](sprint-01-walking-skeleton/SprintReview.md)；产出落此文件夹 |
-| [sprint-02-read-pipeline/](sprint-02-read-pipeline/SprintBacklog.md) | **Sprint 2** —— 完整读取管线：[Backlog](sprint-02-read-pipeline/SprintBacklog.md) · [Review](sprint-02-read-pipeline/SprintReview.md)；产出落此文件夹 |
+| [sprint-02-read-pipeline/](sprint-02-read-pipeline/SprintBacklog.md) | **Sprint 2** —— 完整读取管线：[Backlog](sprint-02-read-pipeline/SprintBacklog.md) · [Review](sprint-02-read-pipeline/SprintReview.md) |
+| [sprint-03-portability-acceptance/](sprint-03-portability-acceptance/SprintBacklog.md) | **Sprint 3** —— 可迁移性+真人验收：[Backlog](sprint-03-portability-acceptance/SprintBacklog.md) · [Review](sprint-03-portability-acceptance/SprintReview.md) |
 
 ## 当前状态
 
@@ -22,7 +23,8 @@
 | Product Backlog | ✅ 已拆解（20 条，PB-Base/Comp/Auto/Scale 四组） |
 | DoD | ✅ PO 已认可（6 类底线，Sprint 2 增补换环境验证 + 独立验证） |
 | Sprint 1 | ✅ Increment 已交付 — [Walking Skeleton](sprint-01-walking-skeleton/SprintReview.md)：8 工作项全通过，3 PBI 达 DoD；产物 `claude-dream/` |
-| Sprint 2 | ✅ Increment 已交付 — [完整读取管线](sprint-02-read-pipeline/SprintReview.md)：10 工作项全通过，5 PBI 达 DoD；产物 `claude-dream/` v0.2.0 + `.claude-dream-context.md` |
+| Sprint 2 | ✅ Increment 已交付 — [完整读取管线](sprint-02-read-pipeline/SprintReview.md)：10 工作项全通过，5 PBI 达 DoD |
+| Sprint 3 | ✅ Increment 已交付 — [可迁移性+真人验收](sprint-03-portability-acceptance/SprintReview.md)：5 工作项全通过，2 PBI 达 DoD；PO 满意 |
 
 ## 背景参考
 

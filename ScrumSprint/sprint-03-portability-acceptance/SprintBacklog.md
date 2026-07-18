@@ -23,8 +23,8 @@
 
 | 编号 | 标题 | size | 用户故事 | Acceptance Criteria | 依赖 | 状态 |
 |---|---|---|---|---|---|---|
-| PB-Base-5.2 | 插件可迁移性——依赖自包含 | S | 作为 Claude Code 用户，我想在任何项目上安装 ClaudeDream 插件后直接使用，不需要提前手动 pip install 任何东西。 | ① SKILL.md 格 3.3 检测 `claude-code-log` 不可用时**自动 `pip install`**——不需用户手动操作；② 在新环境（无全局 claude-code-log）上验证：安装插件后 `/claude-dream` 格 3.3 自动安装依赖并正常执行；③ 自动安装失败时给出清晰的手动指引，不静默跳过。 | 无 | 就绪 |
-| PB-Base-5.3 | 用户手动安装验收——异地真机 | S | 同上 | 同上 | PB-Base-5.2 | 就绪 |
+| PB-Base-5.2 | 插件可迁移性——依赖自包含 | S | 同上 | ① ✅ 自动 `pip install`；② ✅ 卸载→检测→自动装回，W3 异地真机通过；③ ✅ 失败时打印手动命令 | 无 | ✅ 已完成 |
+| PB-Base-5.3 | 用户手动安装验收——异地真机 | S | 同上 | ① ✅ PowerShell `--plugin-dir` 成功；② ✅ 四格无卡壳；③ ✅ PO：「过，我很满意」；④ ✅ 无摩擦点 | PB-Base-5.2 | ✅ 已完成 |
 | PB-Base-5.3 | 用户手动安装验收——异地真机 | S | 作为 PO（seapawn），我想在任意一个非 ClaudeDream 项目上，从零手动安装插件 → 执行 `/claude-dream` → 对产出结果满意——整个过程不卡壳、不需开发者指导。 | ① seapawn 在终端 `cd <异地项目>` → 安装插件（`--plugin-dir` 或 marketplace，行为等价）→ 插件被识别；② 执行 `/claude-dream`，四格流程完整走完，不报错、不卡壳、不需 pawn 远程指导；③ seapawn 阅读格 4 汇总框 + 对话降噪产物后，主观判断「这东西有用、我愿意继续用」；④ 过程中遇到的任何摩擦点记录为 feedback，不要求 Sprint 内全部解决但必须记录。 | PB-Base-5.2 | 就绪 |
 
 **PB-Base-5.2 方案**（PO 已拍板）：SKILL.md 格 3.3 自动检测 + `pip install claude-code-log`——不 vendored（尊重上游开源项目），不要求用户手动操作。

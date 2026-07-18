@@ -24,8 +24,6 @@
 
 | 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
 |---|---|---|---|---|---|---|
-| PB-Base-5.2 | 插件可迁移性——依赖自包含 | 插件装到任意项目即可用，无需手动 pip install 等环境准备 | 角色·插件 | S | 已细化 | 从 PB-Base-5.1 分化。当前隐式依赖全局 pip 安装的 `claude-code-log`。<br><br>**AC**：① SKILL.md 格 3.3 检测 `claude-code-log` 不可用时自动 `pip install`——不需用户手动操作；② 在新环境上验证自动安装+正常执行；③ 自动安装失败时给出清晰手动指引，不静默跳过。<br><br>**方案**（PO 已拍板）：自动 pip install——不 vendored（尊重上游开源），不要求 plugin.json 依赖声明。 |
-| PB-Base-5.3 | 用户手动安装验收——异地项目真机体验 | seapawn（PO）在任意一个非 ClaudeDream 项目上，从零手动安装插件 → 执行 `/claude-dream` → 对产出结果满意 | 角色·插件 | S | 已细化 | 与 5.2 互补——5.2 管"技术上不缺依赖"，5.3 管"真人觉得好用"。<br><br>**AC**：① seapawn 在终端 `cd <异项目>` → 手动敲 `claude --plugin-dir ...`（或 marketplace 安装）→ 插件被识别；② 执行 `/claude-dream`，四格流程完整走完，不报错、不卡壳、不需开发者（pawn）远程指导；③ seapawn 阅读格 4 汇总框 + 对话降噪产物后，主观判断「这东西有用、我愿意继续用」；④ 过程中遇到的任何摩擦点（命令太长、输出难读、路径看不懂等）记录为 feedback，不要求 Sprint 内全部解决但必须记录。<br><br>**依赖**：PB-Base-5.2（依赖自包含）应先完成，否则异地安装大概率失败 |
 | PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 未开始 | ✅ 原型验证。**输入**：B 产出的 `.claude-dream-context.md`（对话降噪）+ agent 上下文（项目感知+记忆基线） |
 | PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 未开始 | ✅ 原型验证 |
 | PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 未开始 | ✅ 原型验证（🗑️⚡ 待测） |
@@ -51,7 +49,9 @@
 | 🟢 PB-Base-4 | 记忆基线读取 | 有可靠的比对基线 | 读取③ · B | S | 已完成 | Sprint 2 已交付。Read 工具静默加载 + 游标提取（frontmatter `modified`/`originSessionId`）。⚠️ 游标精度可改进：当前依赖记忆文件 frontmatter，后续 C 落盘时可写专门的游标文件 |
 | 🟢 PB-Base-5.1 | 对话读取工具接入 | 对话读取有稳定的代码级降噪底座 | 读取④ 底座 · B | S | 已完成 | Sprint 2 已交付。claude-code-log v1.5.0 全局安装、直接 CLI 调用、`--detail low` 降噪 98.2%。⚠️ `--from-date` ISO 格式有 dateparser 时区偏差（偏移-1天兜底） |
 | 🟢 PB-Base-5 | 对话内容解析 | 拿到降噪后的多会话对话素材 | 读取④ · B | M | 已完成 | Sprint 2 已交付。Review 修正：从 stdout 喷改为落盘 `.claude-dream-context.md` + Read 静默加载。增量（游标后）/全量（冷启动）两种模式跨项目验证通过 |
-| 🟢 PB-Base-6 | 汇总交接 C · 当前背景上下文 | C 拿到自包含上下文即可开工 | 读取⑤ · B | S | 已完成 | Sprint 2 已交付。格 4 摘要框 + 落盘文件。B/C 交接契约确立：C 输入 = agent 上下文（项目+记忆+对话）+ `.claude-dream-context.md` |
+| 🟢 PB-Base-6 | 汇总交接 C · 当前背景上下文 | C 拿到自包含上下文即可开工 | 读取⑤ · B | S | 已完成 | Sprint 2 已交付 |
+| 🟢 PB-Base-5.2 | 插件可迁移性——依赖自包含 | 插件装到任意项目即可用，无需手动 pip install | 角色·插件 | S | 已完成 | Sprint 3 已交付；auto `pip install`，异地真机验证通过 |
+| 🟢 PB-Base-5.3 | 用户手动安装验收——异地真机 | seapawn 异地亲手安装+跑通+满意 | 角色·插件 | S | 已完成 | Sprint 3 已交付；PO：「过，我很满意」 |
 | 🟢 PB-Auto-1.1 | 语义召唤触发 · 薄版（仅能识别） | 自然语言直接跳入入口，不含防误触发 | 触发 · A | S | 已完成 | 从 PB-Auto-1 分化（PO 拍板）；Sprint 1 已交付 |
 
 *说明：*
