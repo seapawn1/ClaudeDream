@@ -14,7 +14,7 @@
 | [sprint-01-walking-skeleton/](sprint-01-walking-skeleton/SprintBacklog.md) | **Sprint 1** —— Walking Skeleton：[Backlog](sprint-01-walking-skeleton/SprintBacklog.md) · [Review](sprint-01-walking-skeleton/SprintReview.md)；产出落此文件夹 |
 | [sprint-02-read-pipeline/](sprint-02-read-pipeline/SprintBacklog.md) | **Sprint 2** —— 完整读取管线：[Backlog](sprint-02-read-pipeline/SprintBacklog.md) · [Review](sprint-02-read-pipeline/SprintReview.md) |
 | [sprint-03-portability-acceptance/](sprint-03-portability-acceptance/SprintBacklog.md) | **Sprint 3** —— 可迁移性+真人验收：[Backlog](sprint-03-portability-acceptance/SprintBacklog.md) · [Review](sprint-03-portability-acceptance/SprintReview.md) |
-| [sprint-04-compile-write/](sprint-04-compile-write/SprintBacklog.md) | **Sprint 4** —— 编译层落盘：[Backlog](sprint-04-compile-write/SprintBacklog.md)（🔵 Planning 已定，执行中）；产出落此文件夹 |
+| [sprint-04-compile-write/](sprint-04-compile-write/SprintBacklog.md) | **Sprint 4** —— 编译层落盘：[Backlog](sprint-04-compile-write/SprintBacklog.md) · [Review](sprint-04-compile-write/SprintReview.md)；产出落此文件夹 |
 
 ## 当前状态
 
@@ -26,7 +26,7 @@
 | Sprint 1 | ✅ Increment 已交付 — [Walking Skeleton](sprint-01-walking-skeleton/SprintReview.md)：8 工作项全通过，3 PBI 达 DoD；产物 `claude-dream/` |
 | Sprint 2 | ✅ Increment 已交付 — [完整读取管线](sprint-02-read-pipeline/SprintReview.md)：10 工作项全通过，5 PBI 达 DoD |
 | Sprint 3 | ✅ Increment 已交付 — [可迁移性+真人验收](sprint-03-portability-acceptance/SprintReview.md)：5 工作项全通过，2 PBI 达 DoD；PO 满意 |
-| Sprint 4 | 🔵 Planning 已定，执行中 — [编译层落盘](sprint-04-compile-write/SprintBacklog.md)：7 PBI，10 工作项；Target C 首次写记忆 |
+| Sprint 4 | ✅ Increment 已交付 — [编译层落盘](sprint-04-compile-write/SprintReview.md)：10 工作项全通过，7 PBI 达 DoD；DoD 首次六类全部生效；独立审计 PASS |
 
 ## 背景参考
 

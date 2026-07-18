@@ -24,13 +24,6 @@
 
 | 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
 |---|---|---|---|---|---|---|
-| 🔵 PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 进行中 | Sprint 4 纳入；硬约束排除清单 + sentinel 契约。**输入**：B 产出的当前背景上下文 |
-| 🔵 PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 进行中 | Sprint 4 纳入；whole-KB-in-context + 3-7 概念基数上限 + git 漂移候选标记 |
-| 🔵 PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 进行中 | Sprint 4 纳入；🆕⚡🗑️🔁 四分类 + 保守删除。⚠️ compiler 无此类——ClaudeDream 改进 |
-| 🔵 PB-Base-10 | 原创机制 · 防腐涂料 | 感知旧记忆被修正、与项目同步 | 无（横切） | M | 进行中 | Sprint 4 纳入；双源追踪 / superseded / git 漂移标注——横切进 8/9/11 |
-| 🔵 PB-Base-11 | 写 / 更新 / 删记忆文件 | 编译结果落盘 | 输出① · C | S | 进行中 | Sprint 4 纳入；首次动手写磁盘 | **输入**：C 的判定结论；**输出**：记忆文件 + 更新游标（`modified` + `originSessionId`） |
-| 🔵 PB-Base-12 | MEMORY.md 索引维护 | 记忆能被 Claude Code 高效加载 | 输出② | S | 进行中 | Sprint 4 纳入（PO 拍板）；随 11 同批产出 |
-| 🔵 PB-Base-13 | 变更摘要报告 | 用户能审阅改了什么、为什么 | 输出③ | S | 进行中 | Sprint 4 纳入（PO 拍板）；含每条理由，补 compiler log.md 缺的 why 字段 |
 | PB-Comp-1 | 判定深化测试 | 淘汰 / 冲突 / 漂移路径可信 | 无 | M | 延后 | 原型未测路径（🗑️ / ⚡ / SQ3 / SQ4） |
 | PB-Comp-2 | 确定性层 · Hash Gate | 跳过无变化、省算力 | 做梦流程前置门 | M | 延后 | 整条做梦流程前判定 hash：变化则进行、不变则跳过（省算力）。Sprint 2 明确不做、全部通过 |
 | PB-Comp-3 | 质量层 · Lint | 结构健康、防腐烂 | 无 | L | 延后 | compiler lint 层 |
@@ -53,6 +46,13 @@
 | 🟢 PB-Base-5.2 | 插件可迁移性——依赖自包含 | 插件装到任意项目即可用，无需手动 pip install | 角色·插件 | S | 已完成 | Sprint 3 已交付；auto `pip install`，异地真机验证通过 |
 | 🟢 PB-Base-5.3 | 用户手动安装验收——异地真机 | seapawn 异地亲手安装+跑通+满意 | 角色·插件 | S | 已完成 | Sprint 3 已交付；PO：「过，我很满意」 |
 | 🟢 PB-Auto-1.1 | 语义召唤触发 · 薄版（仅能识别） | 自然语言直接跳入入口，不含防误触发 | 触发 · A | S | 已完成 | 从 PB-Auto-1 分化（PO 拍板）；Sprint 1 已交付 |
+| 🟢 PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 已完成 | Sprint 4 已交付；6 条排除 + sentinel `NOTHING_WORTH_RECORDING` |
+| 🟢 PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 已完成 | Sprint 4 已交付；whole-KB-in-context + 3-7 基数上限 + git 漂移候选 |
+| 🟢 PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 已完成 | Sprint 4 已交付；🆕⚡🗑️🔁 + 保守删除。ClaudeDream 对 compiler 的改进 |
+| 🟢 PB-Base-10 | 原创机制 · 防腐涂料 | 感知旧记忆被修正、与项目同步 | 无（横切） | M | 已完成 | Sprint 4 已交付；双源追踪/superseded/git 漂移——横切进 8/9/11 |
+| 🟢 PB-Base-11 | 写 / 更新 / 删记忆文件 | 编译结果落盘 | 输出① · C | S | 已完成 | Sprint 4 已交付；首次动手写磁盘，两环境验证通过 |
+| 🟢 PB-Base-12 | MEMORY.md 索引维护 | 记忆能被 Claude Code 高效加载 | 输出② | S | 已完成 | Sprint 4 已交付；ClaudeDream 8=8，DiaryAgent 5=5 |
+| 🟢 PB-Base-13 | 变更摘要报告 | 用户能审阅改了什么、为什么 | 输出③ | S | 已完成 | Sprint 4 已交付；含每条理由，补 compiler log.md 缺的 why 字段 |
 
 *说明：*
 - *编号前缀标阶段：`PB-Base`（MVP 薄切片，跑通即"手动形态"可用）/ `PB-Comp`（判定硬化 & 编译器完备化）/ `PB-Auto`（自动化触发）/ `PB-Scale`（规模生态）。同前缀内顺序编号；未来某条分化用 `PB-Base-1.1`——保父级、可无限细分、不冲击其它号。*
