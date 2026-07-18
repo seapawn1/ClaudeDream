@@ -148,13 +148,24 @@ fi
 ```
 
 - **若无记忆（首次做梦/冷启动）**：明确标记「无游标」→ 格 3.3 走全量首读。
-- **若有记忆**：提取 `CURSOR_DATE` 供格 3.3 做增量过滤。
+- **若有记忆**：从脚本输出中提取 `CURSOR_DATE` 的值（格式如 `2026-07-18T18:42:56.867Z`），**你必须记住这个值**——下一步格 3.3 构造命令时，把实际的日期填入 `${CURSOR_DATE}` 占位符。
+
+> ⚠️ 注意：bash 变量不会在独立调用之间自动传递。你必须**读取本步输出**，提取 `CURSOR_DATE=` 后面的实际值，然后在格 3.3 中**手动替换**命令模板里的 `${CURSOR_DATE}` 为这个值。如果本步输出 `CURSOR_DATE=` 为空或不存在，则 `CURSOR_DATE` 整体为空字符串，格 3.3 应走全量首读。
 
 ### 3.3 对话内容解析（W7 · PB-Base-5）
 
 **目标**：用 `claude-code-log` 把 transcript jsonl 转化成降噪后的干净对话流。
 
 **前提**：`claude-code-log` 需已安装（`pip install claude-code-log`）。如果命令不可用，报告并终止此路（其他路继续）。
+
+**执行前**：从上一步格 3.2 的输出中确认游标状态。
+- 如果上一步输出包含 `CURSOR_DATE=<非空值>`（如 `CURSOR_DATE=2026-07-18T18:42:56.867Z`）→ **增量模式**：在下面 bash 脚本的**第一行之前**插入 `CURSOR_DATE="<该日期值>"`（用实际值替换尖括号部分），使 `if [ -n "${CURSOR_DATE:-}" ]` 走入增量分支。
+- 如果上一步输出 `CURSOR_DATE=` 为空或不存在 → **全量首读模式**：不做任何修改，直接运行下面的脚本（`CURSOR_DATE` 为空，自动走 else 分支）。
+
+**示例**：若格 3.2 输出 `CURSOR_DATE=2026-07-18T18:42:56.867Z`，则在下方脚本开头加上：
+```bash
+CURSOR_DATE="2026-07-18T18:42:56.867Z"
+```
 
 ```bash
 CC_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -178,16 +189,20 @@ echo ""
 # 根据游标决定读取范围
 # CURSOR_DATE 由格 3.2 导出（格式如 2026-07-18T10:50:24.046Z）
 if [ -n "${CURSOR_DATE:-}" ]; then
-  # 提取 YYYY-MM-DD 部分，并向前偏移 1 天
-  # （claude-code-log 的 --from-date ISO 格式有时区/零点偏差，偏移一天兜底）
   FROM_DATE=$(echo "$CURSOR_DATE" | cut -dT -f1)
-  # 尝试 GNU date 偏移；若不支持（macOS/BSD），回退到原日期
   FROM_DATE_SAFE=$(date -d "$FROM_DATE -1 day" +%Y-%m-%d 2>/dev/null || echo "$FROM_DATE")
   echo "增量模式：读取 $FROM_DATE_SAFE 之后的会话（游标=$FROM_DATE，向前偏移 1 天兜底）"
   claude-code-log "$TRANSCRIPT_DIR" --detail low --format md --compact --from-date "$FROM_DATE_SAFE" -o - 2>/dev/null
+  CCLOG_EXIT=$?
 else
   echo "全量首读模式：读取所有可见会话（无游标 / 首次做梦）"
   claude-code-log "$TRANSCRIPT_DIR" --detail low --format md --compact -o - 2>/dev/null
+  CCLOG_EXIT=$?
+fi
+
+# 检查 claude-code-log 是否正常退出
+if [ $CCLOG_EXIT -ne 0 ]; then
+  echo "⚠ claude-code-log 退出码=$CCLOG_EXIT（可能部分失败），请检查上方输出是否完整。"
 fi
 ```
 

@@ -83,6 +83,8 @@
 | ⚠️ `--from-date` ISO 格式偏差 | `--from-date "2026-07-19"` 仅返回 header（4 行），同日自然语言 `"today"` 返回 10,605 行。dateparser 对 ISO 日期（YYYY-MM-DD）解析有时区/零点偏差。**对策**：游标日期向前偏移一天（`date -d "$CURSOR_DATE -1 day"`）或改用自然语言；偏差在 1 天内，对本 Sprint「增量做梦」精度无实质影响 | 本会话实测 |
 | 对话素材充分性 | `~/.claude/projects/d--ClaudeDream/` 下 **39 个 jsonl**（1.5KB–6MB），全量 `--detail low` 输出 ~10,600 行干净 Markdown——充分验证「多会话 + 大文件降噪」 | 实测 |
 | 上次做梦游标 | 无现成机制。约定从记忆文件 frontmatter 的 `modified` / `originSessionId` 推断上次处理边界——本 Sprint W6 落地。实测：最新 `modified` = `2026-07-18T18:42:56.867Z`，游标推断可用 | DoD「双源追踪」延伸 |
+| W9 DiaryAgent 插件加载 | DiaryAgent 项目位于 `/f/DiaryAgent`，可通过 `claude --plugin-dir /d/ClaudeDream/claude-dream` 加载插件。Skill 的 Bash/Read 命令与 DiaryAgent 的 Python 3.11.5 全局环境兼容，`claude-code-log` 同样可用 | — |
+| W10 DiaryAgent 端到端 | ✅ 四条读取路径在 DiaryAgent 上全部跑通：README+CLAUDE.md ✅、git log（10 commits）✅、记忆基线 → **冷启动（无记忆）✅**、对话 → 6 sessions / 8,547 行降噪输出 ✅、compact 摘要段保留（39 个 `<summary>` 标签）✅。有游标增量（ClaudeDream）和无游标全量首读（DiaryAgent）两种模式各覆盖一次 | 本会话实测 |
 
 ### 4.2 PO 拍板
 
@@ -97,8 +99,8 @@
 | ~~R3~~ | ~~vendored 代价~~ | ✅ 已关闭 | 无需 vendored——claude-code-log 已全局安装、可直接调用 |
 | R7 | `--from-date` ISO 格式有时区/零点偏差（`"2026-07-19"` 仅返回 4 行，`"today"` 返回 10,605 行） | 已识别 | 游标日期向前偏移一天或改用自然语言；偏差 ≤1 天，对增量做梦精度无实质影响 |
 | R4 | 「上次做梦游标」无现成机制，靠 sources 推断，可能不精确 | 已接受 | 本 Sprint 先做能用的推断（W6）；精确化留后续 |
-| R5 | DiaryAgent 是异构项目，其 jsonl / 记忆 / git 形态可能与 ClaudeDream 不同，暴露本项目验不出的问题 | 已识别（是特性非缺陷） | W9-W10 换环境验证的正是这个——两段式设计就为把「工具可用」与「跨项目可用」分开验 |
-| R6 | 首次做梦无游标：ClaudeDream 现有记忆是上轮 Design Sprint 手写/原型产物（带 `originSessionId`/`modified`，可作准游标），但 DiaryAgent 大概率零记忆＝真·冷启动 | 已识别（设计决策，非坑） | 无游标＝全量首读所有会话（W6/W7 两态）。本项目验「有基线增量」、DiaryAgent 验「首次全量」，两模式真机各覆盖一次。若全量会话过多需上限兜底，留后续 |
+| ~~R5~~ | ~~DiaryAgent 异构项目兼容性~~ | ✅ 已关闭 | DiaryAgent 端到端全通：README/CLAUDE.md/git 格式兼容、jsonl 6 个全可处理、冷启动路径正确。跨项目可用性验证通过 |
+| ~~R6~~ | ~~首次做梦无游标~~ | ✅ 已关闭 | DiaryAgent 确为零记忆冷启动，W6 正确返回"无游标"→ W7 正确走全量首读。ClaudeDream（有基线增量）+ DiaryAgent（首次全量）两种模式各覆盖一次 |
 
 ## 五 · Definition of Done
 
