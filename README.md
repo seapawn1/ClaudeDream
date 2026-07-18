@@ -14,6 +14,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.env` | 本地环境变量，不入库 |
 | `seapawn.md` | 本地私人笔记，不入库 |
 | `.IDEO/` | 设计工作区 — [文件地图](.IDEO/README.md) · [DesignMapping](.IDEO/DesignMapping.md) · 原型目录 |
+| `reference/` | 方案类比参考 — auto-dream · auto-memory · claude-memory-compiler |
 
 ## 当前状态
 
