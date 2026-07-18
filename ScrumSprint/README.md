@@ -20,7 +20,7 @@
 |---|---|
 | Product Goal | ✅ 已定（手动优先的 Claude Code 记忆插件） |
 | Product Backlog | ✅ 已拆解（20 条，PB-Base/Comp/Auto/Scale 四组） |
-| DoD | ✅ PO 已认可（5 类底线） |
+| DoD | ✅ PO 已认可（6 类底线，Sprint 2 增补换环境验证 + 独立验证） |
 | Sprint 1 | ✅ Increment 已交付 — [Walking Skeleton](sprint-01-walking-skeleton/SprintReview.md)：8 工作项全通过，3 PBI 达 DoD；产物 `claude-dream/` |
 | Sprint 2 | ✅ Increment 已交付 — [完整读取管线](sprint-02-read-pipeline/SprintReview.md)：10 工作项全通过，5 PBI 达 DoD；产物 `claude-dream/` v0.2.0 + `.claude-dream-context.md` |
 

@@ -26,6 +26,6 @@ ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事�
 | 目录 | 上游 | 克隆时的 commit | 用途 |
 |---|---|---|---|
 | `agent-memory/claude-memory-compiler/` | https://github.com/coleam00/claude-memory-compiler | `54eddd70` | Memory Compiler 原型——compile → index → log 模型，Design Sprint C 的主基座 |
-| `claude-code-log/` | https://github.com/daaain/claude-code-log | 2026-07-19 clone | Claude Code transcript JSONL → 可读 Markdown，Sprint 2 对话读取（PB-Base-5.1）的代码级降噪底座 |
+| `claude-code-log/` | https://github.com/daaain/claude-code-log | 2026-07-19 clone | ✅ Sprint 2 已接入：`pip install claude-code-log`（v1.5.0），`--detail low --format md --compact` 降噪 98.2%，落盘 `.claude-dream-context.md` |
 
 新增参考项目时：clone → 删除 `.git`（或改名 `.git-bak`）→ `git add` 以普通文件入库。`.gitignore` 里的 `reference/**/.git/` + `reference/claude-code-log/` 防止误提交子仓库的 git 内脏。
