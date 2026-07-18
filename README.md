@@ -13,6 +13,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.gitignore` | Git 忽略规则 |
 | `.env` | 本地环境变量，不入库 |
 | `seapawn.md` | 本地私人笔记，不入库 |
+| `claudedream-plugin/` | **插件产物** — 可安装的 Claude Code 记忆插件（Sprint 1 骨架：manifest + `/claudedream` 入口） |
 | `.IDEO/` | 设计思考工作区 — [README](.IDEO/README.md) · [Design Sprint 完整产出](.IDEO/DesignSprint/DesignReview.md) |
 | `ScrumSprint/` | 当前开发 Sprint — [README](ScrumSprint/README.md) |
 | `reference/` | 方案类比参考 — auto-dream · auto-memory · claude-memory-compiler |
@@ -21,5 +22,6 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 | 空间 | 阶段 | 说明 |
 |---|---|---|
-| [ScrumSprint/](ScrumSprint/README.md) | 🔵 Sprint 1 进行中 | Walking Skeleton：插件骨架 + 命令/语义触发，8 个工作项 — [Sprint Backlog](ScrumSprint/sprint-01-walking-skeleton/SprintBacklog.md) |
+| [claudedream-plugin/](claudedream-plugin/) | ✅ Sprint 1 已交付 | Walking Skeleton：8 工作项全通过、3 PBI 达 DoD — [Sprint Review](ScrumSprint/sprint-01-walking-skeleton/SprintReview.md) |
+| [ScrumSprint/](ScrumSprint/README.md) | 🔵 开发中 | Sprint 1 已交付；下个 Sprint 待规划（读取 B / 编译 C 接入） |
 | [.IDEO/DesignSprint/](.IDEO/DesignSprint/README.md) | ✅ 已闭环 | 设计 Sprint 完整产出—Define → Prototype → Test → Review |

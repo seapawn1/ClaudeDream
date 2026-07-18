@@ -28,11 +28,11 @@
 |---|---|---|---|---|---|---|
 | PB-Base-1 | 插件骨架与入口（S） | 作为 Claude Code 用户，我想要 ClaudeDream 作为可安装插件存在并能被 `run claudedream` 唤起，以便在自己环境里启用记忆系统。 | ① 插件目录结构 + manifest 就位，Claude Code 能识别加载；② `run claudedream` 命中入口并返回可见响应（下游可为空）；③ 能解析出项目目录、记忆目录、transcript 目录三条路径。 | AC② 入口具体化为斜杠命令 `/claudedream`（PO 拍板）；AC③ transcript 只要求「推断出路径」，不解析内容。 | 无 | 就绪 |
 | PB-Base-2 | 手动触发（S） | 作为 Claude Code 用户，我想说 `run claudedream` 手动启动记忆整理，以便在合适时机更新记忆。 | ① 三格流程走通：发起 → 确认 → 交接下游（读取→判定→写入→报告）；② 触发后先确认目标项目再继续；③ 未识别到有效上下文时明确提示，而非静默失败。 | 入口用 `/claudedream`；下游为占位（可为空）。size = S，就绪。 | PB-Base-1 | 就绪 |
-| PB-Auto-1（薄版） | 语义召唤触发 · 仅「能识别」（S） | 作为 Claude Code 用户，我想直接说「开始做梦 / 更新记忆」而不必敲斜杠，以便更自然地唤起记忆整理。 | ① `SKILL.md` 的 `description` 写入窄触发短语；② 去掉 `disable-model-invocation`，使 Claude 能自动识别并跳入入口；③ 真机验证：一句「开始做梦」能跳入与 `/claudedream` 相同的入口流程。**不含**防误触发设计。 | 仅切「能识别」薄版（PO 追加）；完整版仍延后待补 IDEO。 | PB-Base-1 | 就绪 |
+| PB-Auto-1.1 | 语义召唤触发 · 仅「能识别」（S） | 作为 Claude Code 用户，我想直接说「开始做梦 / 更新记忆」而不必敲斜杠，以便更自然地唤起记忆整理。 | ① `SKILL.md` 的 `description` 写入窄触发短语；② 去掉 `disable-model-invocation`，使 Claude 能自动识别并跳入入口；③ 真机验证：一句「开始做梦」能跳入与 `/claudedream` 相同的入口流程。**不含**防误触发设计。 | 仅切「能识别」薄版（PO 追加）；完整版仍延后待补 IDEO。 | PB-Base-1 | 就绪 |
 
 *小字说明：*
 - *PB-Base-1 / PB-Base-2 的用户故事、AC 为 [Product Backlog](../ProductBacklog.md) 原文摘抄；架构定位与产品意图见 Product Backlog，不在此重复。*
-- *PB-Auto-1 完整版在 Product Backlog 中标「延后 · ⚠️ 需补 IDEO」（产品意图＝自然语言召唤、架构定位＝触发·A、原 size M）——「什么话算召唤、如何与手动可控共存、如何防误触发」是设计难点，留待补一轮 IDEO；本 Sprint 仅切薄版，故 AC 为本切片专属、非 Product Backlog 原文。*
+- *本 Sprint 切出的薄版编号为 PB-Auto-1.1（从 PB-Auto-1 分化，PO 已拍板）。PB-Auto-1 完整版在 Product Backlog 中标「延后 · ⚠️ 需补 IDEO」（产品意图＝自然语言召唤、架构定位＝触发·A、原 size M）——「什么话算召唤、如何与手动可控共存、如何防误触发」是设计难点，留待补一轮 IDEO；本 Sprint 仅切薄版，故 AC 为本切片专属、非 Product Backlog 原文。*
 
 ---
 
@@ -47,7 +47,7 @@
 | W5 | 三格流程落地：发起 → 确认目标项目 → 交接下游占位（下游可为空） | PB-Base-2 ①② | 三格走通；触发后先确认再继续 |
 | W6 | 无有效上下文时明确提示 | PB-Base-2 ③ | 不静默失败，给出明确提示 |
 | W7 | 真机端到端跑一次 `/claudedream`（Review demo 素材） | PB-Base-1+2 | 走完三格，DoD「功能可用」达标 |
-| W8 | 语义触发薄版：`description` 写窄触发短语；去掉 `disable-model-invocation`；真机验证「开始做梦」能跳入 | PB-Auto-1 薄版 | 自然语言能跳入同一入口 |
+| W8 | 语义触发薄版：`description` 写窄触发短语；去掉 `disable-model-invocation`；真机验证「开始做梦」能跳入 | PB-Auto-1.1 | 自然语言能跳入同一入口 |
 
 ---
 
@@ -67,7 +67,7 @@
 
 ### 4.2 PO 三处拍板
 
-① 触发语法用 `/claudedream`（`run claudedream` 自然语言归 PB-Auto-1）；② transcript「能推断出路径即可」；③ 语义触发做「能识别」的薄版。
+① 触发语法用 `/claudedream`（`run claudedream` 措辞已在 Product Backlog 全局同步为 `/claudedream`）；② transcript「能推断出路径即可」；③ 语义触发做「能识别」的薄版（编号 PB-Auto-1.1）。
 
 ### 4.3 Impediment / 风险登记
 
@@ -75,7 +75,7 @@
 |---|---|---|---|
 | R1 | transcript 目录无官方路径变量 | 已识别 | W4 降级为「推断路径」，风险已控；内容解析留 PB-Base-5 |
 | R2 | 语义触发薄版无防误触发设计 | 已接受 | `description` 写窄触发短语降低误触率，不承诺零误触；完整方案待 PB-Auto-1 补 IDEO |
-| R3 | Product Backlog 措辞 `run claudedream` 与本 Sprint `/claudedream` 不一致 | 待 PO 处理 | Developer 不擅改 PO 文字，已提请 seapawn 同步 Product Goal / PB-Base-1 AC 的措辞 |
+| R3 | Product Backlog 措辞 `run claudedream` 与本 Sprint `/claudedream` 不一致 | ✅ 已解决 | PO 拍板统一为 `/claudedream`，Product Backlog 已同步（Product Goal / PB-Base-1 / PB-Base-2） |
 
 ---
 

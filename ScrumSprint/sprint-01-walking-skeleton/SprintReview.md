@@ -1,0 +1,82 @@
+# Sprint 1 — Walking Skeleton · Sprint Review
+
+> 本文件记录 Sprint 1 的 **Increment 验收结论**：8 个工作项的完成情况、AC 逐条核对、DoD 达标核对，供 Sprint Review 向 PO（seapawn）展示。
+>
+> 验收日期：2026-07-18。所有验证均在真实 Claude Code（v2.1.214）headless 模式实跑，非纸面推演。
+
+---
+
+## 一 · 可用 Increment（能跑的东西）
+
+**产物**：`claudedream-plugin/` —— 一个通过官方 `plugin validate` 的 Claude Code 插件。
+
+```
+claudedream-plugin/
+├── .claude-plugin/
+│   └── plugin.json          # name=claudedream, version=0.1.0（✔ validate 通过）
+└── skills/
+    └── claudedream/
+        └── SKILL.md          # 入口：三格流程 + 路径解析 + 无上下文提示
+```
+
+**唤起方式**（两条通路，均真机验证）：
+- 命令触发：`/claudedream:claudedream`（插件命名空间化命令名）
+- 语义触发（薄版）：自然语言「开始做梦」等窄触发短语
+
+---
+
+## 二 · 工作项完成情况
+
+| # | 工作项 | 状态 | 真机验证证据 |
+|---|---|---|---|
+| W1 | 插件目录 + `plugin.json` | ✅ | `plugin validate` → `✔ Validation passed` |
+| W2 | `SKILL.md` 入口骨架 | ✅ | headless 列出命令 `claudedream:claudedream` |
+| W3 | 本地加载验证 `--plugin-dir` | ✅ | 插件被识别、命令出现在可用列表 |
+| W4 | 解析三条路径 | ✅ | slug 推断实测 = `D--ClaudeDream`（与真实目录一致）；三路径打印正确 |
+| W5 | 三格流程 | ✅ | `/claudedream:claudedream` 走完 发起→确认→交接下游占位 |
+| W6 | 无上下文明确提示 | ✅ | 伪造不存在项目路径 → skill 停在格2、如实报告缺失、不硬闯 |
+| W7 | 端到端真机跑 | ✅ | 完整三格输出 + 目标项目确认，未写任何记忆 |
+| W8 | 语义触发薄版 | ✅ | 「开始做梦」跳入同一入口，走完三格 |
+
+---
+
+## 三 · AC 逐条核对
+
+**PB-Base-1 · 插件骨架与入口**
+- ① 目录结构 + manifest 就位，Claude Code 能识别加载 → ✅ validate 通过 + headless 加载成功
+- ② 入口（`/claudedream:claudedream`）命中并返回可见响应，下游可为空 → ✅ 三格输出可见
+- ③ 解析出项目 / 记忆 / transcript 三条路径 → ✅ 三路径正确打印，slug 推断实测正确
+
+**PB-Base-2 · 手动触发**
+- ① 三格流程走通（发起→确认→交接下游）→ ✅ W7 实跑
+- ② 触发后先确认目标项目再继续 → ✅ 格2 确认 `D--ClaudeDream` 后才进格3
+- ③ 未识别到有效上下文时明确提示，非静默失败 → ✅ W6 实测报告缺失并停下
+
+**PB-Auto-1.1· 语义召唤触发**
+- ① `description` 写入窄触发短语 → ✅ SKILL.md frontmatter
+- ② 去掉 `disable-model-invocation`，可自动识别跳入 → ✅ 未加该锁
+- ③ 真机验证「开始做梦」跳入同一入口 → ✅ W8 实跑
+
+---
+
+## 四 · DoD 达标核对
+
+| 类别 | 结论 | 证据 |
+|---|---|---|
+| 功能可用 | ✅ | 端到端在真实会话实跑，不半途失败 |
+| 记忆质量 | — 本 Sprint 不适用 | 下游为空，无记忆落盘对象（见 SprintBacklog 五节说明） |
+| 信任边界 | ✅ | git status 仅新增 `claudedream-plugin/`；CLAUDE.md 未动；记忆目录零写入 |
+| 可审阅 | ✅ | 本 Review 文档即变更摘要 |
+| 索引一致 | ✅ | 未新增记忆文件，MEMORY.md 索引无需变动，无断链 |
+
+**结论**：3 条 PBI 全部达到 DoD，可进 Sprint Review 展示。
+
+---
+
+## 五 · 环境变化 / 待 PO 决策（透明汇报）
+
+| # | 事项 | 说明 |
+|---|---|---|
+| E1 | 真实命令名是 `/claudedream:claudedream`（双段） | 插件命名空间机制 `plugin:skill` 决定。SprintBacklog 写的是 `/claudedream`。功能不受影响，但命令略啰嗦——是否重命名 skill 或调整插件名，归 PO 定。 |
+| R3（承接） | Product Backlog 措辞 `run claudedream` vs 实际 `/claudedream:claudedream` | 仍待 PO 决定是否同步 Product Goal / PB-Base-1 AC 措辞。 |
+| N1 | 语义触发薄版无防误触发 | 已知接受项（SprintBacklog R2）。`description` 已写「不要因对话提到记忆就自动启动」以降误触，但不承诺零误触；完整方案待 PB-Auto-1 补 IDEO。 |
