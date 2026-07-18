@@ -83,8 +83,8 @@
 | ⚠️ `--from-date` ISO 格式偏差 | `--from-date "2026-07-19"` 仅返回 header（4 行），同日自然语言 `"today"` 返回 10,605 行。dateparser 对 ISO 日期（YYYY-MM-DD）解析有时区/零点偏差。**对策**：游标日期向前偏移一天（`date -d "$CURSOR_DATE -1 day"`）或改用自然语言；偏差在 1 天内，对本 Sprint「增量做梦」精度无实质影响 | 本会话实测 |
 | 对话素材充分性 | `~/.claude/projects/d--ClaudeDream/` 下 **39 个 jsonl**（1.5KB–6MB），全量 `--detail low` 输出 ~10,600 行干净 Markdown——充分验证「多会话 + 大文件降噪」 | 实测 |
 | 上次做梦游标 | 无现成机制。约定从记忆文件 frontmatter 的 `modified` / `originSessionId` 推断上次处理边界——本 Sprint W6 落地。实测：最新 `modified` = `2026-07-18T18:42:56.867Z`，游标推断可用 | DoD「双源追踪」延伸 |
-| W9 DiaryAgent 插件加载 | DiaryAgent 项目位于 `/f/DiaryAgent`，可通过 `claude --plugin-dir /d/ClaudeDream/claude-dream` 加载插件。Skill 的 Bash/Read 命令与 DiaryAgent 的 Python 3.11.5 全局环境兼容，`claude-code-log` 同样可用 | — |
-| W10 DiaryAgent 端到端 | ✅ 四条读取路径在 DiaryAgent 上全部跑通：README+CLAUDE.md ✅、git log（10 commits）✅、记忆基线 → **冷启动（无记忆）✅**、对话 → 6 sessions / 8,547 行降噪输出 ✅、compact 摘要段保留（39 个 `<summary>` 标签）✅。有游标增量（ClaudeDream）和无游标全量首读（DiaryAgent）两种模式各覆盖一次 | 本会话实测 |
+| W9 DiaryAgent 插件加载 | ✅ 真机验证通过：`claude --plugin-dir /d/ClaudeDream/claude-dream -p "/claude-dream"` 在 `/f/DiaryAgent` 项目上成功加载插件、skill 被命中、四格流程全部执行 | 本会话 headless 实测 |
+| W10 DiaryAgent 端到端 | ✅ 真机验证通过：格 2 路径解析正确（`f--DiaryAgent`）、格 3.1 读到 README+CLAUDE.md+git 10 commits、格 3.2 正确返回冷启动（无记忆基线）、格 3.3 全量首读 8 会话降噪对话、格 4 汇总框完整展示设计决策轨迹。有游标增量（ClaudeDream）和无游标全量首读（DiaryAgent）两种模式各覆盖一次 | 本会话 headless 实测 |
 
 ### 4.2 PO 拍板
 
@@ -115,7 +115,7 @@
 | 索引一致 | `MEMORY.md` 索引与实际记忆文件一致（无断链 / 漏项） | 索引核对 |
 
 **本 Sprint 适用性说明**：本 Sprint 交付的是**读取阶段**——只读不判、不写记忆（写入是 PB-Base-11、编译是 PB-Base-7+）。因此：
-- **「功能可用」**：判据调整为「读取管线端到端跑通、当前背景上下文成功产出」，而非写记忆。
+- **「功能可用」**：判据调整为「读取管线端到端跑通、当前背景上下文成功产出」，而非写记忆。**验证方式**：ClaudeDream 项目（本会话逐命令验证）+ DiaryAgent 项目（headless 真机：`claude --plugin-dir ... -p "/claude-dream"` 完整跑通四格流程）。
 - **「记忆质量」「信任边界（不存 repo 已有）」「可审阅」「索引一致」**：本 Sprint **无记忆落盘对象**，暂不适用（与 Sprint 1 同理）。
 - **「信任边界（不编辑 CLAUDE.md）」**：仍适用——读取阶段绝不改任何被读文件，只读。
 - 换环境验证（W9-W10）在 DiaryAgent 上确认「功能可用」判据。
