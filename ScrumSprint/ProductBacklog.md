@@ -25,6 +25,7 @@
 | 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
 |---|---|---|---|---|---|---|
 | PB-Base-5.2 | 插件可迁移性——依赖自包含 | 插件装到任意项目即可用，无需手动 pip install 等环境准备 | 角色·插件 | S | 已细化 | 从 PB-Base-5.1 分化。当前隐式依赖全局 pip 安装的 `claude-code-log`，换机器/用户即不可用。<br><br>**AC**：① `claude-code-log` 依赖显式声明——pip 自动安装或 vendored 自带，插件加载后不需用户手动 pip install；② 在新环境（无 claude-code-log）上验证：`claude --plugin-dir ...` 加载后 `/claude-dream` 格 3.3 不因缺依赖而失败；③ 解决方案不能依赖"开发者本机已装"——必须是插件自身可复现的。<br><br>**方案选项**（细化时定）：A) `plugin.json` 声明依赖 + Claude Code 插件机制自动安装（如果支持）；B) SKILL.md 格 3.3 前 `pip install claude-code-log` 自动装；C) vendored——把 claude-code-log 打入插件目录（Sprint 2 R3 已评估代价：依赖链复杂、会腐烂） |
+| PB-Base-5.3 | 用户手动安装验收——异地项目真机体验 | seapawn（PO）在任意一个非 ClaudeDream 项目上，从零手动安装插件 → 执行 `/claude-dream` → 对产出结果满意 | 角色·插件 | S | 已细化 | 与 5.2 互补——5.2 管"技术上不缺依赖"，5.3 管"真人觉得好用"。<br><br>**AC**：① seapawn 在终端 `cd <异项目>` → 手动敲 `claude --plugin-dir ...`（或 marketplace 安装）→ 插件被识别；② 执行 `/claude-dream`，四格流程完整走完，不报错、不卡壳、不需开发者（pawn）远程指导；③ seapawn 阅读格 4 汇总框 + 对话降噪产物后，主观判断「这东西有用、我愿意继续用」；④ 过程中遇到的任何摩擦点（命令太长、输出难读、路径看不懂等）记录为 feedback，不要求 Sprint 内全部解决但必须记录。<br><br>**依赖**：PB-Base-5.2（依赖自包含）应先完成，否则异地安装大概率失败 |
 | PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 未开始 | ✅ 原型验证。**输入**：B 产出的 `.claude-dream-context.md`（对话降噪）+ agent 上下文（项目感知+记忆基线） |
 | PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 未开始 | ✅ 原型验证 |
 | PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 未开始 | ✅ 原型验证（🗑️⚡ 待测） |
