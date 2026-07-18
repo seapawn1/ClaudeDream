@@ -13,7 +13,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.gitignore` | Git 忽略规则 |
 | `.env` | 本地环境变量，不入库 |
 | `seapawn.md` | 本地私人笔记，不入库 |
-| `.IDEO/` | 设计思考实战笔记 — 含 DesignMapping（Goal + Questions + Map） |
+| `.IDEO/` | 设计思考实战笔记 — 含 DesignMapping（Goal + Questions + Map + HMW + Target） |
 
 ## 当前状态
 
