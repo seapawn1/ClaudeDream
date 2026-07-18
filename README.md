@@ -13,7 +13,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.gitignore` | Git 忽略规则 |
 | `.env` | 本地环境变量，不入库 |
 | `seapawn.md` | 本地私人笔记，不入库 |
-| `.IDEO/` | 设计工作区 — [文件地图](.IDEO/README.md) · [DesignMapping](.IDEO/DesignMapping.md) · 原型目录 |
+| `.IDEO/` | 设计思考工作区 — [README](.IDEO/README.md) · [Design Sprint 完整产出](.IDEO/DesignSprint/DesignReview.md) |
 | `reference/` | 方案类比参考 — auto-dream · auto-memory · claude-memory-compiler |
 
 ## 当前状态
@@ -29,3 +29,4 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | 2026-07-18 | Target C 原型 ✅ | 四分类验证通过。新增 1 文件、更新 2 文件。Quality 7 rules 全通过 |
 | 2026-07-18 | Target 全流程 Review ✅ | A/B/C 全部草图完成，C 原型验证通过。TargetReview.md 已创建 |
 | 2026-07-18 | **Design Sprint 闭环 ✅** | Define → Ideate → Prototype → Test → Review 全流程走完。DesignReview.md 已创建 |
+| 2026-07-18 | **项目结构重构** | 将所有 Design Sprint 产出移入 `.IDEO/DesignSprint/`，与后续设计工作隔离 |
