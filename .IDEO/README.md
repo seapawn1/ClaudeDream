@@ -10,6 +10,6 @@
 |---|---|
 | `DesignMapping.md` | Design Sprint Monday — Goal, Questions, Map, HMW, Target |
 | `README.md` | 本文件 — 笔记空间说明 + 文件地图 |
-| `target-a-loop-trigger/` | Target A: Loop 触发 — 机制原型 |
-| `target-b-input-parsing/` | Target B: 输入读取与解析 — 功能原型 |
-| `target-c-comprehensive-judgment/` | Target C: 综合判定 ⭐ — 算法原型（核心） |
+| `target-a-loop-trigger/` | Target A: Loop 触发 — [TargetMapping](target-a-loop-trigger/TargetMapping.md) · README |
+| `target-b-input-parsing/` | Target B: 输入读取与解析 — [TargetMapping](target-b-input-parsing/TargetMapping.md) · README |
+| `target-c-comprehensive-judgment/` | Target C: 综合判定 ⭐ — [TargetMapping](target-c-comprehensive-judgment/TargetMapping.md) · README |
