@@ -24,13 +24,13 @@
 
 | 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
 |---|---|---|---|---|---|---|
-| PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 未开始 | ✅ 原型验证。**输入**：B 产出的 `.claude-dream-context.md`（对话降噪）+ agent 上下文（项目感知+记忆基线） |
-| PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 未开始 | ✅ 原型验证 |
-| PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 未开始 | ✅ 原型验证（🗑️⚡ 待测） |
-| PB-Base-10 | 原创机制 | 感知旧记忆被修正、与项目同步 | 无 | M | 未开始 | git 漂移 / 双源追踪 / superseded；✅ 逻辑覆盖待测 |
-| PB-Base-11 | 写 / 更新 / 删记忆文件 | 编译结果落盘 | 输出① · C | S | 未开始 | **输入**：C 的判定结论；**输出**：记忆文件 + 更新游标（`modified` 时间戳 + `originSessionId`） |
-| PB-Base-12 | MEMORY.md 索引维护 | 记忆能被 Claude Code 高效加载 | 输出② | S | 未开始 | — |
-| PB-Base-13 | 变更摘要报告 | 用户能审阅改了什么、为什么 | 输出③ | S | 未开始 | — |
+| 🔵 PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 进行中 | Sprint 4 纳入；硬约束排除清单 + sentinel 契约。**输入**：B 产出的当前背景上下文 |
+| 🔵 PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 进行中 | Sprint 4 纳入；whole-KB-in-context + 3-7 概念基数上限 + git 漂移候选标记 |
+| 🔵 PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 进行中 | Sprint 4 纳入；🆕⚡🗑️🔁 四分类 + 保守删除。⚠️ compiler 无此类——ClaudeDream 改进 |
+| 🔵 PB-Base-10 | 原创机制 · 防腐涂料 | 感知旧记忆被修正、与项目同步 | 无（横切） | M | 进行中 | Sprint 4 纳入；双源追踪 / superseded / git 漂移标注——横切进 8/9/11 |
+| 🔵 PB-Base-11 | 写 / 更新 / 删记忆文件 | 编译结果落盘 | 输出① · C | S | 进行中 | Sprint 4 纳入；首次动手写磁盘 | **输入**：C 的判定结论；**输出**：记忆文件 + 更新游标（`modified` + `originSessionId`） |
+| 🔵 PB-Base-12 | MEMORY.md 索引维护 | 记忆能被 Claude Code 高效加载 | 输出② | S | 进行中 | Sprint 4 纳入（PO 拍板）；随 11 同批产出 |
+| 🔵 PB-Base-13 | 变更摘要报告 | 用户能审阅改了什么、为什么 | 输出③ | S | 进行中 | Sprint 4 纳入（PO 拍板）；含每条理由，补 compiler log.md 缺的 why 字段 |
 | PB-Comp-1 | 判定深化测试 | 淘汰 / 冲突 / 漂移路径可信 | 无 | M | 延后 | 原型未测路径（🗑️ / ⚡ / SQ3 / SQ4） |
 | PB-Comp-2 | 确定性层 · Hash Gate | 跳过无变化、省算力 | 做梦流程前置门 | M | 延后 | 整条做梦流程前判定 hash：变化则进行、不变则跳过（省算力）。Sprint 2 明确不做、全部通过 |
 | PB-Comp-3 | 质量层 · Lint | 结构健康、防腐烂 | 无 | L | 延后 | compiler lint 层 |

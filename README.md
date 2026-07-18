@@ -22,6 +22,6 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 | 空间 | 阶段 | 说明 |
 |---|---|---|
-| [claude-dream/](claude-dream/) | ✅ Sprint 2 已交付 | v0.2.0 完整读取管线：10 工作项全通过、5 PBI 达 DoD — [Sprint 2 Review](ScrumSprint/sprint-02-read-pipeline/SprintReview.md) |
-| [ScrumSprint/](ScrumSprint/README.md) | ✅ Sprint 1+2 已交付 | Target A（手动触发）+ Target B（完整读取管线）已交付；Target C（编译层）待下一 Sprint |
+| [claude-dream/](claude-dream/) | ✅ Sprint 3 已交付 | v0.2.0 可迁移插件：auto pip install + seapawn 异地验收通过 — [Sprint 3 Review](ScrumSprint/sprint-03-portability-acceptance/SprintReview.md) |
+| [ScrumSprint/](ScrumSprint/README.md) | 🔵 Sprint 4 执行中 | Sprint 1/2/3 已交付；Sprint 4 编译层落盘（Target C）Planning 已定 — [Sprint 4 Backlog](ScrumSprint/sprint-04-compile-write/SprintBacklog.md) |
 | [.IDEO/DesignSprint/](.IDEO/DesignSprint/README.md) | ✅ 已闭环 | 设计 Sprint 完整产出—Define → Prototype → Test → Review |
