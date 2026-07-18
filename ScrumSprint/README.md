@@ -12,7 +12,7 @@
 | [DefinitionOfDone.md](DefinitionOfDone.md) | **DoD** —— Increment 的全局质量底线（PO 已认可） |
 | [Architecture.md](Architecture.md) | 架构地图 —— 摘抄自 DesignMapping，供 Backlog「架构定位」对照 |
 | [sprint-01-walking-skeleton/](sprint-01-walking-skeleton/SprintBacklog.md) | **Sprint 1** —— Walking Skeleton：[Backlog](sprint-01-walking-skeleton/SprintBacklog.md) · [Review](sprint-01-walking-skeleton/SprintReview.md)；产出落此文件夹 |
-| [sprint-02-read-pipeline/](sprint-02-read-pipeline/SprintBacklog.md) | **Sprint 2** —— 完整读取管线：[Backlog](sprint-02-read-pipeline/SprintBacklog.md)（Planning 已定，执行中）；产出落此文件夹 |
+| [sprint-02-read-pipeline/](sprint-02-read-pipeline/SprintBacklog.md) | **Sprint 2** —— 完整读取管线：[Backlog](sprint-02-read-pipeline/SprintBacklog.md) · [Review](sprint-02-read-pipeline/SprintReview.md)；产出落此文件夹 |
 
 ## 当前状态
 
@@ -22,7 +22,7 @@
 | Product Backlog | ✅ 已拆解（20 条，PB-Base/Comp/Auto/Scale 四组） |
 | DoD | ✅ PO 已认可（5 类底线） |
 | Sprint 1 | ✅ Increment 已交付 — [Walking Skeleton](sprint-01-walking-skeleton/SprintReview.md)：8 工作项全通过，3 PBI 达 DoD；产物 `claude-dream/` |
-| Sprint 2 | 🔵 Planning 已定，执行中 — [完整读取管线](sprint-02-read-pipeline/SprintBacklog.md)：5 PBI（含新立项 PB-Base-5.1），10 工作项；交付 Target B 完整读取阶段 |
+| Sprint 2 | ✅ Increment 已交付 — [完整读取管线](sprint-02-read-pipeline/SprintReview.md)：10 工作项全通过，5 PBI 达 DoD；产物 `claude-dream/` v0.2.0 + `.claude-dream-context.md` |
 
 ## 背景参考
 
