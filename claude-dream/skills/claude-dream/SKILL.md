@@ -129,7 +129,7 @@ fi
 
 **目标**：用 `claude-code-log` 把 transcript jsonl 降噪后**落盘到文件**，再用 Read 工具加载。
 
-**前提**：`claude-code-log` 需已安装（`pip install claude-code-log`）。如果命令不可用，报告并终止此路（其他路继续）。
+**前提**：`claude-code-log` 需可用。如果命令不可用，**自动安装**（`pip install claude-code-log`）后继续——不要求用户手动操作。
 
 **步骤一**：构造并运行下面的 bash 脚本。根据格 3.2 的游标状态，在脚本**第一行之前**插入（或不插入）`CURSOR_DATE`。
 
@@ -144,9 +144,9 @@ TRANSCRIPT_DIR="$CC_HOME/projects/$SLUG"
 OUTPUT_FILE="$TRANSCRIPT_DIR/.claude-dream-context.md"
 
 if ! command -v claude-code-log &>/dev/null; then
-  echo "⚠ claude-code-log 未安装。请运行: pip install claude-code-log"
-  echo "对话读取跳过——其余路不受影响。"
-  exit 0
+  echo "claude-code-log 未安装，正在自动安装..."
+  pip install claude-code-log 2>&1 || { echo "⚠ 自动安装失败，请手动运行: pip install claude-code-log"; exit 0; }
+  echo "✓ claude-code-log 安装完成"
 fi
 
 SESSION_COUNT=$(ls -1 "$TRANSCRIPT_DIR"/*.jsonl 2>/dev/null | wc -l)
