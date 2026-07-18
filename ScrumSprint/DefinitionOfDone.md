@@ -6,7 +6,7 @@
 
 | 类别 | 完成项（每条增量必须满足） | 如何验证 |
 |---|---|---|
-| 功能可用 | `run claudedream` 端到端跑通，不半途失败 | 在一次真实会话上实跑一遍 |
+| 功能可用 | `/claude-dream` 端到端跑通，不半途失败 | 在一次真实会话上实跑一遍 |
 | 记忆质量 | frontmatter 完整（含 sources 双源：session id + git commit hash）；用绝对日期；冲突时保留旧内容 + superseded 标注 | 输出文件逐条对照 |
 | 信任边界 | 不编辑 CLAUDE.md；不存 repo 已有内容 | diff 检查 |
 | 可审阅 | 生成变更摘要报告 | 报告存在 |

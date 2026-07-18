@@ -22,7 +22,7 @@ flowchart TB
     end
 
     subgraph TRIGGER["⏰ 触发"]
-        T1["手动触发\n'run claudedream'\n自动定时延后"]
+        T1["手动触发\n'/claude-dream'\n自动定时延后"]
         T2{{"⭐ ClaudeDream 启动"}}
         T1 --> T2
     end

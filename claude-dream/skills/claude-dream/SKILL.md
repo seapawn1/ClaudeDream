@@ -1,8 +1,8 @@
 ---
-name: claudedream
+name: claude-dream
 description: >-
-  启动 ClaudeDream 记忆整理。当用户明确说「run claudedream」「开始做梦」「更新记忆」
-  「整理记忆」「ClaudeDream 启动」这类召唤语，或直接输入 /claudedream 时使用。
+  启动 ClaudeDream 记忆整理。当用户明确说「run claude-dream」「开始做梦」「更新记忆」
+  「整理记忆」「ClaudeDream 启动」这类召唤语，或直接输入 /claude-dream 时使用。
   这是一个有副作用的手动流程（读取对话 → 判定 → 写入项目记忆），只在用户明确要求整理/更新记忆时触发，
   不要因为对话里提到「记忆」二字就自动启动。
 allowed-tools: Bash Read
@@ -14,7 +14,7 @@ allowed-tools: Bash Read
 
 ## 格 1 · 发起（确认意图）
 
-用户已通过 `/claudedream` 或自然语言召唤启动记忆整理。向用户确认你已收到指令、即将开始，用一句话说明本版本是骨架（会解析环境并交接下游占位，暂不真正写记忆）。
+用户已通过 `/claude-dream` 或自然语言召唤启动记忆整理。向用户确认你已收到指令、即将开始，用一句话说明本版本是骨架（会解析环境并交接下游占位，暂不真正写记忆）。
 
 ## 格 2 · 确认启动（解析环境 + 确认目标项目）
 

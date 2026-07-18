@@ -20,7 +20,7 @@
 | Product Goal | ✅ 已定（手动优先的 Claude Code 记忆插件） |
 | Product Backlog | ✅ 已拆解（20 条，PB-Base/Comp/Auto/Scale 四组） |
 | DoD | ✅ PO 已认可（5 类底线） |
-| Sprint 1 | ✅ Increment 已交付 — [Walking Skeleton](sprint-01-walking-skeleton/SprintReview.md)：8 工作项全通过，3 PBI 达 DoD；产物 `claudedream-plugin/` |
+| Sprint 1 | ✅ Increment 已交付 — [Walking Skeleton](sprint-01-walking-skeleton/SprintReview.md)：8 工作项全通过，3 PBI 达 DoD；产物 `claude-dream/` |
 
 ## 背景参考
 

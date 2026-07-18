@@ -1,5 +1,16 @@
 {
   "permissions": {
     "allow": []
+  },
+  "extraKnownMarketplaces": {
+    "claude-dream-dev": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "enabledPlugins": {
+    "claude-dream@claude-dream-dev": true
   }
 }
