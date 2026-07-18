@@ -1,7 +1,7 @@
 # Target C: 综合判定 ⭐
 
-**状态：⬜ 待开始（核心优先）**
+**状态：✅ 方案草图完成**
 
-- 验证综合判定能否正确区分新信息、冲突、过时、重复
-- 这是整个 ClaudeDream 的命门——决定着四条 Sprint Question 能否答"是"
+- 方案：Memory Compiler（照抄 compiler compile → index → log 模型，融入 git 漂移感知）
+- 流程：Gate → Compile（Extract → Cross-Reference → Connect）→ Classify（🆕⚡🗑️🔁）→ Output（MEMORY.md + 变更摘要）
 - 详见 [TargetMapping.md](TargetMapping.md)
