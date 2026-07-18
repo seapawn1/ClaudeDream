@@ -16,6 +16,18 @@
 - **清晰边界**：不做对话前端、不碰 CLI 核心、不做 query 检索层（Claude Code 原生加载 `MEMORY.md` 已覆盖）。
 - **三种触发形态**：手动（`/claude-dream`）/ 定时 loop / 语义召唤（自然语言"开始做梦""开始更新"）。
 
+**当前进度**（2026-07-19）：
+
+| Target | Sprint | 状态 |
+|---|---|---|
+| A · 手动触发 | Sprint 1 | ✅ 已交付 — `/claude-dream` 命令 + 语义召唤薄版 |
+| B · 完整读取管线 | Sprint 2 | ✅ 已交付 — 四路读取 + 游标 + claude-code-log 降噪 → `.claude-dream-context.md` |
+| C · 编译层 | 下一 Sprint | 🔵 待启动 — PB-Base-7 起 |
+
+**B/C 交接契约**（Sprint 2 确立）：
+- B 产出两样东西交接给 C：① agent 上下文中的项目感知+记忆基线+对话内容；② 持久化文件 `.claude-dream-context.md`（位于 transcript 目录，C 可直接 Read）
+- C 不需要回翻 jsonl / git / 记忆原文——B 已全部加载就绪
+
 ---
 
 ## 二 · Product Backlog
@@ -24,11 +36,11 @@
 
 | 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
 |---|---|---|---|---|---|---|
-| PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 未开始 | ✅ 原型验证 |
+| PB-Base-7 | Gate 硬约束排除 | 只记值得记的，滤掉噪音 | 编译① · C | S | 未开始 | ✅ 原型验证。**输入**：B 产出的 `.claude-dream-context.md`（对话降噪）+ agent 上下文（项目感知+记忆基线） |
 | PB-Base-8 | Extract + Cross-Reference | 概念与全部记忆互证、识别漂移 | 编译②③ · C | M | 未开始 | ✅ 原型验证 |
 | PB-Base-9 | 四分类 + 生命周期 | 记忆能自我更新而非只追加 | 编译·分类 · C | M | 未开始 | ✅ 原型验证（🗑️⚡ 待测） |
 | PB-Base-10 | 原创机制 | 感知旧记忆被修正、与项目同步 | 无 | M | 未开始 | git 漂移 / 双源追踪 / superseded；✅ 逻辑覆盖待测 |
-| PB-Base-11 | 写 / 更新 / 删记忆文件 | 编译结果落盘 | 输出① · C | S | 未开始 | — |
+| PB-Base-11 | 写 / 更新 / 删记忆文件 | 编译结果落盘 | 输出① · C | S | 未开始 | **输入**：C 的判定结论；**输出**：记忆文件 + 更新游标（`modified` 时间戳 + `originSessionId`） |
 | PB-Base-12 | MEMORY.md 索引维护 | 记忆能被 Claude Code 高效加载 | 输出② | S | 未开始 | — |
 | PB-Base-13 | 变更摘要报告 | 用户能审阅改了什么、为什么 | 输出③ | S | 未开始 | — |
 | PB-Comp-1 | 判定深化测试 | 淘汰 / 冲突 / 漂移路径可信 | 无 | M | 延后 | 原型未测路径（🗑️ / ⚡ / SQ3 / SQ4） |
@@ -45,11 +57,11 @@
 |---|---|---|---|---|---|---|
 | 🟢 PB-Base-1 | 插件骨架与入口 | 有一个可安装、可唤起的产品 | 角色·插件 | S | 已完成 | Sprint 1 已交付；含 marketplace 分发 |
 | 🟢 PB-Base-2 | 手动触发 | 用户可控地启动记忆整理 | 触发 · A | S | 已完成 | Sprint 1 已交付 |
-| 🟢 PB-Base-3 | 项目状态感知 | 让记忆感知项目变化 | 读取② · B | M | 已完成 | Sprint 2 已交付；Claude Code 原生加载 + 提示词确认 |
-| 🟢 PB-Base-4 | 记忆基线读取 | 有可靠的比对基线 | 读取③ · B | S | 已完成 | Sprint 2 已交付；Read 工具静默加载 + 游标提取 |
-| 🟢 PB-Base-5.1 | 对话读取工具接入 | 对话读取有稳定的代码级降噪底座 | 读取④ 底座 · B | S | 已完成 | Sprint 2 已交付；claude-code-log v1.5.0 全局安装、直接 CLI 调用 |
-| 🟢 PB-Base-5 | 对话内容解析 | 拿到降噪后的多会话对话素材 | 读取④ · B | M | 已完成 | Sprint 2 已交付；落盘 + Read 加载，增量/全量两模式 |
-| 🟢 PB-Base-6 | 汇总交接 C · 当前背景上下文 | C 拿到自包含上下文即可开工 | 读取⑤ · B | S | 已完成 | Sprint 2 已交付；格 4 摘要框 + .claude-dream-context.md |
+| 🟢 PB-Base-3 | 项目状态感知 | 让记忆感知项目变化 | 读取② · B | M | 已完成 | Sprint 2 已交付。Review 修正：从 Bash cat 改为 Claude Code 原生加载 + 提示词确认——不重复造轮子 |
+| 🟢 PB-Base-4 | 记忆基线读取 | 有可靠的比对基线 | 读取③ · B | S | 已完成 | Sprint 2 已交付。Read 工具静默加载 + 游标提取（frontmatter `modified`/`originSessionId`）。⚠️ 游标精度可改进：当前依赖记忆文件 frontmatter，后续 C 落盘时可写专门的游标文件 |
+| 🟢 PB-Base-5.1 | 对话读取工具接入 | 对话读取有稳定的代码级降噪底座 | 读取④ 底座 · B | S | 已完成 | Sprint 2 已交付。claude-code-log v1.5.0 全局安装、直接 CLI 调用、`--detail low` 降噪 98.2%。⚠️ `--from-date` ISO 格式有 dateparser 时区偏差（偏移-1天兜底） |
+| 🟢 PB-Base-5 | 对话内容解析 | 拿到降噪后的多会话对话素材 | 读取④ · B | M | 已完成 | Sprint 2 已交付。Review 修正：从 stdout 喷改为落盘 `.claude-dream-context.md` + Read 静默加载。增量（游标后）/全量（冷启动）两种模式跨项目验证通过 |
+| 🟢 PB-Base-6 | 汇总交接 C · 当前背景上下文 | C 拿到自包含上下文即可开工 | 读取⑤ · B | S | 已完成 | Sprint 2 已交付。格 4 摘要框 + 落盘文件。B/C 交接契约确立：C 输入 = agent 上下文（项目+记忆+对话）+ `.claude-dream-context.md` |
 | 🟢 PB-Auto-1.1 | 语义召唤触发 · 薄版（仅能识别） | 自然语言直接跳入入口，不含防误触发 | 触发 · A | S | 已完成 | 从 PB-Auto-1 分化（PO 拍板）；Sprint 1 已交付 |
 
 *说明：*
@@ -57,4 +69,13 @@
 - *产品意图＝这条对用户/产品的价值。架构定位＝回指 [Architecture](Architecture.md) 的 map 节点 / Target（无清晰节点则写"无"）。*
 - *size＝S / M / L / XL 粗估（Developer 在细化时定稿）。优先级＝行序（自上而下由高到低），不单列。*
 - *当前状态（生命周期）：未开始 / 已细化 / 就绪 / 进行中 / 已完成 / 延后。*
+
+### Sprint 2 反哺的设计约束
+
+以下原则在 Sprint 2 Review 中由 PO 确认，对后续 C 开发有约束力：
+
+1. **工具分工**：Bash 只做游标提取（grep frontmatter）+ 外部工具调用（claude-code-log）；Read 工具做文件静默加载；Claude Code 原生能力（README/CLAUDE.md 自动加载、git 感知）不重复造轮子
+2. **B/C 交接**：B 产出 = agent 上下文（项目感知 + 记忆基线 + 对话内容）+ `.claude-dream-context.md`（持久化降噪文件）。C 以这两者为唯一输入，不回溯原始数据源
+3. **只读不判**：B 不做概念提取，C 不做原始数据读取——边界清晰
+4. **输出不喷对话**：大量数据（对话降噪、记忆全文）落盘后用 Read 加载，格 4 只展示摘要；C 同理
 
