@@ -9,8 +9,9 @@
 | 文件 | 内容 |
 |---|---|
 | [ProductBacklog.md](ProductBacklog.md) | **Product Goal + Product Backlog + 细化** —— 核心工件 |
-| [DefinitionOfDone.md](DefinitionOfDone.md) | **DoD** —— Increment 的全局质量底线（草案，待 seapawn 审核） |
+| [DefinitionOfDone.md](DefinitionOfDone.md) | **DoD** —— Increment 的全局质量底线（PO 已认可） |
 | [Architecture.md](Architecture.md) | 架构地图 —— 摘抄自 DesignMapping，供 Backlog「架构定位」对照 |
+| [sprint-01-walking-skeleton/](sprint-01-walking-skeleton/SprintBacklog.md) | **Sprint 1** —— Walking Skeleton：插件骨架 + 命令/语义触发（进行中）；本 Sprint 产出均落此文件夹 |
 
 ## 当前状态
 
@@ -18,9 +19,8 @@
 |---|---|
 | Product Goal | ✅ 已定（手动优先的 Claude Code 记忆插件） |
 | Product Backlog | ✅ 已拆解（20 条，PB-Base/Comp/Auto/Scale 四组） |
-| 排序 | ⏳ SM 建议草案，待 PO 确认 |
-| DoD | ⏳ 草案，待审核 |
-| Sprint Planning | ⬜ 未启动 |
+| DoD | ✅ PO 已认可（5 类底线） |
+| Sprint 1 | 🔵 进行中 — [Walking Skeleton](sprint-01-walking-skeleton.md)：PB-Base-1/2 + PB-Auto-1 薄版，8 个工作项 |
 
 ## 背景参考
 

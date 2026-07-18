@@ -21,5 +21,5 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 | 空间 | 阶段 | 说明 |
 |---|---|---|
-| [ScrumSprint/](ScrumSprint/README.md) | 当前开发 | Product Goal 已定、Product Backlog 已拆解（20 条）；DoD 草案；Sprint Planning 未启动 |
+| [ScrumSprint/](ScrumSprint/README.md) | 🔵 Sprint 1 进行中 | Walking Skeleton：插件骨架 + 命令/语义触发，8 个工作项 — [Sprint Backlog](ScrumSprint/sprint-01-walking-skeleton/SprintBacklog.md) |
 | [.IDEO/DesignSprint/](.IDEO/DesignSprint/README.md) | ✅ 已闭环 | 设计 Sprint 完整产出—Define → Prototype → Test → Review |
