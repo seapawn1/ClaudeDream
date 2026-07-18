@@ -16,18 +16,6 @@
 - **清晰边界**：不做对话前端、不碰 CLI 核心、不做 query 检索层（Claude Code 原生加载 `MEMORY.md` 已覆盖）。
 - **三种触发形态**：手动（`/claude-dream`）/ 定时 loop / 语义召唤（自然语言"开始做梦""开始更新"）。
 
-**当前进度**（2026-07-19）：
-
-| Target | Sprint | 状态 |
-|---|---|---|
-| A · 手动触发 | Sprint 1 | ✅ 已交付 — `/claude-dream` 命令 + 语义召唤薄版 |
-| B · 完整读取管线 | Sprint 2 | ✅ 已交付 — 四路读取 + 游标 + claude-code-log 降噪 → `.claude-dream-context.md` |
-| C · 编译层 | 下一 Sprint | 🔵 待启动 — PB-Base-7 起 |
-
-**B/C 交接契约**（Sprint 2 确立）：
-- B 产出两样东西交接给 C：① agent 上下文中的项目感知+记忆基线+对话内容；② 持久化文件 `.claude-dream-context.md`（位于 transcript 目录，C 可直接 Read）
-- C 不需要回翻 jsonl / git / 记忆原文——B 已全部加载就绪
-
 ---
 
 ## 二 · Product Backlog
