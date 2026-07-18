@@ -13,3 +13,11 @@
 | `target-a-loop-trigger/` | Target A: Loop 触发 — [TargetMapping](target-a-loop-trigger/TargetMapping.md) · README |
 | `target-b-input-parsing/` | Target B: 输入读取与解析 — [TargetMapping](target-b-input-parsing/TargetMapping.md) · README |
 | `target-c-comprehensive-judgment/` | Target C: 综合判定 ⭐ — [TargetMapping](target-c-comprehensive-judgment/TargetMapping.md) · README |
+
+## 当前状态
+
+| Target | 阶段 | 备注 |
+|---|---|---|
+| **A: Loop 触发** | ✅ 方案草图完成 | 手动触发，自动 loop 延后 |
+| **B: 输入读取** | ⬜ 待开始 | — |
+| **C: 综合判定** ⭐ | ⬜ 待开始 | 核心原型，下一优先 |
