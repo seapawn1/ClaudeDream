@@ -20,21 +20,45 @@
 
 ## 二 · Product Backlog
 
-### 2.1 待做
+### 2.0 重构主线（抄入 + 修正）
+
+> **起因**：`da60783` 引入 `reference/claude-dream/`——AI 把 claude-memory-compiler 忠实改写成 Claude Code 插件形态（commands + subagents + hooks），比当前单 SKILL.md 更完整。**PO 拍板**：删 SKILL.md、全换 commands+subagents；记忆模型不变（扁平 `memory/` + `MEMORY.md`，不要 knowledge/）；方法 = 抄入参考骨架，有用的抄、无用的删。
+>
+> **存储/打包决定**：daily/ 和 memory/ 都放**配置目录**（`~/.claude/projects/<slug>/`，保持原生加载）；对话读取先抄参考版；保持**可分发插件**（`.claude-plugin/plugin.json`）。
+>
+> 详细拆解见 plan：`pbi-swirling-willow.md`。执行顺序：Import-1 置顶（最高优先级）→ Fix-1~6 依次掰回我们的决定 → Open-1/2 抄入后拍板。
 
 | 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
 |---|---|---|---|---|---|---|
-| PB-Comp-1 | 判定深化测试 | 淘汰 / 冲突 / 漂移路径可信 | 无 | M | 延后 | 原型未测路径（🗑️ / ⚡ / SQ3 / SQ4） |
-| PB-Comp-2 | 确定性层 · Hash Gate | 跳过无变化、省算力 | 做梦流程前置门 | M | 延后 | 整条做梦流程前判定 hash：变化则进行、不变则跳过（省算力）。Sprint 2 明确不做、全部通过 |
-| PB-Comp-3 | 质量层 · Lint | 结构健康、防腐烂 | 无 | L | 延后 | compiler lint 层 |
+| PB-Import-1 | 全量抄入参考插件骨架 | 用 commands+subagents+hooks 架构替换单 SKILL.md，一次拿到完整插件形态 | 插件结构 | L | 就绪 | 抄 commands（flush/compile/query/lint）+ agents（compiler/linter/query-engine）+ hooks 三件套 + scripts（config/utils）+ AGENTS.md；hooks 接进 plugin.json；**删除 SKILL.md**；顺手修 3 个悬空 bug（pyproject 悬空 script、config.py 双重赋值、utils 扫描目录）。先跑通，此时仍是 knowledge/ 模型 |
+| PB-Fix-1 | 记忆模型 + 存储对齐 | knowledge/ 分层 → 扁平 memory/；仓库根 → 配置目录 | 编译输出 · C | L | 延后 | knowledge/concepts/connections/qa/ → `memory/*.md` + `MEMORY.md`；路径从 ROOT_DIR 改配置目录 slug 解析；**删 session-start.py**（memory/ 原生加载，不需注入）；改 AGENTS.md schema + compiler subagent + utils.py |
+| PB-Fix-2 | Gate 注入 compiler | 只记值得记的，滤噪音 | 编译 · C | S | 延后 | 参考 compiler **无 Gate**——注入我们的 6 条硬约束排除 + `NOTHING_WORTH_RECORDING` sentinel |
+| PB-Fix-3 | 四分类 + 生命周期 | 记忆自我更新而非只追加 | 编译 · C | M | 延后 | 参考只有 create/update——注入 🆕⚡🗑️🔁 + 保守删除。我们对 compiler 的改进 |
+| PB-Fix-4 | 防腐涂料 | 感知旧记忆被修正、与项目同步 | 横切 · C | M | 延后 | 双源追踪（session+git hash）/ superseded 标注 / git 漂移感知。我们的原创，参考没有 |
+| PB-Fix-5 | connections 作为 memory type | 跨概念关联，但不建目录 | 编译输出 · C | M | 延后 | 原 PB-Comp-5 转此。connections 作 `type: connection` + Key Points/Details 作记忆文件可选结构——不建 connections/ 目录 |
+| PB-Fix-6 | query 层对齐 | query 不写 knowledge/qa/ | 查询 · C | S | 延后 | query-engine 默认 `--file-back` 写 qa/——改成不写盘 或 写成我们 memory/ 形态 |
+| PB-Open-1 | claude-code-log 去留评估 | 决定对话读取用哪套 | 读取 · B | M | 延后 | 锚点先抄参考的 JSONL 解析；Sprint 2 的 claude-code-log 降噪（PB-Base-5.1）是否恢复，抄入后评估 |
+| PB-Open-2 | 增量机制统一 | 游标 vs state.json 选一套 | 读取/编译 | S | 延后 | 我们用 frontmatter 游标，参考用 state.json SHA-256。倾向跟随参考的 state.json（daily/ 增量天然按文件 hash） |
+
+### 2.1 待做
+
+> 以下为与本次重构**正交**的旧 PB——触发层、规模、测试等，重构不吸收，继续有效。
+
+| 编号 | 标题 | 产品意图 | 架构定位 | size | 当前状态 | 备注 |
+|---|---|---|---|---|---|---|
+| PB-Comp-1 | 判定深化测试 | 淘汰 / 冲突 / 漂移路径可信 | 无 | M | 延后 | 原型未测路径（🗑️ / ⚡ / SQ3 / SQ4）；可并入 PB-Eval-1 |
 | PB-Auto-1 | 语义召唤触发（完整版） | 自然语言召唤（"开始做梦"），含防误触发设计 | 触发 · A | M | 延后 | ⚠️ 需补 IDEO；薄版分化见 PB-Auto-1.1 |
 | PB-Auto-2 | 定时 loop 触发 | 用户不必记得手动跑 | 触发 · A | M | 延后 | ⚠️ 需补 IDEO |
-| PB-Auto-3 | hooks 自动化 | 后台自动捕获，替换 B 手动读取 | 无 | XL | 延后 | ⚠️ 需补 IDEO；compiler-hooks |
 | PB-Scale-1 | 规模与生态 | 大规模分片 / 多项目 / 质量度量 | 无 | XL | 延后 | DesignReview 展望 |
-| PB-Comp-4 | 对话提炼中间层 | B→C 之间 LLM 提炼，生成 daily/YYYY-MM-DD.md，减小 C 输入体积、留下不可变对话历史 | 编译前处理层 · B/C 之间 | M | 延后 | 对标 flush.py；context 文件庞大问题真实存在；名称可改为 dream-log/ |
-| PB-Comp-5 | 知识库文章深化 | 引入 connections 类型（跨概念关联）+ Key Points/Details 结构化格式，对标 compile.py wiki 文章质量 | 编译输出 · C | L | 延后 | ⚠️ breaking change：现有 memory 格式需迁移；对标 knowledge/concepts/ + connections/ 文章结构 |
-| PB-Base-14 | SKILL.md 重构 | 按分层模式重新组织当前杂乱的 SKILL.md，B/C 层职责分离，为后续 PBI 铺路 | 插件结构 | S | 延后 | 技术债；重构不改功能，只改结构；对标参考项目分层模式 |
-| PB-Eval-1 | 系统性 eval 环境 | 建立测试集验证编译质量（Gate/四分类/防腐涂料），给改进提供可量化基线 | 测试基础设施 | L | 延后 | ⚠️ 需补 IDEO：ground truth 标准待定；PB-Comp-1 测试用例可迁移进来 |
+| PB-Eval-1 | 系统性 eval 环境 | 建立测试集验证编译质量（Gate/四分类/防腐涂料），给改进提供可量化基线 | 测试基础设施 | L | 延后 | ⚠️ 需补 IDEO：ground truth 标准待定；PB-Comp-1 测试用例可迁移进来；重构后更需要——验证抄入+修正没退化 |
+
+> **本次重构吸收 / 作废的旧 PB**（原在待做区，现并入 2.0 重构主线）：
+> - PB-Base-14（SKILL.md 重构）→ **作废**，直接删 SKILL.md
+> - PB-Comp-2（Hash Gate）→ **吸收**，/compile 抄入即带 state.json SHA-256
+> - PB-Comp-3（Lint）→ **吸收**，/lint + linter subagent 抄入即得
+> - PB-Comp-4（对话提炼中间层）→ **吸收**，daily/ + /flush 抄入即得
+> - PB-Comp-5（知识库文章深化）→ **转** PB-Fix-5
+> - PB-Auto-3（hooks 自动化）→ **吸收**，hooks 三件套抄入即得
 
 ### 2.2 已完成
 
