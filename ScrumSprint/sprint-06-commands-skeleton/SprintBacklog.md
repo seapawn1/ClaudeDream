@@ -30,18 +30,35 @@
 
 ## 三 · 工作项分解（≤1 天/项）
 
-| # | 工作项 | 归属 PBI·AC | 验收信号 |
-|---|---|---|---|
-| W1 | 复制 commands 四件套：`flush.md` `compile.md` `query.md` `lint.md` → 插件 commands 目录；确认路径在 plugin.json 中可被注册 | Import-1 ① | 四条命令文件存在于插件目录，内容与参考一致 |
-| W2 | 复制 agents 三件套：`compiler.md` `linter.md` `query-engine.md` → 插件 agents 目录 | Import-1 ② | 三个 agent 文件存在，frontmatter 完整（name / description / model / tools） |
-| W3 | 复制 hooks 三件套：`session-start.py` `session-end.py` `pre-compact.py` → 插件 hooks 目录 | Import-1 ③ | 文件存在，recursion guard（CLAUDE_INVOKED_BY）完整 |
-| W4 | 复制 scripts：`config.py` `utils.py` → 插件 scripts 目录；修 3 个悬空 bug | Import-1 ⑤ | bug 修复：pyproject 无悬空 entry；config.py 无双重赋值；utils 扫描目录改参数化 |
-| W5 | 复制 AGENTS.md + pyproject.toml（精简依赖：python-dotenv + tzdata，无 claude-agent-sdk） | Import-1 骨架 | 文件存在；pyproject 依赖仅两项 |
-| W6 | 创建目录骨架：`daily/`（.gitkeep）/ `knowledge/index.md` + `log.md`（空初始化）/ `reports/`（.gitkeep）/ `scripts/state.json`（空 state） | Import-1 骨架 | 目录结构存在，state.json 合法空 JSON |
-| W7 | 接入 plugin.json（hooks 注册）：session-start / session-end / pre-compact 注册进 `.claude-plugin/plugin.json`；对标 `reference/.claude/settings.json` 格式适配插件形态 | Import-1 ③ | plugin.json 含 hooks 声明；真机重启后 hooks 自动触发 |
-| W8 | 删除 SKILL.md：`claude-dream/skills/claude-dream/SKILL.md` 退役；确认 plugin.json / README 无残留引用 | Import-1 ④ | 文件不存在；grep 无残留引用 |
-| W9 | 端到端验收——本项目：hooks 触发 → `/flush` → `/compile` → `/lint` → `/query` 全通 | Import-1 ⑥ | 五条命令输出正常；daily log 有写入；knowledge/ 有文章产出 |
-| W10 | 端到端验收——外部项目（DiaryAgent 或同等项目）：同 W9，验证可分发性 | Import-1 ⑥ | 异构项目上五条命令全通 |
+> 执行记录：W1-W8 由 pawn 完成（2026-07-27，commit `a9c24a5` + `4b47a86`）；W9-W10 待 seapawn 真机验收。
+
+| # | 工作项 | 归属 PBI·AC | 验收信号 | 状态 |
+|---|---|---|---|---|
+| W1 | 复制 commands 四件套：`flush.md` `compile.md` `query.md` `lint.md` → 插件 commands 目录 | Import-1 ① | 四条命令文件存在于插件目录，内容与参考一致 | ✅ 完成 |
+| W2 | 复制 agents 三件套：`compiler.md` `linter.md` `query-engine.md` → 插件 agents 目录 | Import-1 ② | 三个 agent 文件存在，frontmatter 完整；model 改为 `claude-sonnet-5` | ✅ 完成 |
+| W3 | 复制 hooks 三件套：`session-start.py` `session-end.py` `pre-compact.py` → 插件 hooks 目录 | Import-1 ③ | 文件存在，recursion guard（CLAUDE_INVOKED_BY）完整 | ✅ 完成 |
+| W4 | 复制 scripts：`config.py` `utils.py` → 插件 scripts 目录；reference 已无悬空 bug，按实际状态照抄 | Import-1 ⑤ | 文件存在；pyproject name=claude-dream，无 claude-agent-sdk | ✅ 完成 |
+| W5 | 复制 AGENTS.md + pyproject.toml（精简依赖：python-dotenv + tzdata，无 claude-agent-sdk） | Import-1 骨架 | 文件存在；pyproject 依赖仅两项 | ✅ 完成 |
+| W6 | 创建目录骨架：`daily/`（.gitkeep）/ `knowledge/index.md` + `log.md`（空初始化）/ `reports/`（.gitkeep）/ `scripts/state.json`（空 state） | Import-1 骨架 | 目录结构存在，state.json 合法空 JSON | ✅ 完成 |
+| W7 | 接入 plugin.json（hooks 注册）：三个 hook 以 `hooks/hooks.json` 格式注册，命令路径用 `${CLAUDE_PLUGIN_ROOT}` | Import-1 ③ | plugin.json hooks 指向 `./hooks/hooks.json`；hooks.json 含三事件 | ✅ 完成 |
+| W8 | 删除 SKILL.md：退役；确认 plugin.json / README 无残留引用 | Import-1 ④ | 文件不存在；grep 无残留引用；README 更新至 v0.3.0 | ✅ 完成 |
+| W9 | 端到端验收——本项目：hooks 触发 → `/flush` → `/compile` → `/lint` → `/query` 全通 | Import-1 ⑥ | 五条命令输出正常；daily log 有写入；knowledge/ 有文章产出 | ⏳ **待 seapawn** |
+| W10 | 端到端验收——外部项目（DiaryAgent 或同等项目）：同 W9，验证可分发性 | Import-1 ⑥ | 异构项目上五条命令全通 | ⏳ **待 seapawn** |
+
+### W9/W10 seapawn 操作指引
+
+**前置条件**
+```bash
+uv --version   # 若无：powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**步骤**
+1. `/reload-plugins` → 确认 claude-dream 版本 0.3.0 已加载
+2. 说几句话后结束会话（`/exit` 或关窗口）→ 检查 `claude-dream/daily/2026-07-27.md` 有 Raw Session Dump
+3. 新会话依次运行：`/flush` → `/compile` → `/lint` → `/query ClaudeDream是什么`
+4. 检查 `knowledge/` 有文章产出、`reports/` 有 lint 报告
+
+**出错时**：看 `claude-dream/scripts/flush.log`
 
 ---
 
