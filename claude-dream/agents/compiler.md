@@ -1,7 +1,7 @@
 ---
 name: compiler
 description: Compiles daily conversation logs into structured knowledge articles following the AGENTS.md schema. Use when /compile invokes this agent.
-model: claude-opus-5
+model: claude-sonnet-5
 tools:
   - Read
   - Write

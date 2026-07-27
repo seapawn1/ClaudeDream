@@ -1,7 +1,7 @@
 ---
 name: linter
 description: Runs 7 health checks on the knowledge base and produces a lint report. Use when /lint invokes this agent.
-model: claude-opus-5
+model: claude-sonnet-5
 tools:
   - Read
   - Write

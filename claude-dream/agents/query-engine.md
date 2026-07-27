@@ -1,7 +1,7 @@
 ---
 name: query-engine
 description: Answers questions by reading the knowledge base index and relevant articles. Use when /query invokes this agent.
-model: claude-opus-5
+model: claude-sonnet-5
 tools:
   - Read
   - Write
