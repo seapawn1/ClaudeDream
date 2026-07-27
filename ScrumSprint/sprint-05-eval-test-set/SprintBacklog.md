@@ -77,12 +77,23 @@ eval-subject/                              ← 独立 git 仓库，测试对象
 
 ## 五 · 工作项
 
-*工作项在 Planning 会话后续补充。*
+> Developer 在 2026-07-27 执行启动前补充（Sprint Goal + AC 由上轮 Planning 确认）。
+
+| # | 工作项 | 归属 AC | 验收信号 |
+|---|---|---|---|
+| W1 | 创建 eval-subject 仓库骨架：`git init eval-subject` + `README.md`（项目简介 + eval 用途）+ `CLAUDE.md`（告知 Claude 这是测试项目）+ 初始 commit | AC① | 仓库存在，`git log` 有初始 commit |
+| W2 | git 化 claude project 目录：对 `~/.claude/projects/<eval-subject-slug>/` 执行 `git init`，全量纳入（无 `.gitignore`），commit 初始状态 | AC② | 目录下 `git status` 干净，`git log` 有 commit |
+| W3 | 设计测试路径矩阵：列出 6 条测试路径（Gate噪音 / 🆕纯新知识 / ⚡冲突更新 / 🗑️明确推翻 / SQ3 git漂移 / SQ4保守边界），每条写明「对话说了什么 → 预期触发哪条规则 → 预期产出」，落盘 `test-path-matrix.md` | AC①③ + PB-Comp-1①②③④ | 矩阵文档存在，PB-Comp-1 的 4 条判定路径均有对应行 |
+| W4 | 构造模拟对话 transcript：按 W3 路径矩阵，在 eval-subject 目录下进行实际对话（产生 `.jsonl` transcript），内容覆盖各路径触发场景 | AC①③ | `.jsonl` 文件可被 `claude-code-log` 正确解析，内容可触发对应路径 |
+| W5 | 预置 baseline memories：在 claude project 目录的 `memory/` 写入若干初始记忆文件（为⚡/🗑️/SQ3 路径提供印证基准），更新 MEMORY.md 索引，commit 为"baseline"状态 | AC②③ | `memory/` 有文件，MEMORY.md 无断链，git log 有 baseline commit |
+| W6 | 首跑 eval（Sprint 4 系统）：在 eval-subject 目录触发 `/claude-dream`，完毕后两仓库各 `git add -A && git commit`，保存完整 git diff 记录 | AC⑤ | 两仓库均有新 commit，`git diff HEAD^` 展示完整变化 |
+| W7 | 人工评分 + 撰写基线报告：对照 W3 的预期矩阵，逐路径判断通过 / 不通过，写 `eval-report-baseline.md` | AC⑤ | 报告存在，各路径有 ✅/❌ 判定 + 通过率小结 |
+| W8 | Runbook + DoD 独立验证：写 `eval-runbook.md`（reset → run → diff → score 四步）；独立 subagent 或 seapawn 逐 AC 核查并给出通过 / 不通过结论 | AC④⑥ + DoD独立验证 | Runbook 存在，DoD 每条有明确结论 |
 
 ---
 
 ## 六 · 开始日期与分支
 
-开始日期：待定。
+开始日期：2026-07-27。
 
-Branch：`sprint-05-eval-test-set`
+Branch：`sprint-05-eval-test-set--06`（当前活跃分支，含 Sprint 5 + Sprint 6 Planning 文档）。

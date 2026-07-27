@@ -1,9 +1,10 @@
 {
   "name": "claude-dream",
-  "version": "0.2.0",
-  "description": "升级 Claude Code 的记忆系统，使 agent 记忆免于腐烂、与用户和项目保持同步。手动 /claude-dream 或说「开始做梦 / 更新记忆」唤起。",
+  "version": "0.3.0",
+  "description": "升级 Claude Code 的记忆系统，使 agent 记忆免于腐烂、与用户和项目保持同步。自动捕获对话（hooks）+ 四条命令（/flush /compile /query /lint）。",
   "author": {
     "name": "SeaPawn"
   },
-  "keywords": ["memory", "claude-code", "compiler", "dream"]
+  "keywords": ["memory", "claude-code", "compiler", "dream"],
+  "hooks": "./hooks/hooks.json"
 }
