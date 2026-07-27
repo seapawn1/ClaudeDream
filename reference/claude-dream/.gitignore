@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+
+# Runtime state (auto-generated, not committed)
+scripts/state.json
+scripts/last-flush.json
+scripts/flush.log
+scripts/compile.log
+scripts/flush-context-*.md
+scripts/session-flush-*.md
+
+# Lint reports (generated output)
+reports/
+
+# Knowledge base (LLM-owned, each user keeps their own)
+# Uncomment the next two lines to exclude your KB from git:
+# daily/
+# knowledge/
+
+# OS
+.DS_Store
+Thumbs.db
