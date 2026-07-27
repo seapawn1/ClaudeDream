@@ -49,15 +49,17 @@
 
 ## 四 · eval 主体项目设计
 
-**方案**：端到端集成测试（而非静态 fixture）
+**方案**：两个真实项目作为双 eval 主体（2026-07-27 更新）
+
+| 主体 | 项目路径 | claude project dir | transcript | memory/ | 角色 |
+|---|---|---|---|---|---|
+| **IDEO-Scrum** | `F:\IDEO-Scrum` | `~/.claude/projects/F--IDEO-Scrum/` | 14 个 jsonl（~36MB） | 无（冷启动） | Gate + 🆕 Create 路径为主 |
+| **DiaryAgent** | `F:\DiaryAgent` | `~/.claude/projects/f--DiaryAgent/` | 5 个 jsonl | 已有 2 个记忆文件 | ⚡ Update / 🗑️ Delete / SQ3/SQ4 路径为主 |
+
+两个 claude project 目录均已在 2026-07-27 完成 `git init` + baseline commit（全量纳入，无 `.gitignore`）。
 
 ```
-eval-subject/                              ← 独立 git 仓库，测试对象
-    ├── README.md
-    ├── CLAUDE.md
-    └── ...（预置内容，覆盖各测试路径）
-
-~/.claude/projects/<eval-subject-slug>/    ← 独立 git 追踪，全量
+~/.claude/projects/<slug>/     ← 独立 git 追踪，全量
     ├── memory/
     │   ├── MEMORY.md
     │   └── *.md（记忆文件）
@@ -65,13 +67,13 @@ eval-subject/                              ← 独立 git 仓库，测试对象
     └── 其他 Claude Code 生成文件
 ```
 
-**每次 eval 跑法**：
-1. 准备 eval-subject 状态（必要时 reset 到基准 commit）
-2. 在 eval-subject 里跑 `/claude-dream`
-3. 两个仓库各自 `git diff`——记忆和 claude project 完整变化一览
-4. 对照预期：哪些路径被正确触发？人工评分
+**每次 eval 跑法**（两主体各跑一遍）：
+1. 在目标主体的项目目录下触发 `/claude-dream`
+2. 完毕后两仓库（项目本身 + claude project dir）各自 `git add -A && git commit`
+3. `git diff HEAD^` 展示本轮完整变化
+4. 对照 `test-path-matrix.md` 的预期：各路径正确触发？人工评分
 
-**可行性**：不需要架构改动，仅需 git init 配置 + eval-subject 内容设计。
+**可行性**：无需架构改动，eval 基础设施（git 追踪）已就绪（W2 ✅）。
 
 ---
 
