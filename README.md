@@ -16,7 +16,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `claude-dream/` | **插件产物** — 可安装的 Claude Code 记忆插件（v0.2.0：完整读取管线，claude-code-log 降噪） |
 | `.IDEO/` | 设计思考工作区 — [README](.IDEO/README.md) · [Design Sprint 完整产出](.IDEO/DesignSprint/DesignReview.md) |
 | `ScrumSprint/` | 当前开发 Sprint — [README](ScrumSprint/README.md) |
-| `reference/` | 方案类比参考 — auto-dream · auto-memory · claude-memory-compiler · **claude-code-log**（Sprint 2 对话读取工具底座） |
+| `reference/` | 方案类比参考 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log（Sprint 2 对话读取工具底座） · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信，详见 [reference/README](reference/README.md)） |
 
 ## 当前状态
 
