@@ -11,8 +11,8 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | 文件/目录 | 内容 |
 |---|---|
 | `.gitignore` | Git 忽略规则 |
-| `.env` | 本地环境变量，不入库 |
-| `seapawn.md` | 本地私人笔记，不入库 |
+| `.env` | 本地环境变量，不可阅读 |
+| `seapawn.md` | 本地私人笔记，不可阅读 |
 | `claude-dream/` | **插件产物** — 可安装的 Claude Code 记忆插件（v0.2.0：完整读取管线，claude-code-log 降噪） |
 | `.IDEO/` | 设计思考工作区 — [README](.IDEO/README.md) · [Design Sprint 完整产出](.IDEO/DesignSprint/DesignReview.md) |
 | `ScrumSprint/` | 当前开发 Sprint — [README](ScrumSprint/README.md) |
