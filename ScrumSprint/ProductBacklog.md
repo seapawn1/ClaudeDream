@@ -31,6 +31,10 @@
 | PB-Auto-2 | 定时 loop 触发 | 用户不必记得手动跑 | 触发 · A | M | 延后 | ⚠️ 需补 IDEO |
 | PB-Auto-3 | hooks 自动化 | 后台自动捕获，替换 B 手动读取 | 无 | XL | 延后 | ⚠️ 需补 IDEO；compiler-hooks |
 | PB-Scale-1 | 规模与生态 | 大规模分片 / 多项目 / 质量度量 | 无 | XL | 延后 | DesignReview 展望 |
+| PB-Comp-4 | 对话提炼中间层 | B→C 之间 LLM 提炼，生成 daily/YYYY-MM-DD.md，减小 C 输入体积、留下不可变对话历史 | 编译前处理层 · B/C 之间 | M | 延后 | 对标 flush.py；context 文件庞大问题真实存在；名称可改为 dream-log/ |
+| PB-Comp-5 | 知识库文章深化 | 引入 connections 类型（跨概念关联）+ Key Points/Details 结构化格式，对标 compile.py wiki 文章质量 | 编译输出 · C | L | 延后 | ⚠️ breaking change：现有 memory 格式需迁移；对标 knowledge/concepts/ + connections/ 文章结构 |
+| PB-Base-14 | SKILL.md 重构 | 按分层模式重新组织当前杂乱的 SKILL.md，B/C 层职责分离，为后续 PBI 铺路 | 插件结构 | S | 延后 | 技术债；重构不改功能，只改结构；对标参考项目分层模式 |
+| PB-Eval-1 | 系统性 eval 环境 | 建立测试集验证编译质量（Gate/四分类/防腐涂料），给改进提供可量化基线 | 测试基础设施 | L | 延后 | ⚠️ 需补 IDEO：ground truth 标准待定；PB-Comp-1 测试用例可迁移进来 |
 
 ### 2.2 已完成
 
