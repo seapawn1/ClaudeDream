@@ -1,0 +1,96 @@
+2026-07-27 15:44:23 INFO [session-end] SessionEnd fired: session=test source=manual
+2026-07-27 15:44:23 INFO [session-end] SKIP: transcript missing: fake.jsonl
+2026-07-27 17:16:51 INFO [session-end] SessionEnd fired: session=c29e0e16-b59a-4d5b-b185-2332f395cafe source=unknown
+2026-07-27 17:16:51 INFO [session-end] Appended raw dump for session c29e0e16-b59a-4d5b-b185-2332f395cafe (12 turns, 1740 chars)
+2026-07-27 17:29:39 INFO [session-end] SessionEnd fired: session=55329e47-5abb-4bc5-8d4a-43541107a4a4 source=unknown
+2026-07-27 17:29:39 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\d--ClaudeDream\55329e47-5abb-4bc5-8d4a-43541107a4a4.jsonl
+2026-07-27 17:29:39 INFO [session-end] SessionEnd fired: session=44fe5c4b-b6ff-4cca-92c5-5c4391f93695 source=unknown
+2026-07-27 17:29:39 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\d--ClaudeDream\44fe5c4b-b6ff-4cca-92c5-5c4391f93695.jsonl
+2026-07-27 17:29:39 INFO [session-end] SessionEnd fired: session=6612e34d-72d7-465d-b085-603d0b7a39f2 source=unknown
+2026-07-27 17:29:39 INFO [session-end] Appended raw dump for session 6612e34d-72d7-465d-b085-603d0b7a39f2 (18 turns, 8230 chars)
+2026-07-27 17:29:39 INFO [session-end] SessionEnd fired: session=ca7a45c7-c385-4f3f-bd38-d63d290b229d source=unknown
+2026-07-27 17:29:39 INFO [session-end] Appended raw dump for session ca7a45c7-c385-4f3f-bd38-d63d290b229d (13 turns, 1685 chars)
+2026-07-27 17:29:39 INFO [session-end] SessionEnd fired: session=8355d034-9f4b-4bc8-8c84-2864ab8a9888 source=unknown
+2026-07-27 17:29:39 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\d--ClaudeDream\8355d034-9f4b-4bc8-8c84-2864ab8a9888.jsonl
+2026-07-27 18:40:16 INFO [session-end] SessionEnd fired: session=d782313f-f232-49cb-898e-0f96bb699559 source=unknown
+2026-07-27 18:40:16 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\d--ClaudeDream\d782313f-f232-49cb-898e-0f96bb699559.jsonl
+2026-07-27 18:40:16 INFO [session-end] Appended raw dump for session 1d0fe1bc-900d-4244-b99f-f1759287965d (7 turns, 608 chars)
+2026-07-27 22:08:07 INFO [session-end] SessionEnd fired: session=cd1bc0c1-100f-4d32-bdfc-4a350dfd6114 source=unknown
+2026-07-27 22:08:07 INFO [session-end] Appended raw dump for session cd1bc0c1-100f-4d32-bdfc-4a350dfd6114 (23 turns, 4544 chars)
+2026-07-28 12:07:16 INFO [session-end] SessionEnd fired: session=6e815d0f-19bd-4ee0-bc39-207550cac824 source=unknown
+2026-07-28 12:07:16 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\6e815d0f-19bd-4ee0-bc39-207550cac824.jsonl
+2026-07-28 12:07:27 INFO [session-end] SessionEnd fired: session=04ef2071-d04b-4e16-8e62-27a73e12150c source=unknown
+2026-07-28 12:07:27 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\04ef2071-d04b-4e16-8e62-27a73e12150c.jsonl
+2026-07-28 12:21:28 INFO [session-end] SessionEnd fired: session=feb8795d-a1f3-4a01-ab0d-815afe73eba4 source=unknown
+2026-07-28 12:21:28 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\feb8795d-a1f3-4a01-ab0d-815afe73eba4.jsonl
+2026-07-28 12:21:29 INFO [session-end] SessionEnd fired: session=0a208871-a431-40ad-8613-5a1d352674d2 source=unknown
+2026-07-28 12:21:29 INFO [session-end] Appended raw dump for session 0a208871-a431-40ad-8613-5a1d352674d2 (13 turns, 4051 chars)
+2026-07-28 12:30:56 INFO [session-end] SessionEnd fired: session=63bf0882-57dc-42c5-ade1-14c99059c0b9 source=unknown
+2026-07-28 12:30:56 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\63bf0882-57dc-42c5-ade1-14c99059c0b9.jsonl
+2026-07-28 12:30:56 INFO [session-end] SessionEnd fired: session=853a213f-15a1-46ad-945f-9f2a7321ba82 source=unknown
+2026-07-28 12:30:56 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\853a213f-15a1-46ad-945f-9f2a7321ba82.jsonl
+2026-07-28 13:13:00 INFO [session-end] SessionEnd fired: session=8c21f45e-3a4f-4a00-882f-bb9ae0cba283 source=unknown
+2026-07-28 13:13:00 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\8c21f45e-3a4f-4a00-882f-bb9ae0cba283.jsonl
+2026-07-28 13:13:34 INFO [session-end] SessionEnd fired: session=15358cea-a8d5-4278-b661-a43189c04051 source=unknown
+2026-07-28 13:13:34 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\15358cea-a8d5-4278-b661-a43189c04051.jsonl
+2026-07-28 13:20:23 INFO [session-end] SessionEnd fired: session=bc956689-696b-4b96-8a19-c17d58226a63 source=unknown
+2026-07-28 13:20:23 INFO [session-end] Appended raw dump for session bc956689-696b-4b96-8a19-c17d58226a63 (11 turns, 4871 chars)
+2026-07-28 13:20:23 INFO [session-end] SessionEnd fired: session=77c74aca-2957-4dc7-a12d-f208eea0448d source=unknown
+2026-07-28 13:20:23 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\77c74aca-2957-4dc7-a12d-f208eea0448d.jsonl
+2026-07-28 15:05:20 INFO [session-end] SessionEnd fired: session=f7f49f8c-16a4-45f3-89b1-718497ba7622 source=unknown
+2026-07-28 15:05:20 INFO [session-end] Appended raw dump for session f7f49f8c-16a4-45f3-89b1-718497ba7622 (2 turns, 15000 chars)
+2026-07-28 15:05:22 INFO [session-end] SessionEnd fired: session=fd1081ba-1124-4d7c-b88a-fbf3bda4b0f0 source=unknown
+2026-07-28 15:05:22 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\fd1081ba-1124-4d7c-b88a-fbf3bda4b0f0.jsonl
+2026-07-28 16:06:38 INFO [session-end] SessionEnd fired: session=5388a53c-f436-41f9-a27c-4e2324c983ff source=unknown
+2026-07-28 16:06:38 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\893767b9-fe46-4cac-8b89-18db268c1e01.jsonl
+2026-07-28 16:06:38 INFO [session-end] Appended raw dump for session 5388a53c-f436-41f9-a27c-4e2324c983ff (26 turns, 10495 chars)
+2026-07-28 16:06:42 INFO [session-end] SessionEnd fired: session=9b121005-c214-454c-af30-ca9a1c80ad93 source=unknown
+2026-07-28 16:06:42 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\9b121005-c214-454c-af30-ca9a1c80ad93.jsonl
+2026-07-28 20:39:49 INFO [session-end] SessionEnd fired: session=dd897b3f-60a7-4150-9cba-e288234dfcaa source=unknown
+2026-07-28 20:39:50 INFO [session-end] Appended raw dump for session dd897b3f-60a7-4150-9cba-e288234dfcaa (2 turns, 483 chars)
+2026-07-28 21:23:09 INFO [session-end] SessionEnd fired: session=7c93e6b7-801d-40af-b43f-121b39e9f197 source=unknown
+2026-07-28 21:23:09 INFO [session-end] SessionEnd fired: session=b21aff29-f81d-4fb3-80fa-9e2721c95720 source=unknown
+2026-07-28 21:23:09 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\b21aff29-f81d-4fb3-80fa-9e2721c95720.jsonl
+2026-07-28 21:23:09 INFO [session-end] Appended raw dump for session 7c93e6b7-801d-40af-b43f-121b39e9f197 (22 turns, 14349 chars)
+2026-07-28 21:39:23 INFO [session-end] SessionEnd fired: session=91840208-4fb4-4870-978b-3028d21d9ae1 source=unknown
+2026-07-28 21:39:23 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\91840208-4fb4-4870-978b-3028d21d9ae1.jsonl
+2026-07-28 21:43:43 INFO [session-end] SessionEnd fired: session=561a47eb-df6f-4488-a283-e3f6c47437d4 source=unknown
+2026-07-28 21:43:43 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\561a47eb-df6f-4488-a283-e3f6c47437d4.jsonl
+2026-07-28 21:57:23 INFO [session-end] SessionEnd fired: session=8a404a61-d331-4a79-ab7b-8401897db699 source=unknown
+2026-07-28 21:57:23 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\8a404a61-d331-4a79-ab7b-8401897db699.jsonl
+2026-07-28 21:57:23 INFO [session-end] SessionEnd fired: session=7c93e6b7-801d-40af-b43f-121b39e9f197 source=unknown
+2026-07-28 21:57:23 INFO [session-end] Appended raw dump for session 7c93e6b7-801d-40af-b43f-121b39e9f197 (30 turns, 10984 chars)
+2026-07-28 22:04:20 INFO [session-end] SessionEnd fired: session=2a6b8461-6638-490a-bf57-52eefa33091b source=unknown
+2026-07-28 22:04:20 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\2a6b8461-6638-490a-bf57-52eefa33091b.jsonl
+2026-07-28 22:05:59 INFO [session-end] SessionEnd fired: session=7c93e6b7-801d-40af-b43f-121b39e9f197 source=unknown
+2026-07-28 22:05:59 INFO [session-end] Appended raw dump for session 7c93e6b7-801d-40af-b43f-121b39e9f197 (30 turns, 10984 chars)
+2026-07-28 22:06:39 INFO [session-end] SessionEnd fired: session=5910b584-8320-4628-9739-3c7aa1cc12a9 source=unknown
+2026-07-28 22:06:39 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\5910b584-8320-4628-9739-3c7aa1cc12a9.jsonl
+2026-07-28 22:22:00 INFO [session-end] SessionEnd fired: session=277f61c2-c2f3-48b5-9cd8-5db93290aa76 source=unknown
+2026-07-28 22:22:00 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\277f61c2-c2f3-48b5-9cd8-5db93290aa76.jsonl
+2026-07-28 22:22:00 INFO [session-end] SessionEnd fired: session=7c93e6b7-801d-40af-b43f-121b39e9f197 source=unknown
+2026-07-28 22:22:00 INFO [session-end] Appended raw dump for session 7c93e6b7-801d-40af-b43f-121b39e9f197 (30 turns, 7577 chars)
+2026-07-28 22:42:54 INFO [session-end] SessionEnd fired: session=2be4c6ad-dea1-44ac-9676-d5e559553429 source=unknown
+2026-07-28 22:42:54 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\f--SeaPawn\2be4c6ad-dea1-44ac-9676-d5e559553429.jsonl
+2026-07-28 22:52:39 INFO [session-end] SessionEnd fired: session=2c7340d7-b384-4731-b996-9e5f3754b3c2 source=unknown
+2026-07-28 22:52:39 INFO [session-end] Appended raw dump for session 2c7340d7-b384-4731-b996-9e5f3754b3c2 (5 turns, 772 chars)
+2026-07-28 23:27:13 INFO [session-end] SessionEnd fired: session=fbb2c567-d672-4c94-866e-d79a89f462f6 source=unknown
+2026-07-28 23:27:13 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\fbb2c567-d672-4c94-866e-d79a89f462f6.jsonl
+2026-07-28 23:40:09 INFO [session-end] SessionEnd fired: session=98837657-f4b5-42da-a98a-ac45b70ae6b4 source=unknown
+2026-07-28 23:40:09 INFO [session-end] Appended raw dump for session 98837657-f4b5-42da-a98a-ac45b70ae6b4 (9 turns, 4797 chars)
+2026-07-29 10:11:09 INFO [session-end] SessionEnd fired: session=1fd3b287-f70a-44b6-b49e-d1646cd1a359 source=unknown
+2026-07-29 10:11:09 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\1fd3b287-f70a-44b6-b49e-d1646cd1a359.jsonl
+2026-07-29 12:02:38 INFO [session-end] SessionEnd fired: session=7ab3e00e-a101-47df-9d6a-dc6ec9578ae5 source=unknown
+2026-07-29 12:02:38 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\7ab3e00e-a101-47df-9d6a-dc6ec9578ae5.jsonl
+2026-07-29 12:03:25 INFO [session-end] SessionEnd fired: session=1f7e7cd4-cc5d-4694-a055-abf63fbd46ff source=unknown
+2026-07-29 12:03:25 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\1f7e7cd4-cc5d-4694-a055-abf63fbd46ff.jsonl
+2026-07-29 12:25:27 INFO [session-end] SessionEnd fired: session=4ce71ca1-8f8c-4045-9fa6-f6be4552cd17 source=unknown
+2026-07-29 12:25:27 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\4ce71ca1-8f8c-4045-9fa6-f6be4552cd17.jsonl
+2026-07-29 12:45:23 INFO [session-end] SessionEnd fired: session=fab0d987-d514-4687-8209-883b66c606bd source=unknown
+2026-07-29 12:45:23 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\fab0d987-d514-4687-8209-883b66c606bd.jsonl
+2026-07-29 13:57:39 INFO [session-end] SessionEnd fired: session=eaa3f520-b352-4acf-b5a2-4c810359b899 source=unknown
+2026-07-29 13:57:39 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\eaa3f520-b352-4acf-b5a2-4c810359b899.jsonl
+2026-07-29 15:27:33 INFO [session-end] SessionEnd fired: session=a88e2262-ab43-4dd2-a7f9-677c748794b6 source=unknown
+2026-07-29 15:27:33 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\a88e2262-ab43-4dd2-a7f9-677c748794b6.jsonl
+2026-07-29 15:28:44 INFO [session-end] SessionEnd fired: session=3e04f95b-47ea-43bd-9c1a-ff3b3521c5b7 source=unknown
+2026-07-29 15:28:44 INFO [session-end] SKIP: transcript missing: C:\Users\DELL\.claude\projects\F--SeaPawn\3e04f95b-47ea-43bd-9c1a-ff3b3521c5b7.jsonl

@@ -1,6 +1,11 @@
 {
-  "ingested": {},
-  "query_count": 0,
-  "last_lint": null,
+  "ingested": {
+    "2026-07-27.md": {
+      "hash": "e2c2601d2d2cfe3b",
+      "compiled_at": "2026-07-27T09:20:07.000Z"
+    }
+  },
+  "query_count": 1,
+  "last_lint": "2026-07-27T09:23:51.000Z",
   "total_cost": 0.0
 }
