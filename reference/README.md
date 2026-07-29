@@ -35,4 +35,4 @@ ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事�
 
 | 目录 | 转化依据 | 转化方式 | 用途 |
 |---|---|---|---|
-| `claude-dream/` | `agent-memory/claude-memory-compiler/`（原型） | 由 AI 改写：`claude-agent-sdk` 后台进程 → Claude Code 原生 slash commands（`/flush` `/compile` `/query` `/lint`）+ subagents（compiler / query-engine / linter），去掉独立 API 计费 | 展示"同一套 compile→lint→query 架构，换成 Claude Code 插件形态长什么样"——**不是**上游仓库，无 commit 可追溯，不能当作已验证的实现直接抄；已提炼的可信设计结论见 [[compiler-hooks-reference]] · [[compiler-architecture-reference]]（均以 `claude-memory-compiler` 原型源码为准）
+| `claude-dream/` | `agent-memory/claude-memory-compiler/`（原型） | 由 AI 改写：`claude-agent-sdk` 后台进程 → Claude Code 原生 slash commands（`/flush` `/compile` `/query` `/lint`）+ subagents（compiler / query-engine / linter），去掉独立 API 计费 | 展示"同一套 compile→lint→query 架构，换成 Claude Code 插件形态长什么样"——**不是**上游仓库，无 commit 可追溯，不能当作已验证的实现直接抄；此前提炼的设计结论记忆已随 2026-07-29 项目重启丢失，需要时以 `claude-memory-compiler` 原型源码为准
