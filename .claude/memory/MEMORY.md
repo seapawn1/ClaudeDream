@@ -1,0 +1,8 @@
+- [Target A 决策](target-a-decision.md) — A 退化为手动触发，自动 loop 延后
+- [Target B 决策](target-b-decision.md) — B 顺序管线方案选定，Map B/C 边界厘清
+- [Target C 决策](target-c-decision.md) — C Memory Compiler，compiler compile 模型 + git 漂移；PB-10 横切设计 + scope 扩为 7 条
+- [compiler hooks 参考](compiler-hooks-reference.md) — hooks 架构可未来自动化 B 的读取
+- [compiler 架构参考](compiler-architecture-reference.md) — compiler 三层架构 + compile.py 写入侧勘探（单 prompt/acceptEdits/无四分类器）
+- [ClaudeDream 命名约定](productbacklog-claudedream-naming.md) — 手动触发命令统一为 /claude-dream（带连字符），各层一致
+- [Sprint 4 完成](sprint-04-compile-write-planning.md) — Planning + 执行 + Review 闭环，Target C 首次写记忆，DoD 全六类 PASS
+- [Target C SKILL.md 落地](target-c-skill-layout.md) — C 的 SKILL.md 格 5 落地形态：单 agent compile 流程 8 子节
