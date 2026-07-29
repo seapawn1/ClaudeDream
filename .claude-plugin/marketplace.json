@@ -9,7 +9,7 @@
       "name": "claude-dream",
       "source": "./claude-dream",
       "description": "升级 Claude Code 的记忆系统，使 agent 记忆免于腐烂、与用户和项目保持同步。手动 /claude-dream 或说「开始做梦 / 更新记忆」唤起。",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "author": {
         "name": "SeaPawn"
       },
