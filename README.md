@@ -10,12 +10,9 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 | 文件/目录 | 内容 |
 |---|---|
-| `README.md` | 项目地图与当前状态（本文件） |
-| `CLAUDE.md` | 项目定位，供 Claude 会话载入 |
 | `.gitignore` | Git 忽略规则 |
 | `.env` | 本地环境变量，不可阅读 |
 | `seapawn.md` | 本地私人笔记，不可阅读 |
-| `.claude/` | Claude Code 项目级配置（`settings.json` + 本地 `settings.local.json`） |
 | `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 `./claude-dream`（产物代码待重新设计，目录暂不存在） |
 | `.IDEO/` | 设计思考工作区，预留待用 — [README](.IDEO/README.md) |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
