@@ -14,7 +14,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.env` | 本地环境变量，不可阅读 |
 | `seapawn.md` | 本地私人笔记，不可阅读 |
 | `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 `./claude-dream`（产物代码待重新设计，目录暂不存在） |
-| `.IDEO/` | 设计思考工作区，Design Sprint 进行中（Challenge、长期目标/冲刺问题、Map、HMW 已拍板；下一步 Pick a Target）— [README](.IDEO/README.md) |
+| `.IDEO/` | 设计思考工作区，Design Sprint 进行中（Challenge、长期目标/冲刺问题、Map、HMW、Target 已拍板；当前 Ideate）— [README](.IDEO/README.md) |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
 
 ## 当前状态
@@ -27,4 +27,6 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 2026-08-01（续）：HMW 收敛完成——四模块 40 条原始候选合并为 21 条，选定 8 条挂上 Map。POV+HMW 阶段结束。
 
-2026-08-01（续二）：两份白板审阅整改。`DesignMapping.md` 更名 `DesignMap.md`；两份文件对齐成熟参照的章节骨架；补齐全部证据出处（两个 issue 核实为 `anthropics/claude-code#47959`/`#38493`，claude-mem star 数补快照日期与各源分歧）；新增角色与结果表、HMW 族标记、Target 占位、Map 闭环回边；v0→v1 过程留痕清出白板交由 git 承载。下一阶段 Pick a Target。
+2026-08-01（续二）：两份白板审阅整改。`DesignMapping.md` 更名 `DesignMap.md`；两份文件对齐成熟参照的章节骨架；补齐全部证据出处（两个 issue 核实为 `anthropics/claude-code#47959`/`#38493`，claude-mem star 数补快照日期与各源分歧）；新增角色与结果表、HMW 族标记、Target 占位、Map 闭环回边；v0→v1 过程留痕清出白板交由 git 承载。
+
+2026-08-01（续三）：Pick a Target 完成——圈定 **长期用户 + S6–S8 整合段**（体检 → 整合 → 梦报告）。依据：8 条 HMW 中 6 条落此段、过期/透明/所有权三族全覆盖；对齐权重第一的冲刺问题（过期）；官方 Auto Dream 正是在 S7 翻车（误删 23 个记忆文件）——机会与风险都最大处。落盘于 `.IDEO/Target-1-Consolidation/TargetMap.md`。取用段（S10–S11）列为候选 Target-2，待本段通过后再议。下一阶段 Ideate。
