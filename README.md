@@ -14,7 +14,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.env` | 本地环境变量，不可阅读 |
 | `seapawn.md` | 本地私人笔记，不可阅读 |
 | `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 `./claude-dream`（产物代码待重新设计，目录暂不存在） |
-| `.IDEO/` | 设计思考工作区，Design Sprint 进行中（Challenge 与 Goal/Questions 已拍板）— [README](.IDEO/README.md) |
+| `.IDEO/` | 设计思考工作区，Design Sprint 进行中（Challenge、长期目标/冲刺问题、Map v1 已拍板）— [README](.IDEO/README.md) |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
 
 ## 当前状态
@@ -22,3 +22,5 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 2026-07-29：项目重启。此前的 Design Sprint 产出（原 `.IDEO/DesignSprint/`）和 Scrum Sprint 1-6 开发记录（原 `ScrumSprint/`，含 claude-dream 插件产物代码）已作废，不再是当前工作基础——完整历史仍保留在 Git 里，`main` 之前的提交、以及 `sprint-01` ~ `sprint-05-eval-test-set--06`、`DesignSprint--跑通全流程` 等分支上随时可查。当前只保留 `reference/` 参考资料与基础设施骨架。
 
 2026-07-29（续）：新一轮 Design Sprint 启动（分支 `design-sprint`）。Monday Define 已拍板 Challenge 与长期目标/冲刺问题，落盘于 `.IDEO/ChallengeBackground.md`、`.IDEO/DesignMapping.md`；下一阶段 Ask the Experts。
+
+2026-08-01：Ask the Experts 完成（四模块：官方机制+项目考古、前人方案深读、社区之声调研、决策者访谈）。Challenge 补全整合原料层可行性与差异化定位；Map 修订至 v1（11 步）；冲刺问题由 3 条修订为 4 条（过期升首位、新增所有权问题）；均已拍板落盘。下一步：HMW 收敛选定，随后进入 Target 阶段。

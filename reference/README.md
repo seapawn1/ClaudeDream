@@ -27,7 +27,7 @@ ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事�
 | 目录 | 上游 | 克隆时的 commit | 用途 |
 |---|---|---|---|
 | `agent-memory/claude-memory-compiler/` | https://github.com/coleam00/claude-memory-compiler | `54eddd70` | Memory Compiler 原型——compile → index → log 模型，Design Sprint C 的主基座 |
-| `claude-code-log/` | https://github.com/daaain/claude-code-log | 2026-07-19 clone | ✅ Sprint 2 已接入：`pip install claude-code-log`（v1.5.0），`--detail low --format md --compact` 降噪 98.2%，落盘 `.claude-dream-context.md` |
+| `claude-code-log/` | https://github.com/daaain/claude-code-log | 2026-07-19 clone | `pip install claude-code-log`（v1.5.0）。旧 Sprint 2 曾宣称 `--detail low --format md --compact` 降噪 98.2%——2026-08-01 Design Sprint 专家研究同版本复测三个真实会话：相对 `--detail full` 的 Markdown 体积降至约 1/4–1/7（77.6%–86.2%），相对原始 jsonl 降至约 1/20–1/170，随会话工具密度大幅波动；旧的 98.2% 为单样本、口径未声明（未说明是行数还是字节、基线是 full 还是原始 jsonl），疑似残缺输出导致的离群值，不可沿用 |
 
 新增参考项目时：clone → 删除 `.git`（或改名 `.git-bak`）→ `git add` 以普通文件入库。`.gitignore` 里的 `reference/**/.git/` + `reference/claude-code-log/` 防止误提交子仓库的 git 内脏。
 
