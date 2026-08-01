@@ -23,4 +23,6 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 2026-07-29（续）：新一轮 Design Sprint 启动（分支 `design-sprint`）。Monday Define 已拍板 Challenge 与长期目标/冲刺问题，落盘于 `.IDEO/ChallengeBackground.md`、`.IDEO/DesignMapping.md`；下一阶段 Ask the Experts。
 
-2026-08-01：Ask the Experts 完成（四模块：官方机制+项目考古、前人方案深读、社区之声调研、决策者访谈）。Challenge 补全整合原料层可行性与差异化定位；Map 修订至 v1（11 步）；冲刺问题由 3 条修订为 4 条（过期升首位、新增所有权问题）；均已拍板落盘。下一步：HMW 收敛选定，随后进入 Target 阶段。
+2026-08-01：Ask the Experts 完成（四模块：官方机制+项目考古、前人方案深读、社区之声调研、决策者访谈）。Challenge 补全整合原料层可行性与差异化定位；Map 修订至 v1（11 步）；冲刺问题由 3 条修订为 4 条（过期升首位、新增所有权问题）；均已拍板落盘。
+
+2026-08-01（续）：HMW 收敛完成——四模块 40 条原始候选合并为 21 条，选定 8 条挂上 Map v1，落盘于 `.IDEO/DesignMapping.md`。POV+HMW 阶段结束，下一阶段 Target。
