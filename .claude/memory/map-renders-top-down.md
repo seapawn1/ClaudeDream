@@ -12,4 +12,4 @@ Design Sprint 的 map 落盘到 `.IDEO/` 文档时，mermaid 用 `flowchart TD`�
 
 **Why:** seapawn 在 2026-08-01 Map v0 讨论时明确要求"未来落盘时候地图，改为从上到下排列"。
 
-**How to apply:** 对话白板里怎么画都行，但写进 DesignMapping.md 等文件时一律 TD 方向。
+**How to apply:** 对话白板里怎么画都行，但写进 `.IDEO/DesignMap.md` 等文件时一律 TD 方向。
