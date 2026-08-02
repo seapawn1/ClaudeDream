@@ -1,6 +1,6 @@
 # .IDEO
 
-这里是 ClaudeDream 的设计冲刺工作区，保存挑战定义、长期目标、设计地图与方案收敛过程。这里只有设计文档，不是可运行代码目录。
+这里是 ClaudeDream 的设计冲刺工作区，保存挑战定义、长期目标、设计地图与方案收敛过程。这里以设计文档为主；唯一例外是原型施工物（可运行脚本、假数据 builder、真跑产物）——它们是设计迭代的道具，随所属 `Prototype-0X-*/` 子文件夹落户，与其 Sketches/Storyboard/TestPlan 同住一个迭代单元。
 
 **不做的事**：重复方法定义（方法源文在 `ideo-scrum:design-kernel` 插件里）、存放会话逐字原文、替代 skill 目录。
 
@@ -27,6 +27,7 @@
 | [Target-1-Consolidation/Ideate/SketchPool.md](Target-1-Consolidation/Ideate/SketchPool.md) | 四份竞争草图（A 官方改良 / B 审计·主 agent / C 机械 / D wiki）——评审已收敛，胜者见 Prototype-01 的 Sketches.md |
 | [Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md](Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md) | **定稿方案**（拍板 2026-08-02）：wiki 主体 + 三派嫁接——判据 M1–M5/S1–S3、L0–L3 权限模型、三道安全阀、报告六节、阀门配置、风险表 |
 | [Target-1-Consolidation/Prototype-01-FirstDream/Storyboard.md](Target-1-Consolidation/Prototype-01-FirstDream/Storyboard.md) | 双侧故事板：用户侧十格（Test 剧本）+ 梦侧九镜（施工剧本）+ 道具与施工清单 |
+| [Target-1-Consolidation/Prototype-01-FirstDream/test/TestPlan.md](Target-1-Consolidation/Prototype-01-FirstDream/test/TestPlan.md) | Friday Test 施工图：硬判据 H1–H5（五条验收信号操作化）、行为观察 O1–O4、用户剧本（seapawn 全程 + 模拟用户 P1–P3）、宣判规则三档出口 |
 
 原料与参照物不在本目录，在 [../reference/](../reference/)——外部方案源码、官方机制提取文档及其取材口径。
 

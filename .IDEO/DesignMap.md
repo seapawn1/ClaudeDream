@@ -8,7 +8,7 @@
 
 **验收基调（周五测试总判据）**：长期用下来，用户会真切觉得"agent 更懂我和这个项目"吗？
 
-> **已知缺口**：上述五条验收信号目前都还不可操作——没有一条说清楚"周五测试时具体怎么测"。这不阻塞 Pick a Target，但在 Prototype 定稿前必须补上，否则 Test 阶段无判据。
+> **缺口已补（2026-08-02）**：五条验收信号已在 [Prototype-01 TestPlan](Target-1-Consolidation/Prototype-01-FirstDream/test/TestPlan.md) 操作化为硬判据 H1–H5 与行为观察 O1–O4。其中"不重复提问"属取用段留 Target-2、"数周后复利"须长期使用验证——两条声明靶外，不算 Prototype-01 的账。
 
 ## 冲刺问题
 
