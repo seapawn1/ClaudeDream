@@ -36,3 +36,5 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 2026-08-02（续）：Sketch 完成——四位 sketcher 独立作画（A 官方改良 / B 审计·主 agent 亲画 / C 机械 / D wiki，三个 subagent 真隔离），每份含 Crazy 8s 八变体、S6–S8 三格故事板、梦报告全文样例、自报风险。四份全部通过收卷验收（五节齐全、硬约束无违例），落盘于 `.IDEO/Target-1-Consolidation/Ideate/SketchPool.md`。下一步评审收敛（静默评审 → Decider 选定或杂交）。
 
 2026-08-02（续二）：Ideate 收官——Decider 拍板 **wiki 派为主体、嫁接 A/B/C 三派**（九项嫁接：快照提交、feedback 保护、开场提示、30 秒版+抽查点、证据纪律、LLM 无删除票铁律、熔断器、git 讣告、单笔回滚）。开 `Prototype-01-FirstDream/`：定稿 `Sketches.md` + 双侧 `Storyboard.md`（用户侧十格 = Test 剧本；梦侧九镜 = 施工剧本——原型不是纯假画面，梦必须真跑）。下一步原型施工。
+
+2026-08-02（续三）：Prototype 施工完成（Thursday）——双线并行：Test 线落 `TestPlan.md`（五条验收信号操作化为 H1–H5 + O1–O4，宣判三档出口）；原型线造 acme-api 腐烂记忆库（42 条记忆 builder 可复现生成）+ 梦引擎（M1–M5 机械体检、梦提示词、run-dream 工程审计）。**第一场梦真跑成功**：5 条种植腐烂全处置、健康记忆零误删、报告六节带可复现证据与单条回滚命令；关阀对照梦证明阀门降级可见；三道安全阀（熔断/铁律/越界）经故障注入实测。重要工程发现：`.claude` 受保护路径 + hook 在嵌套 headless 不加载 → **产物阶段必须走 Agent SDK（canUseTool 进程内缴械）**。下一步 Friday Test。

@@ -13,8 +13,8 @@
 | POV + HMW（40 条 → 21 条 → 选定 8 条） | ✅ 已完成，2026-08-01 |
 | Pick a Target（长期用户 + S6–S8 整合段） | ✅ 已完成，2026-08-01 |
 | Ideate（Lightning Demos → Sketch → 评审收敛） | ✅ 已完成，2026-08-02——Decider 选定 wiki 主体杂交方案，定稿 Sketches.md |
-| **Prototype** | **⬅ 当前——Storyboard ✅ 2026-08-02（双侧：用户十格 + 梦九镜），下一步原型施工** |
-| Test | 未启动 |
+| **Prototype** | **✅ 施工完成 2026-08-02——TestPlan 判据 + acme-api 腐烂库 + 梦引擎；三场真梦跑通，H1–H5 施工侧全过，三道安全阀经故障注入实测** |
+| **Test** | **⬅ 当前——Friday 用户环节待开（seapawn 走 G1–G9 + 模拟用户 P1–P3），剧本见 TestPlan** |
 
 ## 文件地图
 
@@ -28,6 +28,7 @@
 | [Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md](Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md) | **定稿方案**（拍板 2026-08-02）：wiki 主体 + 三派嫁接——判据 M1–M5/S1–S3、L0–L3 权限模型、三道安全阀、报告六节、阀门配置、风险表 |
 | [Target-1-Consolidation/Prototype-01-FirstDream/Storyboard.md](Target-1-Consolidation/Prototype-01-FirstDream/Storyboard.md) | 双侧故事板：用户侧十格（Test 剧本）+ 梦侧九镜（施工剧本）+ 道具与施工清单 |
 | [Target-1-Consolidation/Prototype-01-FirstDream/test/TestPlan.md](Target-1-Consolidation/Prototype-01-FirstDream/test/TestPlan.md) | Friday Test 施工图：硬判据 H1–H5（五条验收信号操作化）、行为观察 O1–O4、用户剧本（seapawn 全程 + 模拟用户 P1–P3）、宣判规则三档出口 |
+| Prototype-01-FirstDream/ 施工物 | `testbed/`（acme-api 腐烂库 builder + rot-manifest 对答案卡）、`engine/`（m-checks 机械体检 / dream-prompt / run-dream 引擎 / rogue-dream 故障注入）、`artifacts/`（三场真梦产物 + [审计笔记](Target-1-Consolidation/Prototype-01-FirstDream/artifacts/audit-notes.md)）——acme-api 生成物本身不入库，builder 可复现 |
 
 原料与参照物不在本目录，在 [../reference/](../reference/)——外部方案源码、官方机制提取文档及其取材口径。
 

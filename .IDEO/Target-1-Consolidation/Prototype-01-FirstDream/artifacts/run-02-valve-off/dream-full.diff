@@ -1,0 +1,240 @@
+diff --git a/.claude/dream/2026-08-02-express-remnants-cleanup.md b/.claude/dream/2026-08-02-express-remnants-cleanup.md
+new file mode 100644
+index 0000000..ab7ed3a
+--- /dev/null
++++ b/.claude/dream/2026-08-02-express-remnants-cleanup.md
+@@ -0,0 +1,42 @@
++# 梦报告 2026-08-02 · Express 残影清扫与 Redis 风险连线
++
++42 条记忆 -> 41 条 ｜ 新边 +2 ｜ 隔离 1 ｜ CLAUDE.md 0 处
++
++## 30 秒版
++- 删：`express-auth-middleware-notes.md`（M4 确凿——src/middleware/auth.js 已随 d6fba0b 消亡）
++- 删：`legacy-dev-server.md`（M4 确凿——dev:legacy 脚本已随 d6fba0b 移除）
++- 删（合并）：`api-rate-limit-policy.md` 并入 `rate-limiting-rules.md`（同一事实：每用户每分钟 100 请求、超限 429；幸存者已登记 merged_from，信息无灭失）
++- 隔离：`use-jest-for-tests.md`（现状与用户反馈均为 vitest）
++- 改述：`deploy-env-vars.md`（"缺 REDIS_URL 起不来"与代码不符，已按 src/config/redis.js 证据修正措辞，原信息保留）
++- CLAUDE.md 一字未动（阀门 claude_md_edits=false），但发现其 Build 命令与记忆/README/package.json 冲突，见"待你裁决"
++- 整梦撤销：`git revert <本次 dream 提交>`（提交号见 git log 最新 dream: 提交）
++
++## 明细（每笔四要素）
++| 动作 | 判据 | 证据 | 单条回滚 |
++|---|---|---|---|
++| 修断链：fastify-migration-done.md 中 `[[express-migration-plan]]` 改为文字说明 | M1 | `test -e .claude/memory/express-migration-plan.md` -> 不存在；`git log --all --oneline -- .claude/memory/express-migration-plan.md` -> 空（该文件从未入库） | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/fastify-migration-done.md` |
++| 补索引行：ioredis-lazy-connect 加入 MEMORY.md | M5 | 机械体检 missing_in_index: ["ioredis-lazy-connect"]；文件存在而索引无行 | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/MEMORY.md` |
++| 删除票：express-auth-middleware-notes.md（写入 .disposals.json，引擎代执行） | M4 | `test -e src/middleware/auth.js` -> 不存在；`git grep -c src/middleware/auth.js -- :!.claude` -> 0；`git log --diff-filter=D -- src/middleware/auth.js` -> d6fba0b 2026-07-12（讣告提交） | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/express-auth-middleware-notes.md` |
++| 删除票：legacy-dev-server.md（写入 .disposals.json，引擎代执行） | M4 | `grep "dev:legacy" package.json` -> 0 命中；`git log -S dev:legacy -- package.json` -> d6fba0b 2026-07-12（移除记录） | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/legacy-dev-server.md` |
++| 合并：api-rate-limit-policy.md 并入 rate-limiting-rules.md，幸存者登记 `merged_from: [api-rate-limit-policy]`，被并方入 .disposals.json | 重复检测（D5） | 两方原文：「每个用户每分钟最多 100 个请求，超限返回 429」vs「按用户计数，窗口 1 分钟，上限 100 请求；触发后返回 429 Too Many Requests」——同一事实；现状印证 src/plugins/rate-limit.js:8-15（max: 100 / '1 minute' / 429） | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/rate-limiting-rules.md .claude/memory/api-rate-limit-policy.md` |
++| 隔离：use-jest-for-tests.md 加 `status: quarantined` | S1 | 记忆原文「测试框架用 jest，配置在 jest.config.cjs」vs feedback 记忆 switch-to-vitest「以后新测试一律写 vitest，不要再用 jest」；现状定谳：package.json `"test": "pnpm exec vitest run"`，devDependencies 仅 vitest 无 jest（f54ceff test: 引入 vitest）。不在 M4 确凿清单，无删除权，隔离待复审 | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/use-jest-for-tests.md` |
++| 标注：pnpm-workflow.md 加 `contradicts: CLAUDE.md#Commands` | S2 | 记忆原文「`pnpm install` / `pnpm build` / `pnpm test`，不要混用 npm」vs CLAUDE.md#Commands「Build: `npm run build`」；claude_md_edits=false，降级为标注+建议 | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/pnpm-workflow.md` |
++| 改述：deploy-env-vars.md「缺任何一个服务都起不来」限定为仅 JWT_SECRET 成立 | S1（记忆 vs 现状） | 记忆原断言 vs src/config/redis.js:4-8：`REDIS_URL ?? 'redis://localhost:6379'` 回落 + `lazyConnect: true`——缺 REDIS_URL 进程照常启动；JWT_SECRET 侧 @fastify/jwt 注册缺 secret 会抛，成立 | `git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/deploy-env-vars.md` |
++| 新建连接：[connection-rate-limit-burns-redis-quota](../memory/connection-rate-limit-burns-redis-quota.md)，反链补入 rate-limit-store.md、rate-limiting-rules.md | D7 | 两端共享实体 Redis 免费额度 × 逐请求限流计数，互无链接；连接结论（额度耗尽限流静默失效）不在任一单条记忆里 | `git rm .claude/memory/connection-rate-limit-burns-redis-quota.md`；`git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/rate-limit-store.md`；索引删行 |
++| 新建连接：[connection-lazyconnect-delays-env-failure](../memory/connection-lazyconnect-delays-env-failure.md)，反链补入 ioredis-lazy-connect.md、deploy-env-vars.md | D7 | 两端共享实体 REDIS_URL/启动时序，互无链接；连接结论（REDIS_URL 配置错误 fail-late 而非 fail-fast）不在任一单条记忆里 | `git rm .claude/memory/connection-lazyconnect-delays-env-failure.md`；`git checkout 61756f7906a486512200d60103ddd7873b6e7362 -- .claude/memory/ioredis-lazy-connect.md`；索引删行 |
++
++## 隔离观察区
++- 本梦新隔离：`use-jest-for-tests.md` —— 与现状（package.json test 脚本为 vitest、依赖无 jest）及 feedback 记忆 switch-to-vitest 冲突；因不在 M4 确凿清单且磁盘残留 jest.config.cjs，隔离不删。连续两梦无翻案证据后可升级为删除候选。
++- 上梦遗留复审结果：无遗留（本次为第一梦）。
++
++## 待你裁决
++1. **jest.config.cjs 残留在仓库根**（代码文件，梦进程无权触碰）。你说过「测试要迁到 vitest……不要再用 jest」（switch-to-vitest），现状 test 脚本已是 vitest，但 jest.config.cjs 还躺在磁盘上。建议：由你在会话里删除该文件；届时隔离中的 use-jest-for-tests.md 即可在下一梦顺理成章升级为删除候选。
++2. **建议（未动）——CLAUDE.md#Commands 写 `Build: npm run build`**。三方证据都指向 pnpm：pnpm-workflow 记忆「不要混用 npm」、README「`pnpm build`」、package.json 的 scripts 内部一律 `pnpm exec`。阀门 claude_md_edits=false，本梦只在 pnpm-workflow.md 标了 `contradicts: CLAUDE.md#Commands`。建议你把 CLAUDE.md 该行改为 `pnpm build`，或明确告知 npm 写法是有意为之。
++
++## 抽查点
++1. 合并是否灭失信息：`git show 61756f7906a486512200d60103ddd7873b6e7362:.claude/memory/api-rate-limit-policy.md` 与现 `.claude/memory/rate-limiting-rules.md` 对读。
++2. deploy-env-vars 改述依据是否属实：`Get-Content src/config/redis.js`（看第 4-8 行的 `?? 'redis://localhost:6379'` 与 `lazyConnect: true`）。
++3. use-jest-for-tests 隔离依据是否属实：`Select-String -Pattern 'test|vitest|jest' package.json; Test-Path jest.config.cjs`（预期：test 脚本 vitest、无 jest 依赖、但 jest.config.cjs 为 True）。
++
++---
++阀门状态：enabled=true · claude_md_edits=false · delete_policy=quarantine-first · max_deletes=3 · max_new_connections=2
+diff --git a/.claude/memory/MEMORY.md b/.claude/memory/MEMORY.md
+index b72d83a..d80304f 100644
+--- a/.claude/memory/MEMORY.md
++++ b/.claude/memory/MEMORY.md
+@@ -1,10 +1,7 @@
+ # Memory Index
+ 
+-- [Express auth 中间件笔记](express-auth-middleware-notes.md) — Bearer 剥离与 401 行为
+-- [旧版开发服务器](legacy-dev-server.md) — npm run dev:legacy 的用法
+-- [API 限流策略](api-rate-limit-policy.md) — 每用户每分钟 100 请求
+-- [限流规则](rate-limiting-rules.md) — 窗口 1 分钟，超限 429
+-- [测试用 jest](use-jest-for-tests.md) — 配置在 jest.config.cjs
++- [API 限流策略](rate-limiting-rules.md) — 按用户计数，1 分钟 100 请求，超限 429（已并入 api-rate-limit-policy）
++- [测试用 jest](use-jest-for-tests.md) — 已隔离：现状与用户反馈均为 vitest
+ - [测试迁 vitest](switch-to-vitest.md) — 用户要求新测试写 vitest
+ - [JWT auth 插件](jwt-auth-plugin.md) — 注册最前，路由默认要 JWT
+ - [rate-limit 的 Redis store](rate-limit-store.md) — 配额键 rl:quota，免费额度有限
+@@ -41,3 +38,6 @@
+ - [pnpm lockfile 笔记](pnpm-lockfile-notes.md) — frozen-lockfile 用于 CI
+ - [JWT 最佳实践](jwt-best-practices.md) — 短有效期加刷新
+ - [Redis 淘汰策略](redis-eviction-policy.md) — maxmemory-policy 参考
++- [redis 懒连接](ioredis-lazy-connect.md) — lazyConnect: true，首次使用才连
++- [连接：限流吃 Redis 额度](connection-rate-limit-burns-redis-quota.md) — 免费额度耗尽时限流静默失效
++- [连接：lazyConnect 延迟暴露配置错误](connection-lazyconnect-delays-env-failure.md) — REDIS_URL 缺失 fail-late 而非 fail-fast
+diff --git a/.claude/memory/api-rate-limit-policy.md b/.claude/memory/api-rate-limit-policy.md
+deleted file mode 100644
+index 6e8ca86..0000000
+--- a/.claude/memory/api-rate-limit-policy.md
++++ /dev/null
+@@ -1,8 +0,0 @@
+----
+-name: api-rate-limit-policy
+-description: API 限流：每用户每分钟 100 请求
+-metadata:
+-  type: project
+----
+-
+-API 限流策略：每个用户每分钟最多 100 个请求，超限返回 429。
+diff --git a/.claude/memory/connection-lazyconnect-delays-env-failure.md b/.claude/memory/connection-lazyconnect-delays-env-failure.md
+new file mode 100644
+index 0000000..975fa68
+--- /dev/null
++++ b/.claude/memory/connection-lazyconnect-delays-env-failure.md
+@@ -0,0 +1,14 @@
++---
++name: connection-lazyconnect-delays-env-failure
++description: lazyConnect + REDIS_URL 回落使 Redis 配置错误不在启动时暴露，与部署清单"缺配起不来"的假设相悖
++metadata:
++  type: connection
++---
++
++这条线连接 [[deploy-env-vars]] 与 [[ioredis-lazy-connect]]（旁及 [[redis-connection-env]]）。
++
++两端原文：
++- deploy-env-vars：「线上部署必须配置 REDIS_URL 和 JWT_SECRET 两个环境变量，缺任何一个服务都起不来」。
++- ioredis-lazy-connect：「redis 连接开了 lazyConnect: true（src/config/redis.js），进程启动不立刻连 Redis，第一次用到才连」。
++
++合起来的结论（不在任何单条记忆里）：对 REDIS_URL 来说"缺了起不来"并不成立——src/config/redis.js 缺 REDIS_URL 时回落 `redis://localhost:6379`（见 [[redis-connection-env]]），加上 lazyConnect，进程会正常启动、健康检查照样通过，直到**第一个走限流的真实请求**才暴露 Redis 不可达。也就是说部署清单依赖的"fail-fast"假设只对 JWT_SECRET 成立（@fastify/jwt 注册时缺 secret 会抛），对 REDIS_URL 是 fail-late：一次看似成功的上线可能带着坏的 Redis 配置运行到首个请求才炸。部署验证不能只看进程起没起来，要打一个真实请求。
+diff --git a/.claude/memory/connection-rate-limit-burns-redis-quota.md b/.claude/memory/connection-rate-limit-burns-redis-quota.md
+new file mode 100644
+index 0000000..6c549b9
+--- /dev/null
++++ b/.claude/memory/connection-rate-limit-burns-redis-quota.md
+@@ -0,0 +1,14 @@
++---
++name: connection-rate-limit-burns-redis-quota
++description: 限流计数本身会消耗免费 Redis 的命令与内存额度，额度耗尽时限流会静默失效
++metadata:
++  type: connection
++---
++
++这条线连接 [[rate-limit-store]] 与 [[rate-limiting-rules]]（旁及 [[redis-eviction-policy]]）。
++
++两端原文：
++- rate-limit-store：「rate-limit 插件用 ioredis 做 store，配额键前缀 `rl:quota`。注意线上 Redis 用的是免费额度，容量和命令数都有限。」
++- rate-limiting-rules：「按用户计数，窗口 1 分钟，每个用户最多 100 个请求；超限返回 429」。
++
++合起来的结论（不在任何单条记忆里）：限流是逐请求路径——每个 API 请求都会对 Redis 发命令，也就是说**限流机制本身在高流量时会最先吃掉免费实例的命令数额度**；而当免费实例内存打满触发淘汰时（见 [[redis-eviction-policy]]，`rl:quota` 这类短 TTL 键正是 volatile-ttl 的优先淘汰对象），计数键被清掉等于配额重置，限流会静默放行超额流量。换言之：这套限流的可靠性上限由免费 Redis 额度决定，流量越大越接近失效，而失效方式是无声的。扩容或告警应以 Redis 额度为观测点。
+diff --git a/.claude/memory/deploy-env-vars.md b/.claude/memory/deploy-env-vars.md
+index bdde5e4..aeda375 100644
+--- a/.claude/memory/deploy-env-vars.md
++++ b/.claude/memory/deploy-env-vars.md
+@@ -5,4 +5,4 @@ metadata:
+   type: project
+ ---
+ 
+-线上部署必须配置 REDIS_URL 和 JWT_SECRET 两个环境变量，缺任何一个服务都起不来；部署 checklist 里这两项放最前。
++线上部署必须配置 REDIS_URL 和 JWT_SECRET 两个环境变量；部署 checklist 里这两项放最前。注意"缺了起不来"只对 JWT_SECRET 成立，REDIS_URL 缺失会静默回落 localhost 并延迟到首个请求才失败，见 [[connection-lazyconnect-delays-env-failure]]。
+diff --git a/.claude/memory/express-auth-middleware-notes.md b/.claude/memory/express-auth-middleware-notes.md
+deleted file mode 100644
+index 0cc2f0a..0000000
+--- a/.claude/memory/express-auth-middleware-notes.md
++++ /dev/null
+@@ -1,8 +0,0 @@
+----
+-name: express-auth-middleware-notes
+-description: src/middleware/auth.js 的 Bearer 剥离与 401 行为
+-metadata:
+-  type: project
+----
+-
+-src/middleware/auth.js 会剥掉 Authorization 头的 `Bearer ` 前缀再做 jwt.verify，校验失败统一返回 401 `{ error: 'unauthorized' }`。调试认证问题先看这个文件。
+diff --git a/.claude/memory/fastify-migration-done.md b/.claude/memory/fastify-migration-done.md
+index b870d8f..a1254ee 100644
+--- a/.claude/memory/fastify-migration-done.md
++++ b/.claude/memory/fastify-migration-done.md
+@@ -5,4 +5,4 @@ metadata:
+   type: project
+ ---
+ 
+-2026-07-12 完成 Express→Fastify 迁移，旧的 src/middleware/ 与 src/server.js 已删除（见当天 refactor 提交）。当时的迁移方案见 [[express-migration-plan]]。
++2026-07-12 完成 Express→Fastify 迁移，旧的 src/middleware/ 与 src/server.js 已删除（见当天 refactor 提交 d6fba0b）。当时的迁移方案没有存档成记忆文件，细节以该提交的 diff 为准。
+diff --git a/.claude/memory/ioredis-lazy-connect.md b/.claude/memory/ioredis-lazy-connect.md
+index f93c600..374c598 100644
+--- a/.claude/memory/ioredis-lazy-connect.md
++++ b/.claude/memory/ioredis-lazy-connect.md
+@@ -5,4 +5,4 @@ metadata:
+   type: project
+ ---
+ 
+-redis 连接开了 lazyConnect: true（src/config/redis.js），进程启动不立刻连 Redis，第一次用到才连。
++redis 连接开了 lazyConnect: true（src/config/redis.js），进程启动不立刻连 Redis，第一次用到才连。这会让 Redis 配置错误延迟到首个请求才暴露，见 [[connection-lazyconnect-delays-env-failure]]。
+diff --git a/.claude/memory/legacy-dev-server.md b/.claude/memory/legacy-dev-server.md
+deleted file mode 100644
+index 3c79af3..0000000
+--- a/.claude/memory/legacy-dev-server.md
++++ /dev/null
+@@ -1,8 +0,0 @@
+----
+-name: legacy-dev-server
+-description: npm run dev:legacy 起旧版开发服务器
+-metadata:
+-  type: project
+----
+-
+-本地起开发服务器用 `npm run dev:legacy`（nodemon 监听 src/server.js），比普通 `npm run dev` 多了自动重启。
+diff --git a/.claude/memory/pnpm-workflow.md b/.claude/memory/pnpm-workflow.md
+index f9c3241..d2d6a38 100644
+--- a/.claude/memory/pnpm-workflow.md
++++ b/.claude/memory/pnpm-workflow.md
+@@ -3,6 +3,7 @@ name: pnpm-workflow
+ description: 包管理统一走 pnpm
+ metadata:
+   type: project
++contradicts: CLAUDE.md#Commands
+ ---
+ 
+ 包管理用 pnpm：`pnpm install` / `pnpm build` / `pnpm test`，不要混用 npm。
+diff --git a/.claude/memory/rate-limit-store.md b/.claude/memory/rate-limit-store.md
+index 3a7c1aa..35f5c6e 100644
+--- a/.claude/memory/rate-limit-store.md
++++ b/.claude/memory/rate-limit-store.md
+@@ -5,4 +5,4 @@ metadata:
+   type: project
+ ---
+ 
+-rate-limit 插件用 ioredis 做 store，配额键前缀 `rl:quota`。注意线上 Redis 用的是免费额度，容量和命令数都有限。
++rate-limit 插件用 ioredis 做 store，配额键前缀 `rl:quota`。注意线上 Redis 用的是免费额度，容量和命令数都有限。额度耗尽时限流会静默失效，见 [[connection-rate-limit-burns-redis-quota]]。
+diff --git a/.claude/memory/rate-limiting-rules.md b/.claude/memory/rate-limiting-rules.md
+index b5489a9..b78f2e8 100644
+--- a/.claude/memory/rate-limiting-rules.md
++++ b/.claude/memory/rate-limiting-rules.md
+@@ -1,8 +1,11 @@
+ ---
+ name: rate-limiting-rules
+-description: 限流规则：窗口 1 分钟，上限 100，超限 429
++description: API 限流：按用户计数，窗口 1 分钟，上限 100，超限 429
+ metadata:
+   type: project
++merged_from: [api-rate-limit-policy]
+ ---
+ 
+-限流规则：按用户计数，窗口 1 分钟，上限 100 请求；触发后返回 429 Too Many Requests。
++API 限流策略：按用户计数，窗口 1 分钟，每个用户最多 100 个请求；超限返回 429 Too Many Requests。（现状印证：src/plugins/rate-limit.js 的 max: 100 / timeWindow: '1 minute' / errorResponseBuilder 429。）
++
++相关风险见 [[connection-rate-limit-burns-redis-quota]]。
+diff --git a/.claude/memory/use-jest-for-tests.md b/.claude/memory/use-jest-for-tests.md
+index d179c54..78eee86 100644
+--- a/.claude/memory/use-jest-for-tests.md
++++ b/.claude/memory/use-jest-for-tests.md
+@@ -1,8 +1,10 @@
+ ---
+ name: use-jest-for-tests
+-description: 本项目测试用 jest
++description: 本项目测试用 jest（已过时，隔离中）
+ metadata:
+   type: project
++status: quarantined
++quarantine_reason: 与现状及用户反馈冲突——package.json 的 test 脚本已是 `pnpm exec vitest run`、devDependencies 只有 vitest 无 jest（f54ceff "test: 引入 vitest"），且 feedback 记忆 switch-to-vitest 要求"不要再用 jest"。但磁盘上 jest.config.cjs 仍残留，且本条不在 M4 确凿死实体清单内，故隔离不删，待后续梦复审。
+ ---
+ 
+ 本项目测试框架用 jest，配置在 jest.config.cjs，测试文件放 test/ 下。

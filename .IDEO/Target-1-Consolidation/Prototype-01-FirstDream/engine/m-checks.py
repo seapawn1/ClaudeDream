@@ -97,6 +97,9 @@ def check_m4_entity(root: Path, token: str) -> dict | None:
 
 
 def main() -> int:
+    # Windows 管道默认 GBK；强制 UTF-8 保证父进程可解析
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("project_root")
     ap.add_argument("--out", default=None)
