@@ -34,3 +34,5 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 2026-08-02：Ideate 启动，Lightning Demos 完成（三场：官方双层机制 / compiler+claude-dream / claude-code-log+claude-mem）。claude-mem 入库 `reference/`（commit `a90066f9`@2026-07-31，核实默认纯本地、无整合层）。产出 14 条 big idea + 6 条反面清单 + S4 证据对摆，含一条新拍板：CLAUDE.md 修改权做成阀门——默认改、可关。落盘于 `.IDEO/Target-1-Consolidation/Ideate/IdeaPool.md`。下一步 Sketch。
 
 2026-08-02（续）：Sketch 完成——四位 sketcher 独立作画（A 官方改良 / B 审计·主 agent 亲画 / C 机械 / D wiki，三个 subagent 真隔离），每份含 Crazy 8s 八变体、S6–S8 三格故事板、梦报告全文样例、自报风险。四份全部通过收卷验收（五节齐全、硬约束无违例），落盘于 `.IDEO/Target-1-Consolidation/Ideate/SketchPool.md`。下一步评审收敛（静默评审 → Decider 选定或杂交）。
+
+2026-08-02（续二）：Ideate 收官——Decider 拍板 **wiki 派为主体、嫁接 A/B/C 三派**（九项嫁接：快照提交、feedback 保护、开场提示、30 秒版+抽查点、证据纪律、LLM 无删除票铁律、熔断器、git 讣告、单笔回滚）。开 `Prototype-01-FirstDream/`：定稿 `Sketches.md` + 双侧 `Storyboard.md`（用户侧十格 = Test 剧本；梦侧九镜 = 施工剧本——原型不是纯假画面，梦必须真跑）。下一步原型施工。

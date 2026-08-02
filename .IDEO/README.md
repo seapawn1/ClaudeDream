@@ -12,8 +12,9 @@
 | Ask the Experts（四模块专家研究） | ✅ 已完成，2026-08-01 |
 | POV + HMW（40 条 → 21 条 → 选定 8 条） | ✅ 已完成，2026-08-01 |
 | Pick a Target（长期用户 + S6–S8 整合段） | ✅ 已完成，2026-08-01 |
-| **Ideate** | **⬅ 进行中——Lightning Demos ✅、Sketch ✅ 2026-08-02（IdeaPool、SketchPool 落盘），下一步评审收敛** |
-| Prototype / Test | 未启动 |
+| Ideate（Lightning Demos → Sketch → 评审收敛） | ✅ 已完成，2026-08-02——Decider 选定 wiki 主体杂交方案，定稿 Sketches.md |
+| **Prototype** | **⬅ 当前——Storyboard ✅ 2026-08-02（双侧：用户十格 + 梦九镜），下一步原型施工** |
+| Test | 未启动 |
 
 ## 文件地图
 
@@ -23,7 +24,9 @@
 | [DesignMap.md](DesignMap.md) | 长期目标与验收信号、冲刺问题 4 条、角色与结果表、11 步数据流地图、HMW 8 条（含族标记）、Target 总表 |
 | [Target-1-Consolidation/TargetMap.md](Target-1-Consolidation/TargetMap.md) | **当前主靶**：整合段（S6–S8）的目标、通过标准、靶内 6 条 HMW；靶外事项与未决问题的备注 |
 | [Target-1-Consolidation/Ideate/IdeaPool.md](Target-1-Consolidation/Ideate/IdeaPool.md) | Lightning Demos 蒸馏产物：14 条 big idea + 6 条反面清单 + S4 证据对摆——Sketch 的弹药库 |
-| [Target-1-Consolidation/Ideate/SketchPool.md](Target-1-Consolidation/Ideate/SketchPool.md) | 四份竞争草图（A 官方改良 / B 审计·主 agent / C 机械 / D wiki），各含 Crazy 8s、三格故事板、梦报告全文样例、自报风险——未经评审，无一拍板 |
+| [Target-1-Consolidation/Ideate/SketchPool.md](Target-1-Consolidation/Ideate/SketchPool.md) | 四份竞争草图（A 官方改良 / B 审计·主 agent / C 机械 / D wiki）——评审已收敛，胜者见 Prototype-01 的 Sketches.md |
+| [Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md](Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md) | **定稿方案**（拍板 2026-08-02）：wiki 主体 + 三派嫁接——判据 M1–M5/S1–S3、L0–L3 权限模型、三道安全阀、报告六节、阀门配置、风险表 |
+| [Target-1-Consolidation/Prototype-01-FirstDream/Storyboard.md](Target-1-Consolidation/Prototype-01-FirstDream/Storyboard.md) | 双侧故事板：用户侧十格（Test 剧本）+ 梦侧九镜（施工剧本）+ 道具与施工清单 |
 
 原料与参照物不在本目录，在 [../reference/](../reference/)——外部方案源码、官方机制提取文档及其取材口径。
 
