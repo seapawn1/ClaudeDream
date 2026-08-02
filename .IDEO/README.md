@@ -12,7 +12,7 @@
 | Ask the Experts（四模块专家研究） | ✅ 已完成，2026-08-01 |
 | POV + HMW（40 条 → 21 条 → 选定 8 条） | ✅ 已完成，2026-08-01 |
 | Pick a Target（长期用户 + S6–S8 整合段） | ✅ 已完成，2026-08-01 |
-| **Ideate** | **⬅ 进行中——Lightning Demos ✅ 2026-08-02（IdeaPool 落盘），下一步 Sketch** |
+| **Ideate** | **⬅ 进行中——Lightning Demos ✅、Sketch ✅ 2026-08-02（IdeaPool、SketchPool 落盘），下一步评审收敛** |
 | Prototype / Test | 未启动 |
 
 ## 文件地图
@@ -23,6 +23,7 @@
 | [DesignMap.md](DesignMap.md) | 长期目标与验收信号、冲刺问题 4 条、角色与结果表、11 步数据流地图、HMW 8 条（含族标记）、Target 总表 |
 | [Target-1-Consolidation/TargetMap.md](Target-1-Consolidation/TargetMap.md) | **当前主靶**：整合段（S6–S8）的目标、通过标准、靶内 6 条 HMW；靶外事项与未决问题的备注 |
 | [Target-1-Consolidation/Ideate/IdeaPool.md](Target-1-Consolidation/Ideate/IdeaPool.md) | Lightning Demos 蒸馏产物：14 条 big idea + 6 条反面清单 + S4 证据对摆——Sketch 的弹药库 |
+| [Target-1-Consolidation/Ideate/SketchPool.md](Target-1-Consolidation/Ideate/SketchPool.md) | 四份竞争草图（A 官方改良 / B 审计·主 agent / C 机械 / D wiki），各含 Crazy 8s、三格故事板、梦报告全文样例、自报风险——未经评审，无一拍板 |
 
 原料与参照物不在本目录，在 [../reference/](../reference/)——外部方案源码、官方机制提取文档及其取材口径。
 

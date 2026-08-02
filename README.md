@@ -32,3 +32,5 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 2026-08-01（续三）：Pick a Target 完成——圈定 **长期用户 + S6–S8 整合段**（体检 → 整合 → 梦报告）。依据：8 条 HMW 中 6 条落此段、过期/透明/所有权三族全覆盖；对齐权重第一的冲刺问题（过期）；官方 Auto Dream 正是在 S7 翻车（误删 23 个记忆文件）——机会与风险都最大处。落盘于 `.IDEO/Target-1-Consolidation/TargetMap.md`。取用段（S10–S11）列为候选 Target-2，待本段通过后再议。下一阶段 Ideate。
 
 2026-08-02：Ideate 启动，Lightning Demos 完成（三场：官方双层机制 / compiler+claude-dream / claude-code-log+claude-mem）。claude-mem 入库 `reference/`（commit `a90066f9`@2026-07-31，核实默认纯本地、无整合层）。产出 14 条 big idea + 6 条反面清单 + S4 证据对摆，含一条新拍板：CLAUDE.md 修改权做成阀门——默认改、可关。落盘于 `.IDEO/Target-1-Consolidation/Ideate/IdeaPool.md`。下一步 Sketch。
+
+2026-08-02（续）：Sketch 完成——四位 sketcher 独立作画（A 官方改良 / B 审计·主 agent 亲画 / C 机械 / D wiki，三个 subagent 真隔离），每份含 Crazy 8s 八变体、S6–S8 三格故事板、梦报告全文样例、自报风险。四份全部通过收卷验收（五节齐全、硬约束无违例），落盘于 `.IDEO/Target-1-Consolidation/Ideate/SketchPool.md`。下一步评审收敛（静默评审 → Decider 选定或杂交）。
