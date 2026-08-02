@@ -5,6 +5,8 @@
 ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事，以及 Claude Code 自己内置了什么。
 只放原料，不放结论——从这些材料里读出的洞察归 `.IDEO/`。
 
+**这些原料在设计冲刺中被怎么用了**：三场闪电演示拆解全部六份材料，产出 14 条 big idea 与 6 条反面清单（[IdeaPool](../.IDEO/Target-1-Consolidation/Ideate/IdeaPool.md)）；定稿方案的多处设计可溯源至此——机械体检判据源自 compiler 的 `lint.py`、工具缴械思路源自 claude-mem 的 `hardened-options.ts`、"人不参与梦、报告即汇报"的流程对照官方 auto-dream（但反其道做了留证与改 CLAUDE.md）。结论见 [DesignReview](../.IDEO/DesignReview.md)。
+
 三类东西，处理方式各不同：
 
 - **自己的提取文档**——入库。逐字从 `claude.exe` 二进制里逆出来的，上游没有，丢了要重来。

@@ -6,37 +6,37 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 一个 Claude Code 插件，聚焦 Claude Code 记忆机制的改进——让 agent 在长期对话和跨会话中保持上下文一致性，避免漂移与信息丢失。不做对话前端、不做模型推理、不碰 CLI 核心流程。
 
+**当前处于设计与产物开发之间**：设计冲刺已完成（2026-08-02），方案定稿并在真实腐烂记忆库上跑通验证；产物代码尚未开工。要一次看懂设计结论，读 [.IDEO/DesignReview.md](.IDEO/DesignReview.md)。
+
 ## 文件地图
 
 | 文件/目录 | 内容 |
 |---|---|
+| `README.md` | 本文件——项目地图与当前状态 |
+| `CLAUDE.md` | 项目指令（每次新会话自动加载）：定位、历史分支、入口指引 |
 | `.gitignore` | Git 忽略规则 |
 | `.env` | 本地环境变量，不可阅读 |
 | `seapawn.md` | 本地私人笔记，不可阅读 |
-| `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 `./claude-dream`（产物代码待重新设计，目录暂不存在） |
-| `.IDEO/` | 设计思考工作区，**设计冲刺已完成（2026-08-02）**——结论与全部档案入口见 [DesignReview](.IDEO/DesignReview.md) · [README](.IDEO/README.md) |
+| `.claude/` | 本项目的 auto-memory 记忆库（`memory/` + `MEMORY.md` 索引）——本项目自身用，不是产物 |
+| `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 `./claude-dream`（产物代码待开工，目录暂不存在） |
+| `.IDEO/` | 设计冲刺工作区，**已完成（2026-08-02）**——总入口 [DesignReview](.IDEO/DesignReview.md)，目录导航见 [README](.IDEO/README.md)。含定稿方案、可运行原型（`Prototype-01-FirstDream/engine/` `testbed/`）与三场真梦产物 |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
 
 ## 当前状态
 
-2026-07-29：项目重启。此前的 Design Sprint 产出（原 `.IDEO/DesignSprint/`）和 Scrum Sprint 1-6 开发记录（原 `ScrumSprint/`，含 claude-dream 插件产物代码）已作废，不再是当前工作基础——完整历史仍保留在 Git 里，`main` 之前的提交、以及 `sprint-01` ~ `sprint-05-eval-test-set--06`、`DesignSprint--跑通全流程` 等分支上随时可查。当前只保留 `reference/` 参考资料与基础设施骨架。
+**2026-08-02：设计冲刺完成，Target-1（整合段）带条件通过，下一步产物开发。**
 
-2026-07-29（续）：新一轮 Design Sprint 启动（分支 `design-sprint`）。Monday Define 已拍板 Challenge 与长期目标/冲刺问题，落盘于 `.IDEO/ChallengeBackground.md`、`.IDEO/DesignMap.md`；下一阶段 Ask the Experts。
+结论摘要：定稿方案的主干成立——体检判据（M1–M5 机械 + S1–S3 语义）、四级处置权限、三道安全阀、git 回滚层，在一个 42 条记忆的腐烂库上真跑通并经故障注入验证；兑现层三处待改——报告的证据形态、回滚的隔离性、机器推论的身份标识。完整结算见 [DesignReview](.IDEO/DesignReview.md)。
 
-2026-08-01：Ask the Experts 完成（四模块：官方机制+项目考古、前人方案深读、社区之声调研、决策者访谈）。Challenge 补全整合原料层可行性与差异化定位；Map 修订至 11 步；冲刺问题由 3 条修订为 4 条（过期升首位、新增所有权问题）；均已拍板落盘。
+**产物开发的入场条件**：七条改造清单（[verdict.md](.IDEO/Target-1-Consolidation/Prototype-01-FirstDream/verdict.md) §3）+ S4 机械压缩底片层 + Agent SDK `canUseTool` 结构缴械。
 
-2026-08-01（续）：HMW 收敛完成——四模块 40 条原始候选合并为 21 条，选定 8 条挂上 Map。POV+HMW 阶段结束。
+### 里程碑
 
-2026-08-01（续二）：两份白板审阅整改。`DesignMapping.md` 更名 `DesignMap.md`；两份文件对齐成熟参照的章节骨架；补齐全部证据出处（两个 issue 核实为 `anthropics/claude-code#47959`/`#38493`，claude-mem star 数补快照日期与各源分歧）；新增角色与结果表、HMW 族标记、Target 占位、Map 闭环回边；v0→v1 过程留痕清出白板交由 git 承载。
+| 日期 | 事件 |
+|---|---|
+| 2026-07-29 | 项目重启——旧 Design Sprint 与 Scrum Sprint 1-6 产出作废（历史仍在 `sprint-01`~`sprint-05-eval-test-set--06`、`DesignSprint--跑通全流程` 等分支）；新一轮冲刺启动，Monday Define 拍板 |
+| 2026-08-01 | Ask the Experts 四模块完成；HMW 40→21→8 条；Pick a Target 圈定 **长期用户 + S6–S8 整合段** |
+| 2026-08-02 | Ideate（三场闪电演示 → 四派竞争草图 → wiki 主体杂交定稿）；Prototype 施工（腐烂库 builder + 梦引擎，三场真梦跑通）；Friday Test（真人十格 + 三个模拟用户人格）；三级 Review 落盘 |
 
-2026-08-01（续三）：Pick a Target 完成——圈定 **长期用户 + S6–S8 整合段**（体检 → 整合 → 梦报告）。依据：8 条 HMW 中 6 条落此段、过期/透明/所有权三族全覆盖；对齐权重第一的冲刺问题（过期）；官方 Auto Dream 正是在 S7 翻车（误删 23 个记忆文件）——机会与风险都最大处。落盘于 `.IDEO/Target-1-Consolidation/TargetMap.md`。取用段（S10–S11）列为候选 Target-2，待本段通过后再议。下一阶段 Ideate。
+*过程细节与每一次拍板的理由由 git 历史承载，不堆回本文件。*
 
-2026-08-02：Ideate 启动，Lightning Demos 完成（三场：官方双层机制 / compiler+claude-dream / claude-code-log+claude-mem）。claude-mem 入库 `reference/`（commit `a90066f9`@2026-07-31，核实默认纯本地、无整合层）。产出 14 条 big idea + 6 条反面清单 + S4 证据对摆，含一条新拍板：CLAUDE.md 修改权做成阀门——默认改、可关。落盘于 `.IDEO/Target-1-Consolidation/Ideate/IdeaPool.md`。下一步 Sketch。
-
-2026-08-02（续）：Sketch 完成——四位 sketcher 独立作画（A 官方改良 / B 审计·主 agent 亲画 / C 机械 / D wiki，三个 subagent 真隔离），每份含 Crazy 8s 八变体、S6–S8 三格故事板、梦报告全文样例、自报风险。四份全部通过收卷验收（五节齐全、硬约束无违例），落盘于 `.IDEO/Target-1-Consolidation/Ideate/SketchPool.md`。下一步评审收敛（静默评审 → Decider 选定或杂交）。
-
-2026-08-02（续二）：Ideate 收官——Decider 拍板 **wiki 派为主体、嫁接 A/B/C 三派**（九项嫁接：快照提交、feedback 保护、开场提示、30 秒版+抽查点、证据纪律、LLM 无删除票铁律、熔断器、git 讣告、单笔回滚）。开 `Prototype-01-FirstDream/`：定稿 `Sketches.md` + 双侧 `Storyboard.md`（用户侧十格 = Test 剧本；梦侧九镜 = 施工剧本——原型不是纯假画面，梦必须真跑）。下一步原型施工。
-
-2026-08-02（续三）：Prototype 施工完成（Thursday）——双线并行：Test 线落 `TestPlan.md`（五条验收信号操作化为 H1–H5 + O1–O4，宣判三档出口）；原型线造 acme-api 腐烂记忆库（42 条记忆 builder 可复现生成）+ 梦引擎（M1–M5 机械体检、梦提示词、run-dream 工程审计）。**第一场梦真跑成功**：5 条种植腐烂全处置、健康记忆零误删、报告六节带可复现证据与单条回滚命令；关阀对照梦证明阀门降级可见；三道安全阀（熔断/铁律/越界）经故障注入实测。重要工程发现：`.claude` 受保护路径 + hook 在嵌套 headless 不加载 → **产物阶段必须走 Agent SDK（canUseTool 进程内缴械）**。
-
-2026-08-02（续四）：**Friday Test 完成，设计冲刺结束。** 真人被试走完用户十格（总基调"更懂我们的项目了"）；三个模拟用户人格（审计型/赶时间型/新接手型）各自独立走报告阅读环节，产出的可核缺陷远超真人环节——三人独立交叉验证三处结构性问题（机器推论无身份证、回滚带手工尾巴、首行低报动土范围），主持人逐条核 diff 确认属实。**宣判：Target-1 带条件通过**——主干（体检判据、分级处置、阀门、回滚层）成立，兑现层三处待改（证据形态、回滚隔离性、推论身份标识）。三级 Review 落盘：[verdict](.IDEO/Target-1-Consolidation/Prototype-01-FirstDream/verdict.md)（原型）/ [TargetReview](.IDEO/Target-1-Consolidation/TargetReview.md)（靶）/ [DesignReview](.IDEO/DesignReview.md)（冲刺总入口）。下一步产物开发，入场条件 = C1–C7 七条改造 + S4 机械压缩底片层 + Agent SDK 结构缴械。
