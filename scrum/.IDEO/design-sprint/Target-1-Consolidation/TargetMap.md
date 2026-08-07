@@ -6,7 +6,7 @@
 
 **为什么圈这里。** 8 条 HMW 中 6 条落在此段，且**过期族 3 条、透明族 2 条、所有权族 2 条三族全覆盖**（靶外 2 条同属取用段）；对齐当前权重第一的冲刺问题 1（过期）与问题 4（所有权）；官方 Auto Dream 正是在 S7 翻的车——[anthropics/claude-code#47959](https://github.com/anthropics/claude-code/issues/47959) 24 小时内静默删除 23 个记忆文件，含用户强调过三次的规则。这是全图**机会最大、失败风险也最大**的位置：整张地图上只有这一段真正写文件、造成不可逆损失，前面都是读与判断。
 
-**Challenge 势力范围的兑现处。** Challenge 写的是"整合记忆文件**与 CLAUDE.md**"——而官方提示词明写 `do NOT edit CLAUDE.md during a dream`，即使记忆明确纠正了它也只标注、只报告。**我们打算做官方明确不做的事，敢做的依据是 git 回滚层**（差异化定位①，见 [../ChallengeBackground.md](../ChallengeBackground.md) §5）。这个赌注成不成立，在本段见分晓。
+**Challenge 势力范围的兑现处。** Challenge 写的是"整合记忆文件**与 CLAUDE.md**"——而官方提示词明写 `do NOT edit CLAUDE.md during a dream`，即使记忆明确纠正了它也只标注、只报告。**我们打算做官方明确不做的事，敢做的依据是 git 回滚层**（差异化定位①，见根 [README.md](../../../../README.md)「差异化在哪」节）。这个赌注成不成立，在本段见分晓。
 
 **前置与后置基础设施（随段建设，不设独立靶）。**
 

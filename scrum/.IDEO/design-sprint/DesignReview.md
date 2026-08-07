@@ -2,7 +2,7 @@
 
 **结算日**：2026-08-02　**Decider**：seapawn　**方法**：IDEO 设计思维五模式 + Jake Knapp Design Sprint
 
-> **这是 `.IDEO` 的总入口。** 只想知道结论的人，读第 0 节就够。
+> **这是 design-sprint（原 `.IDEO`）的总入口。** 只想知道结论的人，读第 0 节就够。
 
 ## 0. 一分钟版
 
@@ -89,7 +89,7 @@ flowchart TD
 
 | 阶段 | 产出了什么 |
 |---|---|
-| Define | [ChallengeBackground.md](ChallengeBackground.md)、[DesignMap.md](DesignMap.md) |
+| Define | [根 README.md](../../../README.md)（原 ChallengeBackground.md）、[DesignMap.md](DesignMap.md) |
 | Ask the Experts | 上述两份补全（官方双层机制、两起社区事故、前人三条路径、差异化定位） |
 | POV + HMW | DesignMap 的 8 条 HMW（含族标记） |
 | Pick a Target | [Target-1-Consolidation/TargetMap.md](Target-1-Consolidation/TargetMap.md) |
@@ -138,9 +138,9 @@ flowchart TD
 | 文件 | 用途 |
 |---|---|
 | **DesignReview.md**（本文件） | 冲刺总结算——**总入口** |
-| [ChallengeBackground.md](ChallengeBackground.md) | 挑战宣言、势力范围与非目标、官方现状与社区事故、前人方案对比、差异化定位 |
+| [根 README.md](../../../README.md) | 挑战宣言、势力范围与非目标、官方现状与社区事故、前人方案对比、差异化定位——原 `ChallengeBackground.md`，2026-08-07 并入项目根 README |
 | [DesignMap.md](DesignMap.md) | 长期目标与验收信号、4 条冲刺问题、角色与结果、11 步数据流地图、8 条 HMW、Target 总表 |
 | [Target-1-Consolidation/](Target-1-Consolidation/) | **主靶全部档案**——靶定义（TargetMap）、结算（TargetReview）、Ideate 弹药与草图、原型与测试 |
-| [../reference/](../reference/) | 外部方案原料（auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · claude-dream） |
+| [../../../reference/](../../../reference/) | 外部方案原料（auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · claude-dream） |
 
-**效力顺序**：`reference/` 原料 > `.IDEO/` 蒸馏（冲突时以原料为准）；本文件是蒸馏层的总入口，但具体结论以各层 Review 与 Map 为准；已被替代的旧状态只从 Git 历史追溯，不堆回文档。
+**效力顺序**：`reference/` 原料 > `design-sprint/` 蒸馏（冲突时以原料为准）；本文件是蒸馏层的总入口，但具体结论以各层 Review 与 Map 为准；已被替代的旧状态只从 Git 历史追溯，不堆回文档。
