@@ -102,16 +102,16 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `seapawn.md` | 本地私人笔记，不可阅读 |
 | `.claude/` | 本项目的 auto-memory 记忆库（`memory/` + `MEMORY.md` 索引）——本项目自身用，不是产物 |
 | `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 `./claude-dream`（产物代码待开工，目录暂不存在） |
-| `scrum/` | **Scrum 段工作区（当前阶段）**——总入口 [scrum/README.md](scrum/README.md)：架构地图 [Architecture.md](scrum/Architecture.md)、产品待办 [ProductBacklog.md](scrum/ProductBacklog.md)、设计冲刺全部档案归档于 `scrum/.IDEO/design-sprint/`（总入口 [DesignReview](scrum/.IDEO/design-sprint/DesignReview.md)） |
+| `scrum/` | **Scrum 段工作区（当前阶段）**——总入口 [scrum/README.md](scrum/README.md)：产品待办与架构 [ProductBacklog.md](scrum/ProductBacklog.md)、Sprint-1 [sprint-01-skeleton/](scrum/sprint-01-skeleton/SprintBacklog.md)、设计冲刺全部档案归档于 `scrum/.IDEO/design-sprint/`（总入口 [DesignReview](scrum/.IDEO/design-sprint/DesignReview.md)） |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
 
 ## 当前状态
 
-**2026-08-07：设计冲刺归档，Scrum 段启动，骨架已建，产物代码未开工。**
+**2026-08-09：Sprint-1（骨架回环）已开，产物代码未开工。**
 
 设计冲刺结论摘要（2026-08-02 结算）：定稿方案的主干成立——体检判据（M1–M5 机械 + S1–S3 语义）、四级处置权限、三道安全阀、git 回滚层，在一个 42 条记忆的腐烂库上真跑通并经故障注入验证；兑现层三处待改——报告的证据形态、回滚的隔离性、机器推论的身份标识。完整结算见 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)。
 
-**产物开发的入场条件**：七条改造清单（[verdict.md](scrum/.IDEO/design-sprint/Target-1-Consolidation/Prototype-01-FirstDream/verdict.md) §3）+ S4 机械压缩底片层 + Agent SDK `canUseTool` 结构缴械——三者已转入 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**产物开发的入场条件**：verdict §3 的 C1–C3（回滚与证据形态改造）须在首个可用版本前完成，记录在 [scrum/ProductBacklog.md](scrum/ProductBacklog.md) 第二部分小字；C4–C7 待后续再议。Sprint-1 的 Sprint Goal 是插件骨架立起、回环走通（不含引擎判断质量），见 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md)。
 
 ### 里程碑
 
@@ -121,5 +121,6 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | 2026-08-01 | Ask the Experts 四模块完成；HMW 40→21→8 条；Pick a Target 圈定 **长期用户 + S6–S8 整合段** |
 | 2026-08-02 | Ideate（三场闪电演示 → 四派竞争草图 → wiki 主体杂交定稿）；Prototype 施工（腐烂库 builder + 梦引擎，三场真梦跑通）；Friday Test（真人十格 + 三个模拟用户人格）；三级 Review 落盘 |
 | 2026-08-07 | 设计冲刺档案归档至 `scrum/.IDEO/design-sprint/`；Scrum 段骨架搭建（Architecture / ProductBacklog / README） |
+| 2026-08-09 | ProductBacklog 按 SGEP 方法论重制；Architecture 并入 ProductBacklog 第三部分，原文件删除；Sprint-1 Planning——Sprint Goal 拍板，PBI-04（插件骨架与回环）新建并精化，PBI-03 一并选入，`scrum/sprint-01-skeleton/SprintBacklog.md` 建档 |
 
 *过程细节与每一次拍板的理由由 git 历史承载，不堆回本文件。*
