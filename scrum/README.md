@@ -17,8 +17,8 @@ ClaudeDream 当前的工作区。设计冲刺已于 2026-08-02 结束并归档�
 | 文件/目录 | 内容 |
 |---|---|
 | `README.md` | 本文件——Scrum 段导航 |
-| `Architecture.md` | 全流程 11 步地图 + S6–S8 整合段下钻图，两图均标注实现状态 |
-| `ProductBacklog.md` | Product / Vision / Goal、两份 Definition of Done、Backlog 骨架（5 条最急）、细化列表（留空待填） |
+| `Architecture.md` | 角色表 + 全流程架构图（11 步 + 整合段内部结构，标注实现状态）与批注 |
+| `ProductBacklog.md` | Product 总述与 Vision、两份 Definition of Done（Outcome 侧待 PO 定义）、Product Backlog（3 条最急）、精化 Backlog（待 Refinement 启用） |
 | `.IDEO/design-sprint/` | 已结束的设计冲刺全部档案（原仓库根 `.IDEO/`，2026-08-07 归档于此）——总入口 [DesignReview.md](.IDEO/design-sprint/DesignReview.md) |
 
 ## 当前状态
