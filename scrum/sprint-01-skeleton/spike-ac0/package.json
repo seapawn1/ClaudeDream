@@ -1,0 +1,9 @@
+{
+  "name": "spike-ac0",
+  "private": true,
+  "type": "module",
+  "description": "PBI-04.2 AC0：实测 Agent SDK canUseTool 能否在写入 .claude/memory/ 时被调用并放行。用后即弃，不进插件产物。",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest"
+  }
+}

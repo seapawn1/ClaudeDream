@@ -1,0 +1,46 @@
+{
+  "_pathConvention": "commands 与 source.* 的路径相对本仓库根；paths.*（除 spikeRecord 外）与 offWhitelistTarget 相对『考场项目根』——即各 command 执行时的 cwd，因为梦进程读写的就是那个项目的 .claude/。commands.sessionEnd / commands.runDream / commands.runDreamRogue 均不需要额外传目标路径参数：三者在拿不到显式路径时都 fallback 到 process.cwd()，只要以考场项目根为工作目录执行即可命中。",
+  "commands": {
+    "install": "",
+    "_install_note": "留空：三条测试命令直接调用插件脚本本身，不经过 Claude Code 的 marketplace 安装流程即可验证 AC 行为。AC1『插件本地安装后加载无报错』验的是 plugin.json / hooks.json 的 schema 有效性，不是本字段。",
+    "sessionEnd": "node claude-dream/src/session-end.mjs",
+    "runDream": "node claude-dream/src/run-dream.mjs",
+    "runDreamRogue": "node claude-dream/src/run-dream.mjs --rogue"
+  },
+  "paths": {
+    "triggerMarker": ".claude/dream/session-end-marker.json",
+    "reportGlob": ".claude/dream/*-report.md",
+    "canUseToolLogGlob": ".claude/dream/*-canUseTool.log",
+    "promptCarrier": ".claude/dream/next-session-prompt.txt"
+  },
+  "source": {
+    "sessionEndHook": "claude-dream/src/session-end.mjs",
+    "dreamEntry": "claude-dream/src/run-dream.mjs",
+    "pluginManifest": "claude-dream/.claude-plugin/plugin.json"
+  },
+  "sdkModule": "@anthropic-ai/claude-agent-sdk",
+  "cooldown": {
+    "file": ".claude/dream/last-dream.json",
+    "key": "lastDreamAt",
+    "_note": "冷却时长不落配置文件，走环境变量：durationEnvVar 未设时用 durationDefaultMinutes。verifier 如想缩短等待，可用更小的值覆盖它再触发 sessionEnd。",
+    "durationEnvVar": "CLAUDE_DREAM_COOLDOWN_MINUTES",
+    "durationDefaultMinutes": 30
+  },
+  "recursionGuardEnv": {
+    "name": "CLAUDE_INVOKED_BY",
+    "value": "claude-dream"
+  },
+  "claudeMdValve": {
+    "envVar": "DREAM_CLAUDE_MD_EDITS",
+    "default": "true（未设置该变量时视为 true）",
+    "note": "设为字符串 'false' 时，CLAUDE.md 从白名单里退出，canUseTool 对它的判断从 allow 变 deny——用于验证 AC2『白名单可配置收紧』这条路径，默认行为已满足 AC2 本身。"
+  },
+  "report": {
+    "sections": ["图 delta 对账", "30 秒版", "明细（占位版，四要素+单条回滚）", "隔离观察区", "抽查点", "阀门状态"],
+    "commitPolicy": "separate — 记忆/CLAUDE.md 改动收在 dream: 前缀提交；报告与 canUseTool 日志收在紧随其后的 dream-evidence: 前缀提交。两笔分开是为了 git revert 单独撤销 dream: 提交时，报告与拒绝日志这些审计证据不会被一并销毁（对应设计冲刺 verdict.md 的 C7 顾虑）。AC3 只要求『记忆与 CLAUDE.md 的改动收为单笔 dream: 提交』，这一点满足；报告落在哪笔按此声明即可，不因选择本身扣分。"
+  },
+  "offWhitelistTarget": "ROGUE-TARGET.md",
+  "spikeRecord": "scrum/sprint-01-skeleton/spike-ac0/SPIKE-RECORD.md",
+  "timeoutMs": 180000,
+  "_timeoutMs_note": "commands.sessionEnd 自身几乎立即返回（只落标记、detached 拉起分离进程），实际梦跑在后台异步完成——判定完成要轮询 cooldown.file 的 lastDreamAt 和 status 字段（见 status!=='running' 且时间戳晚于触发时刻），轮询超时建议同样给到 180000ms 量级。commands.runDream / runDreamRogue 是同步阻塞到梦跑完才返回，180000ms 是给足网络抖动余量，实测单场梦（1-2 次工具调用）在 12-35 秒量级完成。"
+}
