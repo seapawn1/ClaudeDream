@@ -36,6 +36,45 @@
 
 *size 已在本次 Sprint Planning 内由 Product Developer 自估（符合 ProductBacklog「Sprint Planning 时由 Product Developers 重估」的规则）；三条装不下时按行序退回，退回不伤 Sprint Goal 的最小成立（04.1+04.2 跑通即环有骨，04.3 是环合拢）。DoD 的 D1（一键重跑验证）与 D3（独立 review）不是单独工作项，是每条 AC 交付时随附的质量门——验证脚本随 04.1–04.3 各自产出，D3 在 Sprint 收尾时统一过审（见第三节 DoD 门节点）。*
 
+### 交付接口约定（2026-08-12 由 PO 补入）
+
+本 Sprint 的验收 test 由独立于开发的一方出卷，**卷面不对开发方公开**——防的是对着判据表写出一个专门讨好脚本的空壳，不是不信任。规矩是：**凡属"要求"一律在此写明，只有"怎么打分"留在卷里**。若验收时出现本节未写明、却决定过不过的要求，那是出卷方的错，按打回处理并修卷。
+
+开发方据 AC 自建开发沙箱自证跑通（DoD·D1 仍然照常兑现），不必也拿不到验收考场。除本节三项外，AC 之外无额外加码。
+
+**① 故障注入入口（唯一一项额外要求）**
+
+实现须提供一个**蓄意越界的作恶模式**入口——命令、环境变量或启动参数均可——令梦进程尝试写一个白名单外的文件。理由：合作型 agent 永远不会主动越界，围栏有效性靠正常跑一场梦证明不了，只能靠故障注入（设计冲刺 Prototype-01 已实测，做法见原型 `engine/rogue-dream.py`）。没有它，04.2·AC2 的"越界被拒"无法验证。
+
+**② 验收适配声明 `adapter.json`**
+
+完工时在 `scrum/sprint-01-skeleton/acceptance/adapter.json` 交一份适配声明，让验收方接得上实现的入口与产物落点。命令以考场项目根为工作目录、以非交互方式（stdin 关闭）执行；`source` 段的路径相对本仓库根。
+
+| 键 | 填什么 |
+|---|---|
+| `commands.install` | 在目标项目里安装/启用插件的命令（无需则留空） |
+| `commands.sessionEnd` | 模拟一次会话正常结束、触发 hook 链 |
+| `commands.runDream` | 无人值守拉起一次梦 |
+| `commands.runDreamRogue` | 上述①的作恶模式入口 |
+| `paths.triggerMarker` | 触发标记落点 |
+| `paths.reportGlob` | 梦报告落点（可带 `*`） |
+| `paths.canUseToolLogGlob` | 越界拒绝日志落点 |
+| `paths.promptCarrier` | 下次会话提示行的载体 |
+| `source.sessionEndHook` / `dreamEntry` / `pluginManifest` | 三个源码文件位置 |
+| `sdkModule` | 所用 Agent SDK 包名（默认 `@anthropic-ai/claude-agent-sdk`） |
+| `cooldown.file` / `cooldown.key` | 冷却期配置的落点与键名 |
+| `recursionGuardEnv.name` / `value` | 防递归所依据的环境变量 |
+| `report.sections` | 报告六节的实际标题写法（六节内容见 ProductBacklog 架构 S8） |
+| `report.commitPolicy` | 报告是否与记忆改动同笔提交，见③ |
+| `offWhitelistTarget` | 作恶模式尝试写的那个白名单外文件 |
+| `spikeRecord` | AC0 spike 记录的落盘位置 |
+| `timeoutMs` | 单条命令的超时上限 |
+
+**③ 两处本轮不预设，怎么选都不扣分**
+
+- **报告文件是否与记忆改动同笔提交**：04.3·AC3 明写留待 C7 决定。验收只判"记忆与 CLAUDE.md 的改动收为单笔 `dream:` 提交"，报告在哪笔不判；选了哪种在 `report.commitPolicy` 声明即可。
+- **canUseTool 放行还是走退路**：04.2·AC0 的 spike 结果决定。放行成立、或走 `bypassPermissions` + git 审计退路，两条路都算过；验收判的是"结论在案、退路有交代"，不是"必须放行"——**但不允许静默降级**。
+
 ## 第三节 · 计划
 
 ```mermaid
