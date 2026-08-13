@@ -31,6 +31,7 @@
 - [ ] D1 **跑给你看**：每个增量都带一个能一键重跑的验证（脚本或步骤清单），当场重跑、全绿才算完
 - [ ] D2 **不破坏官方 auto-memory 契约**：一记一文件 + MEMORY.md 纯指针索引，增量改动后契约完好
 - [ ] D3 **过审才算完**：增量完成后必须经独立 review——调用 review agent 或 PO 亲审，通过才算 Done
+- [ ] D4 **绿灯点过烟**：验证中的每条自动判据/测试都配一个负向对照——故意制造一次它该拦的坏情况、亲眼看它变红过；从未被真正执行过的分支不算已覆盖（2026-08-13 Sprint-1 Retro 增设）
 
 *这是对每个增量、每条 PBI 通用的质量底线，Sprint 内不得削弱、只能加强。设计冲刺的 C1–C7 类条款（证据栏形态、抽查点、回滚行为、删除票……）是特定功能的验收标准，refinement 时归位到对应 PBI 的 Acceptance Criteria，不占用全增量的 DoD。*
 
@@ -42,7 +43,7 @@
 | PBI-02 | 引擎主干产品化 | 原型验证过的体检与处置能真装进 Claude Code 用 | S6–S7 | 原型已跑通，待产品化 | L | M1–M5 / S1–S3 判据、L0–L3 处置、三道安全阀从脚本变插件形态（Sketches、verdict §2） |
 | PBI-03 | Agent SDK canUseTool 结构缴械 | 梦在结构上碰不到它不该碰的东西 | 横切 S5–S7 | Sprint-1 已交付（随 PBI-04 吸收） | M | `.claude` 是受保护路径、headless 下 hook 不加载——从「推荐」升为「必选」；PBI-02 的前提（DesignReview §7、原型实测） |
 | PBI-04 | 插件骨架与回环 | 插件形态立起来：无人值守转完一圈「触发→快照→占位整合→报告→提交→提示」，后续引擎内容有处可装 | S5 + P0 + S8 + S9（S6/S7 占位） | Sprint-1 已交付（2026-08-13 Review 收口） | L | 吸收 PBI-03；OC 兑现：环真转一圈，dream commit 可 revert；验收 15/16，遗留 04.3·AC4 用户可见部分 → PBI-05（Review 记录见 sprint-01-skeleton/SprintBacklog 第四节） |
-| PBI-05 | 梦提示行送到用户眼前 | 用户不问也知道昨夜做过梦——知情的最后一米 | S9 | Sprint-1 Review 遗留（2026-08-13），待精化 | S | H-A8：session-start 钩子纯 stdout 送信只进 AI 上下文，用户看不见；精化时连带调研用户可见输出通道（如 hook JSON `systemMessage`），并顺带裁决冷却 0 值语义 |
+| PBI-05 | 梦提示行送到用户眼前 | 用户不问也知道昨夜做过梦——知情的最后一米 | S9 | Sprint-1 Review 遗留（2026-08-13），待精化 | S | H-A8：session-start 纯 stdout 只进 AI 上下文，用户看不见。修复方向已调研（`5c04dd3`）：hook JSON `systemMessage`（官方标注 shown to the user，SessionStart 下是否真渲染**待实测**，备选 `terminalSequence`）；冷却 0 值语义已由 developers 先行裁决支持 |
 
 *本表是达成 Product Goal 的唯一工作来源：行序即优先序，由 Product Owner 排定；编号是不随排序变的稳定 ID。粗条目经 Refinement 拆小后写入对应 Sprint 的 SprintBacklog 第二节（层级编号如 PBI-04.1，AC/OC 须 PO 通过、sizing 归 Product Developers），本表对应行状态改「已精化」。size 是未经 refinement 的 T 恤码初估，Sprint Planning 时由 Product Developers 重估。依赖提示：PBI-03 是 PBI-02 的结构前提，现行序按价值排，取舍在首次 Sprint Planning 定。入场条件：verdict §3 的 C1–C3（回滚与证据形态改造）须在首个可用版本前完成，对应条目待 PO 补入。2026-08-13 Sprint-1 Review：PBI-01 与 PBI-02 的先后不裁，留待 Sprint-2 Planning 开场定。*
 

@@ -18,11 +18,9 @@ ClaudeDream 当前的工作区。设计冲刺已于 2026-08-02 结束并归档�
 |---|---|
 | `README.md` | 本文件——Scrum 段导航 |
 | `ProductBacklog.md` | Product 总述与 Vision（兼任 Goal）、两份 DoD、Product Backlog、架构（角色表+全流程图+批注） |
-| `sprint-01-skeleton/` | Sprint-1 的 SprintBacklog——Sprint Goal + 选取条目与精化 + 施工 map |
+| `sprint-01-skeleton/` | Sprint-1（骨架回环）完整档案——入口 [README.md](sprint-01-skeleton/README.md)：SprintBacklog（含 Review/Retro 记录）+ 验收考卷考场 + AC0 spike |
 | `.IDEO/design-sprint/` | 已结束的设计冲刺全部档案（原仓库根 `.IDEO/`，2026-08-07 归档于此）——总入口 [DesignReview.md](.IDEO/design-sprint/DesignReview.md) |
 
 ## 当前状态
 
-**2026-08-09：Sprint-1 已开（骨架回环）。**
-
-Sprint Goal：插件骨架立起、回环走通，见 [sprint-01-skeleton/SprintBacklog.md](sprint-01-skeleton/SprintBacklog.md)。
+**2026-08-13：Sprint-1（骨架回环）已收口，增量收下（验收 16 判据 15 过 1 遗留 H-A8 → PBI-05）。** 下一步 Sprint-2 Planning（PBI-01 vs PBI-02 排序开场定）。详见 [sprint-01-skeleton/README.md](sprint-01-skeleton/README.md)。

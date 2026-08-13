@@ -134,3 +134,20 @@ D3 独立 review 三轮 + 复审，各轮改了什么、为什么：
 1. **冷却 0 值**：裁「支持 0=关掉冷却」。原 `Number(env) || 默认` 是 falsy 陷阱，0 被吞成 30 分钟。已改 `trigger-check.mjs` 显式判断（未设置/非法/负数回退默认，其余含 0 照用）。
 2. **残留清理（含根因）**：生产仓失败梦的根因是 `.gitignore` 里 `.claude/dream/` 整目录 ignore，令 `git add -- .claude/dream` 报 "ignored" 致梦失败——这行随 `ae8fd2b` 入库（提交时未核实来源即一并带上，是疏忽）。已改 `.gitignore` 为精确 ignore 四个运行态文件（`last-dream.json`/`session-end-marker.json`/`dream.lock`/`next-session-prompt.txt`），报告与日志仍可入库；残留两个运行态文件已物理清理。
 3. **PBI-05 通道调研（官方文档为准）**：`systemMessage` 是官方「shown to the user」字段，SessionStart 纯 stdout 只进 Claude 上下文——正是 H-A8 根因。修复方向 = session-start 改输出 `{"systemMessage": "..."}`。**待实测 caveat**：文档明说 systemMessage 的 surface "depends on the event"，SessionStart section 未明确承诺它渲染给用户，PBI-05 精化须实测；备选 `terminalSequence`（OSC 桌面通知/窗口标题/BEL）。
+
+## 第五节 · Sprint Retrospective（2026-08-13）
+
+**合桌素材（三方到齐）**
+- developers——最顺：D3 审阅循环，三轮 + 复审每轮抓真问题并闭环；最卡：登录态缺失致 D1 真梦自测不可跑，端到端甩给 PO 手工（环境 impediment，非代码）；想改：写测试先问「这个分支有没有被跑到」。
+- 出卷侧——最顺：出卷/答卷分离经实战成立，首考 7 挂全为考卷账、零冤枉，人工项抓到自动化盲区（H-A8）；最卡：考卷先于实现出生，四处形态想当然，修卷三轮。
+- PO——提出「审阅 agent 似不能无限审，恐陷死角」之问，合桌判定为真：同一双眼睛边际收益递减、盲区固定。本冲刺自证——「空转冒充覆盖」同时逃过 developers 测试与三轮审阅，最终被换角度的检查（考卷故意下料、人眼看开场）抓住。
+
+**病根共振（本次 Retro 最大发现）**：两个互相独立的 agent 在同一病上各摔一跤——快照提交分支从未被测试踩到（`--only` 回归漏掉），与 H-A4 判据因考场太干净而空转白绿。病名：**空转冒充覆盖**——绿灯亮着，只因它守的那条路没人走过。
+
+**改进项（两条，全队通过，PO 2026-08-13 拍板；第 1 条即 developers 自提）**
+1. **「绿灯点过烟」升入 DoD**：ProductBacklog 之 Definition of Output Done 增设 D4——每条自动判据/测试配一个负向对照，亲眼看它红过一次；从未被踩过的分支不算已覆盖。记录归本节，规矩进 DoD——生效点在每个增量的必经清单，不依赖谁记得。
+2. **真梦冒烟检查固定化**：把「本机能跑真梦」的前置检查（登录态/token/SDK 可达）做成可复跑的固定路径，列为 Sprint-2 开工首件事——D1 端到端不再依赖 PO 手工代跑。
+
+**执行注记（待 developers 确认）**：D3 审阅轮次带停机条件——每轮须有新发现方续轮，无新发现即停；停轮后剩余核查预算优先换角度（负向对照、独立验收、人眼实看），不加同质轮次。
+
+**关账**：Review 双半场齐（`5c04dd3`），Retro 记录即本节；改进项 1 已写入 DoD·D4，改进项 2 与执行注记带入 Sprint-2 Planning。Sprint-1 全部仪式完毕。

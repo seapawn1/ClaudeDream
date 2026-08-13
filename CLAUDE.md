@@ -6,7 +6,11 @@
 
 新会话先读 [README.md](README.md)（项目地图与当前状态）。要理解**方案是什么、为什么这么设计**，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)——设计冲刺的总结算与全部档案入口；要看 Scrum 段产品目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
-**当前阶段**：设计冲刺已完成（2026-08-02，Target-1 带条件通过），归档至 `scrum/.IDEO/design-sprint/`；Scrum 段已启动，Sprint-1（骨架回环）核心代码已实现（`claude-dream/`，13 条 AC 自证通过），D3 独立 review 三轮 + 复审已闭环（pathspec 限定、崩溃自愈、清单文案照实已修），D1 全量自测待登录态环境复验。Sprint Goal 与选取条目见 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md)，产品待办与架构见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前阶段**：设计冲刺已完成（2026-08-02，Target-1 带条件通过），归档至 `scrum/.IDEO/design-sprint/`；Sprint-1（骨架回环）已于 2026-08-13 收口——验收 16 判据 15 过（考卷与考场见 `scrum/sprint-01-skeleton/acceptance/`，在 `sprint-01-acceptance` 分支），遗留 H-A8 立为 PBI-05，Review 与 Retro 记录在 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md) 第四/五节，DoD 增设 D4「绿灯点过烟」。下一步：Sprint-2 Planning（PBI-01 vs PBI-02 排序开场定），产品待办与架构见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+
+## 常用命令
+
+- `node claude-dream/test/self-test.mjs` —— DoD·D1 一键自证（全链路/冷却/防递归/故障注入），需登录态（见「环境与坑」）。
 
 ## 历史与分支
 
@@ -16,3 +20,9 @@
 
 - `scrum/` 是当前工作区，以 Scrum 产物（ProductBacklog 含架构 / 各 Sprint 的 SprintBacklog）为主；`scrum/.IDEO/design-sprint/` 归档已结束的设计冲刺，以设计文档为主，例外是原型施工物（可运行脚本、假数据 builder、真跑产物，含各 `testbed/` 生成物），随所属 `Prototype-0X-*/` 子文件夹落户，生成物不入库。
 - `reference/` 只放原料，不放结论；与 `scrum/.IDEO/design-sprint/` 蒸馏冲突时以原料为准。
+
+## 环境与坑
+
+- 跑梦（`claude-dream/src/run-dream.mjs`）与 D1 自证（`claude-dream/test/self-test.mjs`）需 Claude Code 登录态（`~/.claude/.credentials.json`），缺失报 "Not logged in"——headless/CI 环境先确认登录态，别当代码 bug。
+- 验收考卷在 `sprint-01-acceptance` 分支 `scrum/sprint-01-skeleton/acceptance/`，卷面对开发方保密；开发方按 AC + `adapter.json` 自证（DoD·D1），不碰考卷。
+- 梦进程的 git 提交必须限定 pathspec：`git commit -- <目录>` 走 `--only`，空目录报 "pathspec did not match"，应先 `git diff --cached --name-only -- <pathspec>` 算具体文件再喂 commit。
