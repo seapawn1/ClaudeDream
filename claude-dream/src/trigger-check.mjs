@@ -81,7 +81,10 @@ async function main() {
   const paths = dreamPaths(root);
   mkdirSync(paths.dreamDir, { recursive: true });
 
-  const cooldownMinutes = Number(process.env.CLAUDE_DREAM_COOLDOWN_MINUTES) || DEFAULT_COOLDOWN_MINUTES;
+  // 「0=关掉冷却」是合法语义（冷却期可配置，0 分钟=每次会话结束都触发）。原写法 Number(env) || 默认
+  // 会把 0 当 falsy 吞成默认 30 分钟——JS 的 || 陷阱，不是设计。显式判：未设置/非法/负数回退默认，其余含 0 照用。
+  const parsedCooldown = Number(process.env.CLAUDE_DREAM_COOLDOWN_MINUTES);
+  const cooldownMinutes = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : DEFAULT_COOLDOWN_MINUTES;
   const cooldownMs = cooldownMinutes * 60 * 1000;
 
   let lastState = null;
