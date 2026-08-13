@@ -5,9 +5,12 @@ Thumbs.db
 __pycache__/
 .venv/
 *.pyc
+node_modules/
+scrum/sprint-01-skeleton/spike-ac0/scratch/
 setting.local.json
 *.code-workspace
 .claude/worktrees/
+.claude/dream/
 reference/**/.git/
 reference/.git/
 **/.git/

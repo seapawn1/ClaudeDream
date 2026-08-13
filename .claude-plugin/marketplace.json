@@ -8,12 +8,12 @@
     {
       "name": "claude-dream",
       "source": "./claude-dream",
-      "description": "升级 Claude Code 的记忆系统，使 agent 记忆免于腐烂、与用户和项目保持同步。手动 /claude-dream 或说「开始做梦 / 更新记忆」唤起。",
-      "version": "2.0.0",
+      "description": "升级 Claude Code 的记忆系统，使 agent 记忆免于腐烂、与用户和项目保持同步。Sprint-1 骨架阶段：会话结束后自动触发一场占位梦，走通「触发→快照→整合→报告→提交→提示」回环，真实判据引擎留待后续 Sprint。",
+      "version": "0.1.0",
       "author": {
         "name": "SeaPawn"
       },
-      "keywords": ["memory", "claude-code", "compiler", "dream"]
+      "keywords": ["memory", "claude-code", "dream"]
     }
   ]
 }

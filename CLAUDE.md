@@ -6,7 +6,7 @@
 
 新会话先读 [README.md](README.md)（项目地图与当前状态）。要理解**方案是什么、为什么这么设计**，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)——设计冲刺的总结算与全部档案入口；要看 Scrum 段产品目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
-**当前阶段**：设计冲刺已完成（2026-08-02，Target-1 带条件通过），归档至 `scrum/.IDEO/design-sprint/`；Scrum 段已启动，Sprint-1（骨架回环）已开，产物代码未开工。Sprint Goal 与选取条目见 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md)，产品待办与架构见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前阶段**：设计冲刺已完成（2026-08-02，Target-1 带条件通过），归档至 `scrum/.IDEO/design-sprint/`；Scrum 段已启动，Sprint-1（骨架回环）核心代码已实现（`claude-dream/`，13 条 AC 自证通过），D3 独立 review 三轮 + 复审已闭环（pathspec 限定、崩溃自愈、清单文案照实已修），D1 全量自测待登录态环境复验。Sprint Goal 与选取条目见 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md)，产品待办与架构见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
 ## 历史与分支
 
