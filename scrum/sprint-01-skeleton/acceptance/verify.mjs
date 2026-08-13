@@ -26,6 +26,8 @@ const WHITELIST = ['.claude/memory/', '.claude/dream/', 'CLAUDE.md']
 /** 白名单外的脏改动——用来证明梦前快照的 pathspec 真的收着（见 H-A4）。 */
 const DIRT_TRACKED = 'src/report.js'
 const DIRT_UNTRACKED = 'notes.txt'
+/** 白名单内的梦前脏改动——快照该把它先收进 dream: 之前的提交，否则快照空转、判据空洞。 */
+const DIRT_WHITELIST_MARK = '<!-- 验收预置：梦前未收口的用户改动，快照该把这行收进去 -->'
 
 // ---------------------------------------------------------------- 判据台账
 
@@ -62,10 +64,25 @@ function git(args, opts = {}) {
   }).trim()
 }
 
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+
+/** 命令里的脚本路径容错：约定 cwd 是考场根，但答卷方看不见考场在仓库里的层级，
+ *  命令写成仓库根相对路径是唯一理性选择——凡带路径分隔符、考场下不存在而仓库根下
+ *  存在的 token，就地转绝对路径。考场内相对路径与选项 token 原样保留。 */
+function resolveCmdPaths(cmdline) {
+  return cmdline.split(' ').map((tok) => {
+    const bare = tok.replace(/^["']|["']$/g, '')
+    if (!bare || bare.startsWith('-') || !/[\\/]/.test(bare)) return tok
+    if (existsSync(join(LAB, bare))) return tok
+    const inRepo = join(REPO_ROOT, bare)
+    return existsSync(inRepo) ? `"${inRepo}"` : tok
+  }).join(' ')
+}
+
 /** 以非交互方式跑适配层声明的命令：stdin 关闭，等待输入即超时判负（H-A9 的机制）。 */
 function runCmd(cmd, { env = {}, timeout } = {}) {
   try {
-    const out = execSync(cmd, {
+    const out = execSync(resolveCmdPaths(cmd), {
       cwd: LAB,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -153,11 +170,23 @@ function plantDirt() {
   const f = labPath(DIRT_TRACKED)
   writeFileSync(f, readFileSync(f, 'utf8') + '\n// 验收留下的脏改动，梦不该碰它\n', 'utf8')
   writeFileSync(labPath(DIRT_UNTRACKED), '验收留下的未跟踪文件，梦不该碰它\n', 'utf8')
+  const cm = labPath('CLAUDE.md')
+  writeFileSync(cm, readFileSync(cm, 'utf8') + '\n' + DIRT_WHITELIST_MARK + '\n', 'utf8')
 }
 
 function scenarioA() {
   const preHead = git('rev-parse HEAD')
   plantDirt()
+
+  // 声明了 durationEnvVar 的实现，cooldown.file 是运行态（上次梦的时间戳）而非配置。
+  // 预置一份「刚梦过」的状态，让本场 sessionEnd 只落标记、不真的在后台拉起梦——
+  // A 场景的梦由下面的 runDream 同步跑，两场并发会撞实现的互斥锁，假摔。
+  const cdA = adapter.cooldown
+  if (cdA?.durationEnvVar && cdA?.file && cdA?.key) {
+    const stateP = labPath(cdA.file)
+    mkdirSync(dirname(stateP), { recursive: true })
+    writeFileSync(stateP, JSON.stringify({ [cdA.key]: new Date().toISOString(), status: 'completed' }, null, 2), 'utf8')
+  }
 
   // --- 触发链 ---
   const sessionEnd = cmd('sessionEnd')
@@ -219,20 +248,33 @@ function scenarioA() {
   else block('H-A5', '梦未跑完，无从判断过场')
 
   const commitsAfter = git(`rev-list --reverse ${preHead}..HEAD`).split('\n').filter(Boolean)
+  const subj = (c) => git(`log -1 --format=%s ${c}`)
+  // 提交按角色归位：dream: 前缀是锚点；它之前的都算梦前快照（白名单干净时实现可跳过
+  // 空快照，所以快照不以「第一笔」论，也不预设它的 message 前缀）；之后是证据类提交。
+  const dreamIdx = commitsAfter.findIndex((c) => subj(c).startsWith('dream:'))
 
-  // H-A4 梦前快照 + pathspec 收着
+  // H-A4 梦前快照 + pathspec 收着：
+  //   ① 梦造出的每一笔提交都不得越出三处白名单（pathspec 收着的总体现）
+  //   ② 白名单内的梦前脏改动（CLAUDE.md 预置标记）须先被收进 dream: 之前的快照笔——
+  //      否则用户梦前未收口的改动会和梦的改动混进同一笔，revert 梦会连用户的一起撤掉
   if (commitsAfter.length === 0) {
     fail('H-A4', '梦跑完后没有任何新提交——梦前快照缺席')
   } else {
-    const snap = commitsAfter[0]
-    const files = git(`show --name-only --format= ${snap}`).split('\n').filter(Boolean)
-    const outside = files.filter((f) => !inWhitelist(f))
-    const dirtLeaked = files.some((f) => f === DIRT_TRACKED || f === DIRT_UNTRACKED)
-    if (outside.length) {
-      fail('H-A4', `快照 ${snap.slice(0, 7)} 卷进白名单外的路径：${outside.join('、')}` +
-        (dirtLeaked ? '（含验收故意留下的脏改动——多半是 git add -A 没收 pathspec）' : ''))
+    const leaks = []
+    for (const c of commitsAfter) {
+      const files = git(`show --name-only --format= ${c}`).split('\n').filter(Boolean)
+      for (const f of files.filter((x) => !inWhitelist(x))) leaks.push(`${c.slice(0, 7)}:${f}`)
+    }
+    const preDream = dreamIdx === -1 ? commitsAfter : commitsAfter.slice(0, dreamIdx)
+    const snapHasMark = preDream.some((c) => {
+      try { return git(`show ${c}:CLAUDE.md`).includes(DIRT_WHITELIST_MARK) } catch { return false }
+    })
+    if (leaks.length) {
+      fail('H-A4', `有提交卷进白名单外的路径：${leaks.join('、')}（多半是 git add -A 没收 pathspec）`)
+    } else if (!snapHasMark) {
+      fail('H-A4', '梦前留在 CLAUDE.md 的未收口改动没有先被收进 dream: 之前的快照笔——快照缺席或漏收')
     } else {
-      pass('H-A4', `快照 ${snap.slice(0, 7)} 改动全在三处白名单内；白名单外的脏改动未被卷入`)
+      pass('H-A4', `快照先行收好梦前改动，${commitsAfter.length} 笔提交全部收在三处白名单内`)
     }
   }
 
@@ -255,18 +297,28 @@ function scenarioA() {
     }
   }
 
-  // H-A7 单笔 dream: 收口（报告在哪笔不判——C7 未决）
-  const nonSnapshot = commitsAfter.slice(1)
+  // H-A7 单笔 dream: 收口。报告/审计证据可按声明另收一笔（C7 未决，commitPolicy 声明即可），
+  // 快照笔（dream: 之前）碰记忆/CLAUDE.md 是本分；判的是：dream: 前缀提交恰 1 笔，
+  // 且 dream: 之后的提交不再碰记忆/CLAUDE.md。
   if (commitsAfter.length === 0) {
     block('H-A7', '无新提交')
-  } else if (nonSnapshot.length !== 1) {
-    fail('H-A7', `快照之后应恰有 1 笔梦提交，实际 ${nonSnapshot.length} 笔`)
   } else {
-    const msg = git(`log -1 --format=%s ${nonSnapshot[0]}`)
+    const dreamCommits = commitsAfter.filter((c) => subj(c).startsWith('dream:'))
+    const strayTouch = dreamIdx === -1 ? [] : commitsAfter.slice(dreamIdx + 1)
+      .filter((c) => !subj(c).startsWith('dream:'))
+      .filter((c) => git(`show --name-only --format= ${c}`).split('\n')
+        .some((f) => f === 'CLAUDE.md' || f.startsWith('.claude/memory/')))
     const leftover = git('status --porcelain -- .claude/memory CLAUDE.md').trim()
-    if (!msg.startsWith('dream:')) fail('H-A7', `梦提交 message 未以 dream: 开头：「${msg}」`)
-    else if (leftover) fail('H-A7', `记忆/CLAUDE.md 有改动没进提交：\n${leftover}`)
-    else pass('H-A7', `单笔收口：「${msg}」`)
+    if (dreamCommits.length !== 1) {
+      fail('H-A7', `应恰有 1 笔 dream: 前缀提交，实际 ${dreamCommits.length} 笔`)
+    } else if (strayTouch.length) {
+      fail('H-A7', `dream: 之后仍有提交在碰记忆/CLAUDE.md：${strayTouch.map((c) => c.slice(0, 7)).join('、')}`)
+    } else if (leftover) {
+      fail('H-A7', `记忆/CLAUDE.md 有改动没进提交：\n${leftover}`)
+    } else {
+      const extra = commitsAfter.length - dreamIdx - 1
+      pass('H-A7', `单笔收口：「${subj(dreamCommits[0])}」${extra > 0 ? `（另 ${extra} 笔证据提交，commitPolicy 已声明）` : ''}`)
+    }
   }
 
   // H-C1 白名单内放行、零权限提示
@@ -300,17 +352,11 @@ function scenarioA() {
     fail('H-A4', `${cur?.note ?? ''}｜但白名单外的未跟踪文件 ${DIRT_UNTRACKED} 不见了——有人越界动了它`)
   }
 
-  return { preHead, ran: run.ok, commitsAfter }
+  // snapBase：revert 后对账的基线——dream: 之前最后一笔快照；快照被跳过（白名单本来干净）时用梦前 HEAD
+  return { preHead, ran: run.ok, commitsAfter, snapBase: dreamIdx > 0 ? commitsAfter[dreamIdx - 1] : preHead }
 }
 
 // ---------------------------------------------------------------- 场景 B
-
-function readCooldownFile() {
-  const c = adapter.cooldown
-  if (!c?.file || !c?.key) return null
-  const p = labPath(c.file)
-  return existsSync(p) ? { p, key: c.key, text: readFileSync(p, 'utf8') } : null
-}
 
 function scenarioB() {
   const sessionEnd = cmd('sessionEnd')
@@ -320,32 +366,61 @@ function scenarioB() {
     fail('H-B2', '同上')
     return
   }
+  // 防虚绿：触发链本身没走通时，「不触发」是空转通过，不算数
+  if (results.get('H-A1')?.mark !== '✔') {
+    block('H-B1', '触发链没走通（H-A1 未过），抑制行为无从判起')
+    block('H-B2', '同上')
+    return
+  }
 
-  // H-B1 冷却期内不重复触发
-  const before = labHas(marker) ? readFileSync(labPath(marker), 'utf8') : null
-  const beforeMtime = labHas(marker) ? git('log -1 --format=%H').slice(0, 7) : null
-  runCmd(sessionEnd)
-  const after = labHas(marker) ? readFileSync(labPath(marker), 'utf8') : null
+  const c = adapter.cooldown ?? {}
+  const stateText = () => {
+    const p = c.file ? labPath(c.file) : null
+    return p && existsSync(p) ? readFileSync(p, 'utf8') : null
+  }
 
-  if (before !== null && after !== before) {
-    fail('H-B1', '冷却期内再次结束会话，触发标记被刷新了——重复触发')
-  } else {
-    // 再证明它是配置在起作用：冷却期改成 0，应当重新触发
-    const cd = readCooldownFile()
-    if (!cd) {
-      fail('H-B1', '冷却期内未重复触发，但 adapter.cooldown 未声明，无法验证「可配置」')
+  // H-B1 冷却期内不重复触发。两种声明方式两种测法：
+  //   durationEnvVar 声明 —— 冷却时长走环境变量，cooldown.file 是运行态；触发标记按设计
+  //   每次会话结束都刷新（那是 AC2 的落盘行为），「重复触发」的信号是运行态文件的变化。
+  //   否则 —— 冷却时长写在 cooldown.file 的 cooldown.key 里，触发信号即标记刷新。
+  if (c.durationEnvVar) {
+    const s0 = stateText()
+    runCmd(sessionEnd)
+    let launched = false
+    for (let i = 0; i < 10 && !launched; i++) { sleep(500); if (stateText() !== s0) launched = true }
+    if (launched) {
+      fail('H-B1', '冷却期内再次结束会话，梦仍被拉起——重复触发')
     } else {
-      const patched = cd.text.replace(
-        new RegExp(`^(\\s*${cd.key}\\s*:\\s*).*$`, 'm'), '$10')
-      if (patched === cd.text) {
-        fail('H-B1', `在 ${adapter.cooldown.file} 里找不到键 ${cd.key}，无法验证「可配置」`)
+      // 用 0.01 分钟而不是 0：「0 是否等于关掉冷却」语义未约定，不强判；
+      // 近零的正数是无歧义的时长，足以证明配置接上了
+      runCmd(sessionEnd, { env: { [c.durationEnvVar]: '0.01' } })
+      let relaunched = false
+      for (let i = 0; i < 40 && !relaunched; i++) { sleep(500); if (stateText() !== s0) relaunched = true }
+      if (relaunched) pass('H-B1', `冷却期内不重复拉起；${c.durationEnvVar}=0.01 后重新拉起——配置确实在起作用`)
+      else fail('H-B1', `${c.durationEnvVar}=0.01 后 20 秒内未见梦拉起——冷却配置没接上，或触发链本身坏了`)
+    }
+  } else {
+    const before = labHas(marker) ? readFileSync(labPath(marker), 'utf8') : null
+    runCmd(sessionEnd)
+    const after = labHas(marker) ? readFileSync(labPath(marker), 'utf8') : null
+    if (before !== null && after !== before) {
+      fail('H-B1', '冷却期内再次结束会话，触发标记被刷新了——重复触发')
+    } else if (!c.file || !c.key) {
+      fail('H-B1', '冷却期内未重复触发，但 adapter.cooldown 未声明，无法验证「可配置」')
+    } else if (stateText() === null) {
+      fail('H-B1', `冷却配置文件 ${c.file} 不存在，无法验证「可配置」`)
+    } else {
+      const text = stateText()
+      const patched = text.replace(new RegExp(`^(\\s*${c.key}\\s*:\\s*).*$`, 'm'), '$10')
+      if (patched === text) {
+        fail('H-B1', `在 ${c.file} 里找不到键 ${c.key}，无法验证「可配置」`)
       } else {
-        writeFileSync(cd.p, patched, 'utf8')
+        writeFileSync(labPath(c.file), patched, 'utf8')
         runCmd(sessionEnd)
         const afterZero = labHas(marker) ? readFileSync(labPath(marker), 'utf8') : null
-        writeFileSync(cd.p, cd.text, 'utf8')  // 还原
+        writeFileSync(labPath(c.file), text, 'utf8')  // 还原
         if (afterZero !== after) pass('H-B1', '冷却期内不重复触发；冷却时长改为 0 后重新触发——配置确实在起作用')
-        else fail('H-B1', `冷却期改为 0 后仍未触发——${cd.key} 这个配置没接上，或触发链本身坏了`)
+        else fail('H-B1', `冷却期改为 0 后仍未触发——${c.key} 这个配置没接上，或触发链本身坏了`)
       }
     }
   }
@@ -366,8 +441,10 @@ function scenarioB() {
 // ---------------------------------------------------------------- 场景 C
 
 function scenarioC() {
-  // H-C3 spike 结论在案
-  const rec = adapter.spikeRecord ? join(HERE, adapter.spikeRecord) : null
+  // H-C3 spike 结论在案（落盘位置的基准未在约定里写死——仓库根、考卷目录两个基准都认）
+  const rec = adapter.spikeRecord
+    ? [join(REPO_ROOT, adapter.spikeRecord), join(HERE, adapter.spikeRecord)].find((p) => existsSync(p)) ?? null
+    : null
   if (!rec || !existsSync(rec)) {
     fail('H-C3', 'adapter.spikeRecord 未声明或文件不存在——AC0 的前提实测没有落盘')
   } else {
@@ -390,13 +467,15 @@ function scenarioC() {
     return
   }
 
-  const beforeHash = git(`hash-object ${target}`)
+  // 作恶目标可以是「写一个新文件」（预先不存在，被拦住就该一直不存在），也可以是改现成文件
+  const targetState = () => (existsSync(labPath(target)) ? git(`hash-object ${target}`) : null)
+  const beforeHash = targetState()
   runCmd(rogue)
-  const afterHash = git(`hash-object ${target}`)
+  const afterHash = targetState()
   const logs = findFiles(logGlob)
 
   if (beforeHash !== afterHash) {
-    fail('H-C2', `白名单外的 ${target} 被改动了——围栏没拦住`)
+    fail('H-C2', `白名单外的 ${target} 被${beforeHash === null ? '创建' : '改动'}了——围栏没拦住`)
   } else if (!logs.length) {
     fail('H-C2', `${target} 未被改动，但 ${logGlob} 下没有拒绝日志——拦了但没留证`)
   } else {
@@ -410,12 +489,19 @@ function scenarioC() {
 
 function scenarioD(ctx) {
   const commits = ctx?.commitsAfter ?? []
-  if (commits.length < 2) {
+  if (commits.length === 0) {
     block('H-D1', '没有可撤销的梦提交')
     return
   }
-  const snap = commits[0]
-  const dreamCommit = commits[commits.length - 1]
+  // 撤销对象是那笔 dream: 前缀提交——commitPolicy 为 separate 时它不是最后一笔，
+  // 报告/日志的证据提交不在撤销之列（撤梦不该销毁审计证据，正是 C7 顾虑本身）；
+  // 对账基线是 dream: 之前的快照笔（或梦前 HEAD），不预设快照是否存在
+  const dreamCommit = commits.find((c) => git(`log -1 --format=%s ${c}`).startsWith('dream:'))
+  if (!dreamCommit) {
+    fail('H-D1', '找不到 dream: 前缀提交，无从 revert')
+    return
+  }
+  const snap = ctx.snapBase ?? commits[0]
 
   const r = runCmd(`git -c user.name=verify -c user.email=v@t.test revert --no-edit ${dreamCommit}`)
   if (!r.ok) {
@@ -477,14 +563,16 @@ function main() {
   const install = cmd('install')
   if (install) runCmd(install)
 
-  // 执行顺序是 A → D → B → C，不是 A→B→C→D：
+  // 执行顺序是 A → D → C → B，不是 A→B→C→D：
   // D 要在梦刚跑完的干净状态下 revert，B/C 会往 .claude/dream/ 里写标记与日志，
-  // 先跑它们会让 revert 撞上"本地改动会被覆盖"而假摔。
+  // 先跑它们会让 revert 撞上"本地改动会被覆盖"而假摔；
+  // B 必须垫底——验证「冷却改 0 应重新触发」会真的拉起一场后台梦，
+  // 放在别的场景前面会撞实现的互斥锁。
   let ctx
   try { ctx = scenarioA() } catch (err) { console.error(`场景 A 异常：${err.message}`) }
   try { scenarioD(ctx) } catch (err) { console.error(`场景 D 异常：${err.message}`) }
-  try { scenarioB() } catch (err) { console.error(`场景 B 异常：${err.message}`) }
   try { scenarioC() } catch (err) { console.error(`场景 C 异常：${err.message}`) }
+  try { scenarioB() } catch (err) { console.error(`场景 B 异常：${err.message}`) }
 
   const allGreen = render()
   console.log('\n人工核对三项（脚本查不了，验收当场做）：')

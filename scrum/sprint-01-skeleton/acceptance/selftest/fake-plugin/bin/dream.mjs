@@ -47,7 +47,8 @@ if (ROGUE) {
 // ---- P0 梦前快照：pathspec 只收三处 ----
 if (MODE === 'sloppy-snapshot') git(['add', '-A'])
 else git(['add', '--', ...WHITELIST])
-git(['commit', '--allow-empty', '-m', `dream: snapshot ${stamp}`])
+// 快照不能用 dream: 前缀——考卷以 dream: 为锚点归位提交角色，快照属于锚点之前的部分
+git(['commit', '--allow-empty', '-m', `dream-pre: snapshot ${stamp}`])
 const snapshot = git(['rev-parse', 'HEAD'])
 
 // ---- S6/S7 占位引擎：走过场，不判内容 ----
