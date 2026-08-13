@@ -53,9 +53,16 @@ function unstageOperationalState(root, dreamDir) {
   }
 }
 
-function stagedCount(root) {
-  const out = git(root, ['diff', '--cached', '--name-only']);
-  return out ? out.split('\n').filter(Boolean).length : 0;
+// D3 review 三轮抓到的坑：commit 只该提交"梦自己 add 的那几处"，这里也必须带同样的 pathspec——
+// 否则人类在会话中途手动 git add 了无关文件时，会把它们也数进"有待提交"，下面那个不带 pathspec 的
+// git commit 再一跑，就把人类暂存一并吞进 dream: 提交。判断范围必须和提交范围一致。
+// 复审又抓到一个更深的坑：git commit -- <目录 pathspec> 走 --only 语义，只要其中某个目录匹配不到任何
+// git 已知文件（比如梦前阶段的 .claude/dream，此刻只有未跟踪的运行态文件），整笔提交直接报
+// "pathspec did not match" 退出，全新项目第一场梦就断在梦前快照。所以不喂目录，而是先 diff --cached
+// --name-only 算出"实际被 staged 的具体文件"，只把这些精确路径传给 commit——空匹配不会发生。
+function stagedFiles(root, pathspec) {
+  const out = git(root, ['diff', '--cached', '--name-only', '--', ...(pathspec ?? [])]);
+  return out ? out.split('\n').map((l) => l.trim()).filter(Boolean) : [];
 }
 
 /** P0：梦前快照。只对 .claude/memory、.claude/dream（刨去运行态文件）、CLAUDE.md 有待提交变更时才提交。 */
@@ -64,8 +71,9 @@ function preDreamSnapshot(root, paths, runId) {
   if (pathspec.length > 0) {
     git(root, ['add', '--', ...pathspec]);
     unstageOperationalState(root, paths.dreamDir);
-    if (stagedCount(root) > 0) {
-      git(root, ['commit', '-m', `dream-pre: 梦前快照 ${runId}`]);
+    const staged = stagedFiles(root, pathspec);
+    if (staged.length > 0) {
+      git(root, ['commit', '-m', `dream-pre: 梦前快照 ${runId}`, '--', ...staged]);
     } else {
       // D3 review 二轮实测抓到的坑：裸 git reset 会把整个暂存区退回 HEAD，不只是这个函数自己 add 的东西——
       // 真复现过：人类在会话中途自己 git add 了别的文件，梦一跑，那些暂存也被这行悄悄清掉。
@@ -81,6 +89,8 @@ function preDreamSnapshot(root, paths, runId) {
  * 收尾提交：记忆+CLAUDE.md 一笔 dream: 前缀（可回滚），.claude/dream 证据另一笔（不随 revert 销毁，
  * 且刨去运行态文件）。两笔各自 try/catch——D3 review 指出：第二笔失败时若不单独兜底，未捕获异常会
  * 让调用方以为整场梦失败，实际上 dream: 那笔记忆改动已经是真实历史了，报告/日志才是那笔没提交上。
+ * D3 review 三轮指出：两处 commit 必须限定 pathspec（与各自 add 的范围一致），否则人类会话中途手动
+ * git add 的无关暂存会被一并吞进 dream:/dream-evidence: 提交。
  */
 function commitResults(root, paths, runId) {
   const commits = {};
@@ -89,8 +99,9 @@ function commitResults(root, paths, runId) {
   if (memoryPathspec.length > 0) {
     try {
       git(root, ['add', '--', ...memoryPathspec]);
-      if (stagedCount(root) > 0) {
-        git(root, ['commit', '-m', `dream: ${runId} 占位整合`]);
+      const staged = stagedFiles(root, memoryPathspec);
+      if (staged.length > 0) {
+        git(root, ['commit', '-m', `dream: ${runId} 占位整合`, '--', ...staged]);
         commits.dream = git(root, ['rev-parse', 'HEAD']);
       }
     } catch (err) {
@@ -103,8 +114,9 @@ function commitResults(root, paths, runId) {
     try {
       git(root, ['add', '--', paths.dreamDir]);
       unstageOperationalState(root, paths.dreamDir);
-      if (stagedCount(root) > 0) {
-        git(root, ['commit', '-m', `dream-evidence: ${runId} 报告与日志`]);
+      const staged = stagedFiles(root, [paths.dreamDir]);
+      if (staged.length > 0) {
+        git(root, ['commit', '-m', `dream-evidence: ${runId} 报告与日志`, '--', ...staged]);
         commits.evidence = git(root, ['rev-parse', 'HEAD']);
       } else {
         gitTry(root, ['reset', '--', paths.dreamDir]);

@@ -307,6 +307,83 @@ async function testRogue() {
   return sandbox;
 }
 
+async function testStaleLockDetection() {
+  // D3 review 三轮抓到的坑：锁只查"文件在不在"，上一场梦硬死（kill -9 / 断电 / OOM）没走到 finally 的
+  // releaseLock 时 dream.lock 永久残留，之后每次触发都撞 EEXIST 直接退出，梦从此停摆、无人发现。
+  // 修复靠锁里记的 pid 判定存活：pid 死 = 残留可清，pid 活 = 真在跑别抢。三条边界钉进回归。
+  console.log('\n=== 崩溃残留锁自愈（stale lock 判定 + 清锁重抢，不起会话） ===');
+  const { isStaleLock, acquireLock, releaseLock } = await import('../src/trigger-check.mjs');
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-lock-test-'));
+  const lockPath = path.join(tmpDir, 'dream.lock');
+
+  // 死 pid：spawnSync 同步跑一个立即退出的子进程，返回时该 pid 已确定查无此进程。
+  const dead = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { windowsHide: true });
+  writeFileSync(lockPath, JSON.stringify({ pid: dead.pid, acquiredAt: new Date().toISOString() }));
+  check('死 pid 的锁判定为 stale（崩溃残留）', isStaleLock(lockPath) === true);
+  check('残留锁被清掉并重新获取（acquireLock 返回 true）', acquireLock(lockPath) === true);
+  check('锁已换成当前进程的 pid', JSON.parse(readFileSync(lockPath, 'utf8')).pid === process.pid);
+
+  // 活 pid：写一把"当前进程自己"的锁，必然存活，acquireLock 不该抢。
+  releaseLock(lockPath);
+  writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }));
+  check('活 pid 的锁判定为非 stale（别抢活锁）', isStaleLock(lockPath) === false);
+  check('活锁不被抢（acquireLock 返回 false）', acquireLock(lockPath) === false);
+
+  // 损坏锁：读不出 pid，按残留处理（宁可清掉也不永久卡死）。
+  releaseLock(lockPath);
+  writeFileSync(lockPath, 'not-json-at-all');
+  check('读不出 pid 的损坏锁按残留处理', isStaleLock(lockPath) === true);
+
+  releaseLock(lockPath);
+  rmSync(tmpDir, { recursive: true, force: true });
+}
+
+async function testCommitPathspecDoesNotSwallowHumanStaged() {
+  // D3 review 三轮抓到的坑：git commit 不带 pathspec 时提交整个暂存区，人类会话中途手动 git add 的
+  // 无关文件会被连坐吞进 dream: 提交。修复 = stagedFiles 和 commit 都限定与 add 相同的 pathspec。
+  // 预置一个人类 staged 的无关文件，跑一场梦，断言它既不进 dream: 提交、也不被 reset 清掉。
+  // 复审又指出：梦前快照的 commit 分支（有运行态文件 + 有待提交 memory 改动）从未被测试跑到，导致
+  // 发现 1 漏网。这里一并预置这两个条件，让 preDreamSnapshot 真走进 commit 分支，验证空 .claude/dream
+  // 目录不再让 commit -- 报 "pathspec did not match"。
+  const sandbox = makeSandbox('pathspec');
+  const paths = dreamPaths(sandbox);
+  console.log(`\n=== D3 三轮回归：dream 提交不吞人类暂存 + 梦前快照空目录不炸（沙箱: ${sandbox}） ===`);
+
+  // 1) 人类会话中途 stage 一个无关文件
+  writeFileSync(path.join(sandbox, 'README.md'), 'human staged change\n');
+  git(sandbox, ['add', 'README.md']);
+
+  // 2) 让梦前快照有"待提交 memory 改动" + ".claude/dream 有运行态文件"，迫使 preDreamSnapshot 走进
+  //    commit 分支（这正是复审发现 1 的空目录 pathspec 会炸的场景）
+  mkdirSync(paths.dreamDir, { recursive: true });
+  writeFileSync(paths.memoryIndex, readFileSync(paths.memoryIndex, 'utf8') + '\n<!-- pathspec 回归钉子 -->\n');
+  writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: '2020-01-01T00:00:00.000Z', status: 'running' }));
+
+  const result = runNode(path.join(SRC, 'run-dream.mjs'), [sandbox], { cwd: sandbox });
+  check('直接跑 run-dream 正常返回（退出码 0）', result.status === 0, result.stderr);
+
+  // 3) 梦前快照提交成功（修复前这里会因空 .claude/dream 目录报 did not match 而整场梦中断）
+  const preSha = git(sandbox, ['log', '--oneline', '--grep=^dream-pre:', '-1', '--format=%H']);
+  check('梦前快照 dream-pre: 提交成功（空 .claude/dream 目录没炸）', !!preSha, preSha);
+  if (preSha) {
+    const preFiles = git(sandbox, ['show', '--name-only', '--pretty=format:', preSha]).split('\n').map((l) => l.trim()).filter(Boolean);
+    check('dream-pre 提交不含运行态文件 last-dream.json', !preFiles.includes('.claude/dream/last-dream.json'), preFiles.join(', '));
+    check('dream-pre 提交不含人类 README.md', !preFiles.includes('README.md'));
+  }
+
+  // 4) dream: 提交不含人类 README，README 仍保持 staged
+  const dreamSha = git(sandbox, ['log', '--oneline', '--grep=^dream:', '-1', '--format=%H']);
+  const dreamFiles = dreamSha
+    ? git(sandbox, ['show', '--name-only', '--pretty=format:', dreamSha]).split('\n').map((l) => l.trim()).filter(Boolean)
+    : [];
+  check('dream: 提交不含人类无关的暂存文件 README.md', dreamFiles.length > 0 && !dreamFiles.includes('README.md'), dreamFiles.join(', '));
+
+  const staged = git(sandbox, ['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
+  check('人类暂存的 README.md 仍保持 staged（未被吞、未被 reset）', staged.includes('README.md'), staged.join(', '));
+
+  return sandbox;
+}
+
 function testPluginManifestShape() {
   // D3 review 抓到的坑：hooks.json 曾经缺顶层 "hooks" 包裹键（{"SessionEnd":[...]} 而不是
   // {"hooks":{"SessionEnd":[...]}}）——那是 .claude/settings.json 的格式，不是插件 hooks.json 的格式，
@@ -356,9 +433,11 @@ try {
   testScopeGuardUnit();
   testPluginManifestShape();
   await testNotebookEditFieldName();
+  await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testConcurrentTriggerLock());
   sandboxes.push(await testRogue());
+  sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());
 } finally {
   const failed = results.filter((r) => !r.pass);
   console.log(`\n=== 结果：${results.length - failed.length}/${results.length} 通过 ===`);

@@ -1,6 +1,6 @@
 {
   "name": "claude-dream",
-  "version": "2.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "claude-dream 插件产物代码——Sprint-1 骨架回环",

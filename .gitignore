@@ -10,6 +10,7 @@ scrum/sprint-01-skeleton/spike-ac0/scratch/
 setting.local.json
 *.code-workspace
 .claude/worktrees/
+.claude/dream/
 reference/**/.git/
 reference/.git/
 **/.git/
