@@ -5,9 +5,15 @@ Thumbs.db
 __pycache__/
 .venv/
 *.pyc
+node_modules/
+scrum/sprint-01-skeleton/spike-ac0/scratch/
 setting.local.json
 *.code-workspace
 .claude/worktrees/
+.claude/dream/last-dream.json
+.claude/dream/session-end-marker.json
+.claude/dream/dream.lock
+.claude/dream/next-session-prompt.txt
 reference/**/.git/
 reference/.git/
 **/.git/

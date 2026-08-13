@@ -1,0 +1,46 @@
+{
+  "_readme": "考卷自检用的适配层，指向 selftest/fake-plugin 这份假实现。真验收用 acceptance/adapter.json，由 developers 填。commands 的相对路径以考场 testbed/dream-lab/ 为基准；source 的相对路径以仓库根为基准。",
+
+  "commands": {
+    "install": "",
+    "sessionEnd": "node ../../selftest/fake-plugin/hooks/session-end.mjs",
+    "runDream": "node ../../selftest/fake-plugin/bin/dream.mjs",
+    "runDreamRogue": "node ../../selftest/fake-plugin/bin/dream.mjs --rogue-write-outside"
+  },
+
+  "paths": {
+    "triggerMarker": ".claude/dream/.trigger",
+    "reportGlob": ".claude/dream/*.md",
+    "canUseToolLogGlob": ".claude/dream/*-canUseTool.log",
+    "promptCarrier": ".claude/dream/latest.txt"
+  },
+
+  "source": {
+    "sessionEndHook": "scrum/sprint-01-skeleton/acceptance/selftest/fake-plugin/hooks/session-end.mjs",
+    "dreamEntry": "scrum/sprint-01-skeleton/acceptance/selftest/fake-plugin/bin/dream.mjs",
+    "pluginManifest": "scrum/sprint-01-skeleton/acceptance/selftest/fake-plugin/.claude-plugin/plugin.json"
+  },
+
+  "sdkModule": "@anthropic-ai/claude-agent-sdk",
+
+  "cooldown": {
+    "file": ".claude/claude-dream.local.md",
+    "key": "cooldown_minutes"
+  },
+
+  "recursionGuardEnv": {
+    "name": "CLAUDE_INVOKED_BY",
+    "value": "claude-dream"
+  },
+
+  "report": {
+    "sections": ["图 delta 对账", "30 秒版", "明细", "隔离观察区", "抽查点", "阀门状态"],
+    "commitPolicy": "report-in-dream-commit"
+  },
+
+  "offWhitelistTarget": "src/cli.js",
+
+  "spikeRecord": "selftest/spike-fake.md",
+
+  "timeoutMs": 120000
+}
