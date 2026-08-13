@@ -10,7 +10,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 **非目标（本轮收窄）**：团队共享记忆（`team/`、多人协作）；跨项目记忆（未来方向）。
 
-**当前处于产物开发段**：设计冲刺已完成（2026-08-02），方案定稿并在真实腐烂记忆库上跑通验证；Sprint-1（骨架回环）已收口（2026-08-13），Sprint-2 待 Planning。要一次看懂设计结论，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)；要看产物开发的目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前处于产物开发段**：设计冲刺已完成（2026-08-02），方案定稿并在真实腐烂记忆库上跑通验证；Sprint-1（骨架回环）已收口（2026-08-13）；Sprint-2（底片层）Planning 已完成（2026-08-13），施工与出卷并行推进中。要一次看懂设计结论，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)；要看产物开发的目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
 ## 为什么需要它
 
@@ -103,12 +103,14 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `.claude/` | 本项目的 auto-memory 记忆库（`memory/` + `MEMORY.md` 索引）——本项目自身用，不是产物 |
 | `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 [`./claude-dream`](claude-dream/) |
 | `claude-dream/` | **插件产物代码**（与 `reference/claude-dream/` 是两回事，那个是只读参考材料）——Sprint-1 骨架回环：`hooks/`（SessionEnd/SessionStart）、`src/`（触发链、canUseTool 围栏、占位体检整合引擎、梦报告与 `dream:` 提交）。自证脚本 `claude-dream/test/self-test.mjs`（DoD·D1，覆盖全链路/冷却期/防递归/故障注入） |
-| `scrum/` | **Scrum 段工作区（当前阶段）**——总入口 [scrum/README.md](scrum/README.md)：产品待办与架构 [ProductBacklog.md](scrum/ProductBacklog.md)、Sprint-1 [sprint-01-skeleton/](scrum/sprint-01-skeleton/README.md)（已收口）、设计冲刺全部档案归档于 `scrum/.IDEO/design-sprint/`（总入口 [DesignReview](scrum/.IDEO/design-sprint/DesignReview.md)） |
+| `scrum/` | **Scrum 段工作区（当前阶段）**——总入口 [scrum/README.md](scrum/README.md)：产品待办与架构 [ProductBacklog.md](scrum/ProductBacklog.md)、Sprint-1 [sprint-01-skeleton/](scrum/sprint-01-skeleton/README.md)（已收口）、Sprint-2 [sprint-02-negatives/SprintBacklog.md](scrum/sprint-02-negatives/SprintBacklog.md)（底片层，Planning 完成、施工中；出卷线 `sprint-02-acceptance` 分支，卷面保密）、设计冲刺全部档案归档于 `scrum/.IDEO/design-sprint/`（总入口 [DesignReview](scrum/.IDEO/design-sprint/DesignReview.md)） |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
 
 ## 当前状态
 
-**2026-08-13：Sprint-1 收口——增量收下。验收 16 判据 15 过（出卷/答卷分离，考卷与考场在 `sprint-01-acceptance` 分支 `scrum/sprint-01-skeleton/acceptance/`；三场真梦全程无人值守，revert 一步可退），遗留 H-A8（提示行用户可见）立为 PBI-05；Review 与 Retro 落盘 SprintBacklog 第四/五节，DoD 增设 D4「绿灯点过烟」；下一步 Sprint-2 Planning（PBI-01 vs PBI-02 开场定）。**
+**2026-08-13：Sprint-1 收口——增量收下。验收 16 判据 15 过（出卷/答卷分离，考卷与考场在 `sprint-01-acceptance` 分支 `scrum/sprint-01-skeleton/acceptance/`；三场真梦全程无人值守，revert 一步可退），遗留 H-A8（提示行用户可见）立为 PBI-05；Review 与 Retro 落盘 SprintBacklog 第四/五节，DoD 增设 D4「绿灯点过烟」。**
+
+**同日：Sprint-2（底片层）Planning 完成。** Goal「白天留底，夜里读得到」——PBI-01 机械压缩底片层先动工（料先行，PBI-02 排后一棒），PBI-05 留 backlog 不搭车；opus 独立审阅 29 条全数收入 AC；施工分支 `sprint-02-negatives`，出卷线 `sprint-02-acceptance`（worktree 隔离、卷面保密），两线并行推进，待派发 developers。
 
 设计冲刺结论摘要（2026-08-02 结算）：定稿方案的主干成立——体检判据（M1–M5 机械 + S1–S3 语义）、四级处置权限、三道安全阀、git 回滚层，在一个 42 条记忆的腐烂库上真跑通并经故障注入验证；兑现层三处待改——报告的证据形态、回滚的隔离性、机器推论的身份标识。完整结算见 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)。
 
@@ -125,5 +127,6 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | 2026-08-09 | ProductBacklog 按 SGEP 方法论重制；Architecture 并入 ProductBacklog 第三部分，原文件删除；Sprint-1 Planning——Sprint Goal 拍板，PBI-04（插件骨架与回环）新建并精化，PBI-03 一并选入，`scrum/sprint-01-skeleton/SprintBacklog.md` 建档 |
 | 2026-08-12 | Sprint-1 执行：04.2·AC0 spike 实测 canUseTool 放行路线成立（记录见 `scrum/sprint-01-skeleton/spike-ac0/`）；`claude-dream/` 插件骨架与 13 条 AC 落地，自证脚本全绿；交付接口 `adapter.json` 与故障注入入口一并交付；D3 独立 review 三轮 + 复审已闭环 |
 | 2026-08-13 | Sprint-1 收口：D3 三轮 + 复审闭环；验收首考挂 7 条经查全为考卷侧接口想当然、developers 零改动，修卷三轮（`b3ad44d`）后 13 自动判据全绿 + 人工两项过；Review 增量收下（15/16，H-A8→PBI-05），Retro 立「空转冒充覆盖」病根、「绿灯点过烟」入 DoD·D4；开发版插件全局关闭 |
+| 2026-08-13 | Sprint-2（底片层）Planning：Goal「白天留底，夜里读得到」；PBI-01 先动工（料先行），PBI-05 不搭车；opus 独立审阅 29 条全收；`sprint-02-negatives` 施工分支与 `sprint-02-acceptance` 出卷线（worktree 隔离）并行落盘 |
 
 *过程细节与每一次拍板的理由由 git 历史承载，不堆回本文件。*

@@ -6,7 +6,7 @@
 
 新会话先读 [README.md](README.md)（项目地图与当前状态）。要理解**方案是什么、为什么这么设计**，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)——设计冲刺的总结算与全部档案入口；要看 Scrum 段产品目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
-**当前阶段**：设计冲刺已完成（2026-08-02，Target-1 带条件通过），归档至 `scrum/.IDEO/design-sprint/`；Sprint-1（骨架回环）已于 2026-08-13 收口——验收 16 判据 15 过（考卷与考场见 `scrum/sprint-01-skeleton/acceptance/`，在 `sprint-01-acceptance` 分支），遗留 H-A8 立为 PBI-05，Review 与 Retro 记录在 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md) 第四/五节，DoD 增设 D4「绿灯点过烟」。下一步：Sprint-2 Planning（PBI-01 vs PBI-02 排序开场定），产品待办与架构见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前阶段**：Sprint-1（骨架回环）已收口；当前 Sprint-2（底片层），Goal「白天留底，夜里读得到」，施工与出卷并行推进中。详见 [README.md](README.md) 当前状态与 [scrum/sprint-02-negatives/SprintBacklog.md](scrum/sprint-02-negatives/SprintBacklog.md)。
 
 ## 常用命令
 
