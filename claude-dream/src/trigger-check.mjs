@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE, DEFAULT_COOLDOWN_MINUTES } from './lib/paths.mjs';
 import { isStaleLock, acquireLock, releaseLock } from './lib/proc-lock.mjs';
 import { processSessionTranscript } from './negatives/write-negative.mjs';
+import { backfillNegatives } from './negatives/backfill.mjs';
 import { runDream } from './run-dream.mjs';
 
 // 锁的 pid 存活判定逻辑（D3 三轮 review 磨出来的：check-then-write 非原子、非 EEXIST 失败要清残留、
@@ -46,6 +47,23 @@ async function main() {
       } catch {
         // 连留痕都失败：不再重试，继续往下走冷却/拉梦逻辑，AC5 的底线是不阻断后续。
       }
+    }
+  }
+
+  // AC6：漏网场补捞——「下一个机械触发点」就是这里，每次散会都顺带扫一遍这个项目名下
+  // 还没处理过的逐字稿。每个已覆盖的会话在 processSessionTranscript 里都是 O(1) 的台账
+  // 命中判断，不会让这一步显著拖慢检查链路。同样不允许向上抛出去阻断后续逻辑。
+  try {
+    await backfillNegatives({ root });
+  } catch (err) {
+    try {
+      appendFileSync(
+        paths.negativeErrorTrace,
+        JSON.stringify({ ts: new Date().toISOString(), context: 'trigger-check-backfill-step', error: String(err?.message ?? err) }) + '\n',
+        'utf8'
+      );
+    } catch {
+      // 同上，留痕失败也不阻断。
     }
   }
 

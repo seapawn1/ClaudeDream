@@ -25,6 +25,10 @@ export function dreamPaths(root) {
     lastDreamState: path.join(dreamDir, 'last-dream.json'),
     promptCarrier: path.join(dreamDir, 'next-session-prompt.txt'),
     lockFile: path.join(dreamDir, 'dream.lock'),
+    // AC6①：补捞时排除梦会话自己的逐字稿（防自吞污染底片）。run-dream.mjs 在拿到自己那场
+    // Agent SDK 调用的 session_id 后追加一行到这里；backfill.mjs 读这份名单跳过对应文件。
+    // 不靠解析 prompt 文本猜"这像不像梦的开场白"——那是语义判断，这是机械登记。
+    dreamSessionIdsLog: path.join(dreamDir, 'dream-session-ids.log'),
     negativesDir,
     negativeLedger: path.join(negativesDir, 'ledger.json'),
     negativeLedgerLock: path.join(negativesDir, 'ledger.lock'),

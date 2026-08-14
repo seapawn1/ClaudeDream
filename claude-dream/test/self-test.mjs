@@ -8,10 +8,12 @@
 //  - AC4 防递归（CLAUDE_INVOKED_BY 设置时 hook 直接 no-op）
 //  - 故障注入（rogue）：越界写入确实被拒、不落盘
 //  - PBI-01.1：底片一场一文件 + 幂等（重复触发不产第二页）+ 规则表纯函数单测（含未知类型留痕）+ AC2 零 API 静态检查
+//  - PBI-01.1·AC5：底片写失败故障注入（D4 点烟）
+//  - PBI-01.1·AC6：漏网场补捞（排除梦会话/活稿判别/可重入/清理跳过，D4 点烟）
 //  - PBI-01.2·AC3：埋标记话，验证底片里按原文检索得到
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -342,6 +344,86 @@ async function testNegativesFaultInjection() {
   return sandbox;
 }
 
+async function testBackfillNegatives() {
+  // PBI-01.1·AC6：漏网场补捞。CLAUDE_CONFIG_DIR 指向临时目录，不碰真实 ~/.claude/projects/
+  // （沙箱纪律：不碰本仓库真实 .claude/，这里连全局 ~/.claude/ 都不能碰）。
+  console.log('\n=== PBI-01.1·AC6 漏网场补捞（D4 点烟：真造一场无结束事件的会话） ===');
+
+  const { backfillNegatives } = await import(pathToFileURL(path.join(SRC, 'negatives', 'backfill.mjs')).href);
+
+  const prevConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  const configDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-config-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-root-'));
+
+  try {
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    const encoded = root.replace(/[^a-zA-Z0-9]/g, '-');
+    const transcriptsDir = path.join(configDir, 'projects', encoded);
+    mkdirSync(transcriptsDir, { recursive: true });
+
+    const writeFakeTranscript = (sessionId, text) => {
+      const p = path.join(transcriptsDir, `${sessionId}.jsonl`);
+      writeFileSync(p, JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }) + '\n', 'utf8');
+      return p;
+    };
+
+    // 场景①：一场真实的、够旧的、没触发过 SessionEnd 的会话——这是 AC6 要补的主角。
+    const missedId = 'missed-session-1';
+    const missedPath = writeFakeTranscript(missedId, 'BACKFILL-MARKER-missed');
+    const oldTime = new Date(Date.now() - 60 * 60 * 1000);
+    utimesSync(missedPath, oldTime, oldTime);
+
+    // 场景②：梦自己的会话，登记进 dreamSessionIdsLog——AC6①必须排除，不能自吞。
+    const dreamId = 'dream-own-session-1';
+    const dreamTranscriptPath = writeFakeTranscript(dreamId, '不该被压成底片');
+    utimesSync(dreamTranscriptPath, oldTime, oldTime);
+    mkdirSync(path.join(root, '.claude', 'dream'), { recursive: true });
+    writeFileSync(path.join(root, '.claude', 'dream', 'dream-session-ids.log'), dreamId + '\n', 'utf8');
+
+    // 场景③：mtime 是刚刚——大概率还在进行中的活会话，AC6②不得误冻。
+    const activeId = 'active-session-1';
+    writeFakeTranscript(activeId, '还在打字');
+
+    const summary = await backfillNegatives({ root });
+    const byId = Object.fromEntries((summary.results ?? []).map((r) => [r.sessionId, r.status]));
+
+    check('AC6 补捞：漏网会话确实产出底片（status=written）', byId[missedId] === 'written', JSON.stringify(byId));
+    check('AC6① 排除梦会话：梦自己的逐字稿被跳过、没压成底片', byId[dreamId] === 'skipped-dream-session');
+    check('AC6② 活稿判别：mtime 太新的会话没被误冻', byId[activeId] === 'skipped-active');
+
+    const ledgerPath = path.join(root, '.claude', 'negatives', 'ledger.json');
+    const ledger = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) : {};
+    check('梦会话没有留下台账记录', !ledger[dreamId]);
+    check('活会话没有留下台账记录', !ledger[activeId]);
+
+    const missedPage = ledger[missedId]?.pages?.[0]?.file;
+    if (missedPage) {
+      const pageContent = readFileSync(path.join(root, '.claude', 'negatives', missedPage), 'utf8');
+      check('补捞产出的底片能按原文检索到标记话', pageContent.includes('BACKFILL-MARKER-missed'));
+    }
+
+    // AC6③ 补捞可重入：再跑一遍，漏网会话不该产生第二页。
+    const summary2 = await backfillNegatives({ root });
+    const byId2 = Object.fromEntries((summary2.results ?? []).map((r) => [r.sessionId, r.status]));
+    check('AC6③ 补捞可重入：再跑一遍不产生第二页（幂等）', byId2[missedId] === 'skipped-no-new', JSON.stringify(byId2));
+
+    // AC6④：逐字稿已被清理——记账跳过、不报错。直接构造一个不存在的 transcript_path 场景，
+    // 复用 processSessionTranscript（backfill 与 session-end 共用同一条编排逻辑）。
+    const { processSessionTranscript } = await import(pathToFileURL(path.join(SRC, 'negatives', 'write-negative.mjs')).href);
+    const cleanedUpResult = await processSessionTranscript({
+      root,
+      sessionId: 'already-cleaned-up-session',
+      transcriptPath: path.join(root, 'does-not-exist-anymore.jsonl'),
+    });
+    check('AC6④ 逐字稿已被官方清理：记账跳过、不报错', cleanedUpResult.status === 'skipped-missing-transcript', JSON.stringify(cleanedUpResult));
+  } finally {
+    if (prevConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = prevConfigDir;
+    rmSync(configDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+}
+
 async function testConcurrentTriggerLock() {
   // D3 review 抓到的坑：原来的"锁"是 check-then-write，靠得够近的两次 SessionEnd 能一起穿过冷却期检查、
   // 都去跑梦。这里真刀真枪触发两次几乎同时的 SessionEnd（不等第一次的 detached 子进程跑完），
@@ -427,7 +509,7 @@ async function testStaleLockDetection() {
   check('读不出 pid 的损坏锁按残留处理', isStaleLock(lockPath) === true);
 
   releaseLock(lockPath);
-  rmSync(tmpDir, { recursive: true, force: true });
+  rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 async function testCommitPathspecDoesNotSwallowHumanStaged() {
@@ -561,6 +643,7 @@ try {
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());
+  await testBackfillNegatives();
   sandboxes.push(await testConcurrentTriggerLock());
   sandboxes.push(await testRogue());
   sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());
@@ -573,7 +656,16 @@ try {
   }
   console.log(`\n沙箱目录（失败时保留供排查，全绿可删）: ${sandboxes.join(', ')}`);
   if (!failed.length) {
-    for (const s of sandboxes) rmSync(s, { recursive: true, force: true });
+    for (const s of sandboxes) {
+      try {
+        // Windows 下 git.exe/杀毒软件等偶发地在进程刚退出那一刻仍占着文件句柄，rmSync 会报
+        // 瞬时性的 EPERM——maxRetries/retryDelay 是 Node 官方给这个场景的解法（间隔重试等锁自然释放）。
+        // 清理失败本身不该让一次全绿的测试跑报出非零退出码：这是收尾动作,不是断言。
+        rmSync(s, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (err) {
+        console.log(`（沙箱清理失败，忽略，不影响测试结果）: ${s} :: ${String(err?.message ?? err)}`);
+      }
+    }
   }
   process.exit(failed.length ? 1 : 0);
 }

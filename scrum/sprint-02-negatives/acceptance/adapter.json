@@ -1,0 +1,88 @@
+{
+  "_pathConvention": "commands 与 source.* 的路径相对本仓库根；paths.*（除 retainRules/spikeRecord 外）相对『考场项目根』——即各 command 执行时的 cwd。",
+  "commands": {
+    "install": "",
+    "_install_note": "留空，同 Sprint-1：三条命令直接调用插件脚本本身，不经过 marketplace 安装流程。",
+    "sessionEnd": "node claude-dream/src/session-end.mjs",
+    "runDream": "node claude-dream/src/run-dream.mjs",
+    "runDreamRogue": "node claude-dream/src/run-dream.mjs --rogue",
+    "backfill": "node claude-dream/src/negatives/backfill.mjs"
+  },
+  "sessionEndInput": {
+    "_note": "Sprint-2 起硬性要求：commands.sessionEnd 必须从 stdin 喂一份合法 JSON，字段名 snake_case（官方 SessionEnd hook payload 形状，对照官方文档 hooks#sessionend-input 核实）。stdin 空、非 JSON、或缺 requiredFields 任一字段——不落底片、不拉梦触发链，只在 paths.errorTrace 留痕退出（Sprint-1 老的『stdin 关闭裸用 process.cwd()』静默 fallback 本轮起废止）。transcript_path 指向的文件必须真实存在、可读、是一行一个 JSON 对象的 jsonl——验收方需自备测试用逐字稿（真实或构造均可，构造时至少含一条 type:\"user\"、message.content 为 [{type:\"text\",text:...}] 的条目，用于验证 AC1/AC3 的产出与检索）。",
+    "requiredFields": ["session_id", "transcript_path", "cwd"],
+    "exampleStdin": { "session_id": "example-session-id", "transcript_path": "/absolute/path/to/example-session-id.jsonl", "cwd": "/absolute/path/to/project", "hook_event_name": "SessionEnd", "reason": "other" }
+  },
+  "paths": {
+    "triggerMarker": ".claude/dream/session-end-marker.json",
+    "reportGlob": ".claude/dream/*-report.md",
+    "canUseToolLogGlob": ".claude/dream/*-canUseTool.log",
+    "promptCarrier": ".claude/dream/next-session-prompt.txt",
+    "negativeDir": ".claude/negatives",
+    "negativePageGlob": ".claude/negatives/*.md",
+    "negativeLedger": ".claude/negatives/ledger.json",
+    "errorTrace": ".claude/negatives-error.log",
+    "retainRules": "claude-dream/src/negatives/RETAIN-RULES.md",
+    "dreamSessionIdsLog": ".claude/dream/dream-session-ids.log",
+    "_dreamSessionIdsLog_note": "AC6①排除梦会话用的登记名单，run-dream.mjs 每场梦结束后追加自己的 session_id。"
+  },
+  "source": {
+    "sessionEndHook": "claude-dream/src/session-end.mjs",
+    "dreamEntry": "claude-dream/src/run-dream.mjs",
+    "pluginManifest": "claude-dream/.claude-plugin/plugin.json",
+    "negativesRuleTable": "claude-dream/src/negatives/RETAIN-RULES.md",
+    "negativesCompressor": "claude-dream/src/negatives/compress.mjs",
+    "negativesOrchestrator": "claude-dream/src/negatives/write-negative.mjs",
+    "negativesLedgerModule": "claude-dream/src/negatives/ledger.mjs",
+    "negativesBackfill": "claude-dream/src/negatives/backfill.mjs"
+  },
+  "sdkModule": "@anthropic-ai/claude-agent-sdk",
+  "cooldown": {
+    "file": ".claude/dream/last-dream.json",
+    "key": "lastDreamAt",
+    "_note": "与 Sprint-1 一致，未变。冷却只管梦不管底片——底片压缩每次散会都跑，不受冷却门限影响。",
+    "durationEnvVar": "CLAUDE_DREAM_COOLDOWN_MINUTES",
+    "durationDefaultMinutes": 30
+  },
+  "recursionGuardEnv": {
+    "name": "CLAUDE_INVOKED_BY",
+    "value": "claude-dream",
+    "_note": "与 Sprint-1 一致。防递归双保险：session-end.mjs 命中即整条链路（含底片压缩）直接 no-op。"
+  },
+  "claudeMdValve": {
+    "envVar": "DREAM_CLAUDE_MD_EDITS",
+    "default": "true（未设置该变量时视为 true）",
+    "note": "与 Sprint-1 一致，未变。"
+  },
+  "report": {
+    "sections": ["图 delta 对账", "30 秒版", "明细（占位版，四要素+单条回滚）", "隔离观察区", "抽查点", "阀门状态"],
+    "commitPolicy": "separate — 与 Sprint-1 一致：记忆/CLAUDE.md 改动收在 dream: 前缀提交；报告与 canUseTool 日志收在 dream-evidence: 前缀提交。",
+    "negativeFeedReconciliationField": "negativeFeed",
+    "_negativeFeedReconciliation_note": "PBI-01.2·AC1：进料对账由 run-dream.mjs 机械统计写入报告（不由模型自述），须包含触发本次梦的那场会话的底片（session id 对得上）。具体落点写在阀门状态节，字段名与格式见最新 dream-*-report.md 实例（施工中，AC 冻结前最终版随增量一并交付）。"
+  },
+  "offWhitelistTarget": "ROGUE-TARGET.md",
+  "offWhitelistTargetParam": {
+    "_note": "PBI-01.2·AC2：作恶模式现在可用 --target 指定越界目标路径（相对项目根），用于验证梦对底片目录零写权——canUseTool 白名单结构上不包含 negativeDir，越界会被拒且日志（paths.canUseToolLogGlob）里能看到该路径。",
+    "cliFlag": "--target=<相对项目根路径>",
+    "exampleNegativesTarget": ".claude/negatives/rogue-attempt.md",
+    "exampleCommand": "node claude-dream/src/run-dream.mjs --rogue --target=.claude/negatives/rogue-attempt.md",
+    "defaultWhenOmitted": "ROGUE-TARGET.md（Sprint-1 行为，未传 --target 时不变）"
+  },
+  "faultInjection": {
+    "negativesWriteFailureEnvVar": {
+      "name": "CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE",
+      "truthyValue": "true",
+      "_note": "PBI-01.1·AC5（守卫类，D4 点烟）：设为字符串 true 时，底片写入在正要落盘那一刻抛出注入的错误，验证——降级不阻断散会链路（梦依旧正常跑完）、底片目录没有多出页面、错误留痕落在 paths.errorTrace（底片目录之外）且含注入原因。"
+    }
+  },
+  "backfill": {
+    "_note": "PBI-01.1·AC6：漏网场补捞。每次 commands.sessionEnd 触发的分离进程都会顺带跑一次（『下一个机械触发点』），commands.backfill 亦可单独调用做同样的事。",
+    "staleMinutesEnvVar": "CLAUDE_DREAM_BACKFILL_STALE_MINUTES",
+    "defaultStaleMinutes": 30,
+    "staleSemantics": "会话逐字稿的 mtime 距今 < staleMinutes 视为『可能还在进行』，本轮跳过不碰（AC6②活稿判别）；≥ staleMinutes 才纳入补捞候选。",
+    "transcriptsDirFormula": "<CLAUDE_CONFIG_DIR 或 ~/.claude>/projects/<项目工作目录路径将非字母数字字符替换为 - 后的编码>，官方文档 sessions#where-transcripts-are-stored 明写的规则，已用真实目录名核对过。"
+  },
+  "spikeRecord": "scrum/sprint-01-skeleton/spike-ac0/SPIKE-RECORD.md",
+  "timeoutMs": 180000,
+  "_timeoutMs_note": "与 Sprint-1 一致：commands.sessionEnd 自身几乎立即返回，实际底片压缩+梦运行在分离进程里异步完成，判定完成要轮询。commands.runDream/runDreamRogue/backfill 是同步阻塞到跑完才返回，180000ms 给足网络抖动余量。"
+}
