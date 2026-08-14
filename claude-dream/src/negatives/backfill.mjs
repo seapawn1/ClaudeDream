@@ -11,7 +11,8 @@
 //   D:\ClaudeDream                                          -> D--ClaudeDream
 //   D:\ClaudeDream\.claude\worktrees\sprint-02-negatives-work -> D--ClaudeDream--claude-worktrees-sprint-02-negatives-work
 
-import { existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, readFileSync, createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,38 @@ const DEFAULT_STALE_MINUTES = 30;
 // 官方文档：编码后的目录名超过 200 字符会被截断并追加一段 hash，hash 算法未公开——
 // 与其猜错不如老实承认这个边界够不着，留痕跳过（比自建一个大概率错误的路径更安全）。
 const MAX_ENCODED_LENGTH = 200;
+// D3 review 抓到的坑：编码规则是官方文档写死的「非字母数字字符替换成 -」，这是真实存在的
+// 多对一映射——D:\My Project、D:\My-Project、D:\My.Project 编码后是同一个目录名。两个不同
+// 项目的逐字稿因此可能同住一个 <projects>/<encoded>/ 目录，不检查就处理会把别的项目的会话
+// 内容压缩写进这个项目的底片目录，那是明确因涉隐私才排除入库的地方——跨项目泄漏进去更糟。
+// 解法：处理前 peek 逐字稿自己记录的 cwd 字段（每条 transcript entry 都带），跟 root 对不上
+// 就跳过，不盲信"同目录=同项目"。只找前 N 行，不为一个字段读全文件。
+const CWD_PEEK_MAX_LINES = 20;
+
+function normalizeForCompare(p) {
+  return path.resolve(p).replace(/\\/g, '/').toLowerCase();
+}
+
+async function peekTranscriptCwd(transcriptPath) {
+  const rl = createInterface({ input: createReadStream(transcriptPath, { encoding: 'utf8' }), crlfDelay: Infinity });
+  let lineCount = 0;
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      lineCount++;
+      try {
+        const entry = JSON.parse(line);
+        if (typeof entry.cwd === 'string' && entry.cwd) return entry.cwd;
+      } catch {
+        // 这一行解析不出来，跳过找下一行——peek 不是压缩，不需要按 AC3③ 的规格处理坏行。
+      }
+      if (lineCount >= CWD_PEEK_MAX_LINES) break;
+    }
+  } finally {
+    rl.close();
+  }
+  return null;
+}
 
 function encodedProjectDir(root) {
   return root.replace(/[^a-zA-Z0-9]/g, '-');
@@ -95,6 +128,20 @@ export async function backfillNegatives({ root }) {
     }
     if (Date.now() - mtimeMs < staleMs) {
       results.push({ sessionId, status: 'skipped-active' });
+      continue;
+    }
+
+    // 目录编码碰撞防线（D3 review）：这份逐字稿自己记录的 cwd 跟 root 对不上，说明它属于
+    // 另一个编码到同一目录名的项目——跳过，不把别人的会话内容压缩进这个项目的底片目录。
+    // peek 不出 cwd（罕见——前 20 行都没有该字段）时保守放行，不因为读不到就不敢处理正常数据。
+    let entryCwd;
+    try {
+      entryCwd = await peekTranscriptCwd(transcriptPath);
+    } catch {
+      entryCwd = null;
+    }
+    if (entryCwd && normalizeForCompare(entryCwd) !== normalizeForCompare(root)) {
+      results.push({ sessionId, status: 'skipped-cwd-mismatch', entryCwd });
       continue;
     }
 

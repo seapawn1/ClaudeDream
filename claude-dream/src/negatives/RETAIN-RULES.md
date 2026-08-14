@@ -17,7 +17,7 @@
 | `type` | 处置 | 理由 |
 |---|---|---|
 | `user`（非 `tool_result`） | **保留**，抽取其中的人类可读文本 | OC 的核心资产——「用户在会话里说过的话不再蒸发」。两种 JSON 结构都命中（见下）：`message.content` 是裸字符串，或是 `[{type:"text",...}]` 数组；`isMeta` 真假都保留，不做「是不是真人打字」的语义分类（那需要模式匹配 `<local-command-caveat>`/compact 续写前缀等文本特征，属语义判断，本表不做） |
-| `user`（含 `tool_result`） | **摘要化**：留 `tool_use_id` + 成败 + 字节数，正文丢弃 | 「以 user 角色记录的工具返回」——AC3②明写的类目。正文常是文件全文/命令输出，体积大、且与对应的 `tool_use` 摘要重复了「做了什么」这层信息 |
+| `user`（含 `tool_result`） | **摘要化**：留 `tool_use_id` + 成败 + 字节数，正文丢弃 | 「以 user 角色记录的工具返回」——AC3②明写的类目。正文常是文件全文/命令输出，体积大、且与对应的 `tool_use` 摘要重复了「做了什么」这层信息。**`content` 数组逐项独立处理，不是查到一个 `tool_result` 就整条早退**——D3 review 指出早退写法会吞掉理论上可能共存于同一条目的文本/图片，即便这种共存目前未在真实数据里观测到，也不该假设它不会发生 |
 | `assistant`：`text` 内容项 | **保留**全文 | 模型说给用户听的话，下一场梦要读到「上次做了什么」离不开这个 |
 | `assistant`：`thinking` 内容项 | **摘要化**：留一行「thinking block，N 字，已丢弃」的桩 | 内部推理草稿，体积常是全场最大头之一（实测单条 5356 字符），且内容基本是 text 内容项的前置草稿、信息冗余度高。丢弃正文但留桩——不是静默消失，留痕可审计 |
 | `assistant`：`tool_use` 内容项 | **摘要化**：留工具名 + 关键参数（`file_path`/`command`/`pattern`/`prompt` 视工具而定，只取一两个最能定位「做了什么」的标量字段） | AC3④「动过的文件、跑过的命令」的落地点。完整参数体（如 Write 的全文 content、Edit 的 old/new_string）丢弃——那是"改成了什么"，不是"改过什么"，机械压缩不留 |
@@ -26,13 +26,14 @@
 | `file-history-snapshot` | **摘要化**：留「N 个被跟踪文件」的计数桩 | AC3⑤明写的类目。纯 Claude Code 自己的文件备份簿记（`trackedFileBackups` 里是备份文件名/版本号/时间戳），不是任何人说的话 |
 | `summary` | **保留**全文 | 官方 `/compact` 自己产出的浓缩摘要，本身已经是「压缩过的干货」，机械压缩不该在浓缩品上再动刀 |
 | `queue-operation`：`operation:"remove"` | **保留**（steering 文本，用户在模型工作时插的话） | claude-code-log 原话：「out-of-band user inputs made visible to the agent for steering purposes」——是用户的话 |
-| `queue-operation`：`enqueue`/`dequeue`/`popAll` | **丢弃**（不留桩） | claude-code-log 原话：「内部记账操作，内容与真实用户消息重复」——丢了不损失信息，真内容已经在对应的 `user` 条目里 |
+| `queue-operation`：`operation` 为 `enqueue`/`dequeue`/`popAll` | **丢弃**（不留桩） | claude-code-log 原话：「内部记账操作，内容与真实用户消息重复」——丢了不损失信息，真内容已经在对应的 `user` 条目里。**只有这三个核实过的值走丢弃**，`operation` 出现任何其它值（含未来新增）走下一行的未知留痕，不是无差别丢弃所有非 `remove` 的值 |
 | `ai-title` / `custom-title` / `agent-name` / `last-prompt` / `mode` / `permission-mode` | **保留**（原样，体积极小） | 会话级元数据，体积可忽略不计（实测均 <200 字节），没必要为了省这点体积去分类判断，直接留最安全 |
-| 其它未列出的 `type`（如 `queue-operation` 的 DAG-only 结构条目、未来新出现的顶层类型） | **未知类型：保守保留＋留痕**（AC3③），原样收整条 JSON，标 `unknown: true` | 逐字稿格式随官方发版漂移是既定事实（注意点3），静默丢弃等于在没人知道的情况下悄悄减少信任 |
+| 其它未列出的 `type`（未来新出现的顶层类型） | **未知类型：保守保留＋留痕**（AC3③），原样收整条 JSON，标 `unknown: true` | 逐字稿格式随官方发版漂移是既定事实（注意点3），静默丢弃等于在没人知道的情况下悄悄减少信任 |
 
 ## 内容项/子结构规则
 
 - `ImageContent`（`type:"image"`，base64 图片数据）：出现在 `user`/`assistant` 的 content 数组里时，**摘要化**为 `[image, N bytes]`，二进制正文一律丢弃——体积单条常以 KB~MB 计，且当前梦引擎不具备读图能力，留着没有下游消费者。
+- **`user`/`assistant` content 数组里未列举的子类型**（比如 Anthropic Messages API 真实存在的 `redacted_thinking`）：**未知子类型：保守保留＋留痕**，逻辑同顶层未知类型（原样带 `unknown: true` 的 JSON 块，同样受单条硬上限约束），但不改变该 entry 整体的 retain/stub/discard 分类——`compress.mjs` 的 `stats.subitemUnknownCount` 单独计数「至少混了一个未知子类型的 entry 数」，不会被"entry 整体算 retain"盖住看不见（D3 review 抓到的坑：改之前这类子项直接静默消失，且不进任何统计）。
 - 子 agent 独立稿（`subagents/agent-*.jsonl`）：**本轮不处理**，已知盲区，随主稿一起在 SprintBacklog 注意点8 声明，不在本表覆盖范围内、不静默假装覆盖了。
 - Bash 间接改动的文件：**本轮不处理**，同上已知盲区——AC3④明写「限指工具调用声明的」，不追踪 shell 内部实际发生的文件改动。
 
@@ -42,4 +43,4 @@
 {"unknown": true, "type": "<原始 type 值>", "raw": <整条原始 JSON 对象>}
 ```
 
-不摘要、不截断（除非超过 [compress.mjs](compress.mjs) 的单条硬上限，超限时截断但仍标 `unknown: true` 且注明截断前字节数）——未知的东西优先保真，比压缩率更重要。
+不摘要、不截断，**除非超过单条硬上限 100KB**（`compress.mjs` 的 `UNKNOWN_RAW_CAP_BYTES`）——超限按字节截断，标注原始字节数与截断阈值，`unknown: true` 标记不受影响。未知的东西优先保真，比压缩率更重要，但保真不等于没有边界：AC4 的体积预算不该被单条离群的未知类型条目吃掉。

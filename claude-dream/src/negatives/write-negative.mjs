@@ -13,6 +13,28 @@ import { dreamPaths, runIdNow } from '../lib/paths.mjs';
 import { compressEntries } from './compress.mjs';
 import { withLedgerLock, sliceNewEntries, recordPage } from './ledger.mjs';
 
+// D3 review 抓到的坑：官方文档确认 transcript_path 是异步写入的，SessionEnd 触发那一刻
+// 文件可能还没追上内存里最新的对话——如果恰好赶上文件还在被写，读到的内容会缺散会前
+// 最后几句话（偏偏是 PBI-01.2·AC3 最在意的"裁决"场景）。这不是能彻底根治的问题（官方
+// 没承诺最大滞后时长），只能降低撞上的概率：读之前看文件大小是否还在变化，变化就等一下
+// 再读，有界重试（不会无限等，最坏情况这个函数多花约 1 秒）。真撞上了、且这是这个项目
+// 最后一场会话（没有下一次触发点让 AC6 补捞捞回来），内容会永久漏掉——这一点残余风险
+// 如实记录在这里，不假装能百分百堵上。
+async function waitForTranscriptToSettle(transcriptPath, { maxAttempts = 4, intervalMs = 250 } = {}) {
+  let lastSize = -1;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let size;
+    try {
+      size = statSync(transcriptPath).size;
+    } catch {
+      return; // 文件这一步没了（极端罕见），交给调用方的 existsSync 检查处理
+    }
+    if (size === lastSize) return; // 连续两次大小不变，认为已经落盘稳定
+    lastSize = size;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
 /** 逐行读取 jsonl，解析失败的行不中断整个流程——原样按 AC3③ 的未知留痕精神收一条占位。 */
 async function readTranscriptEntries(transcriptPath) {
   const entries = [];
@@ -77,6 +99,9 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
     return { status: 'skipped-missing-transcript', sessionId, transcriptPath };
   }
 
+  // 读之前先等文件大小稳定——见 waitForTranscriptToSettle 的注释。
+  await waitForTranscriptToSettle(transcriptPath);
+
   const paths = dreamPaths(root);
 
   let entries, rawBytesTotal;
@@ -117,12 +142,19 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
     // （不碰字节计费）这里用估算，AC4 要的是「压缩前后体积对账」这个数量级，不是逐字节审计。
     const sliceRatio = entries.length > 0 ? newEntries.length / entries.length : 1;
     const originalBytes = Math.round(rawBytesTotal * sliceRatio);
-    const compressedBytes = Buffer.byteLength(markdown, 'utf8');
+    // D3 review 抓到的坑：以前这里定义的 compressedBytes（markdown 正文，不含头部元数据块）
+    // 和后面写进 outcome 对象、同名字段却用 fullContent（头部+正文）算出来的值不是一回事，
+    // 但 ratio 又是用这里这个 markdown-only 的值算的——同一个返回对象里 ratio 与
+    // compressedBytes 数学上对不上。现在统一：全程只用 markdownBytes 这一个基准（正文，
+    // 不含头部）——头部本身要显示 compressedBytes 才能拼出 fullContent，先有值才能拼头部，
+    // 拿 fullContent 的体积反过来定义 compressedBytes 会成循环依赖，索性头部的体积开销
+    // （几百字节）本就不是 AC4 关心的"压缩前后对比"的重点，不算进这个字段更干净。
+    const markdownBytes = Buffer.byteLength(markdown, 'utf8');
 
     const fileName = `${sessionId}--${runId}.md`;
     const filePath = path.join(negativesDir, fileName);
     mkdirSync(negativesDir, { recursive: true });
-    const header = pageHeader({ sessionId, transcriptPath, runId, fromIndex, toIndex, stats, originalBytes, compressedBytes: compressedBytes + 0 });
+    const header = pageHeader({ sessionId, transcriptPath, runId, fromIndex, toIndex, stats, originalBytes, compressedBytes: markdownBytes });
     const fullContent = header + '\n' + markdown + '\n';
     // AC5 故障注入入口：设了这个环境变量就在真正写文件前抛错，模拟磁盘满/权限拒绝等真实
     // 写失败场景。抛出点选在"已经算完所有东西、正要落盘"这一刻，模拟最贴近真实的失败位置——
@@ -147,8 +179,9 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
       entryCount: toIndex - fromIndex,
       stats,
       originalBytes,
-      compressedBytes: Buffer.byteLength(fullContent, 'utf8'),
-      ratio: originalBytes > 0 ? compressedBytes / originalBytes : 0,
+      // 正文体积（不含头部元数据块）——与 ratio 用同一个基准，两个字段现在数学上自洽。
+      compressedBytes: markdownBytes,
+      ratio: originalBytes > 0 ? markdownBytes / originalBytes : 0,
     };
 
     return recordPage(ledger, sessionId, {

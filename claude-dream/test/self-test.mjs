@@ -205,6 +205,13 @@ async function testNegativesLargeTranscriptStress() {
   check('AC4 大稿处理成功（流式读取未崩溃）', result.status === 'written', JSON.stringify({ status: result.status, reason: result.reason }));
   if (result.status === 'written') {
     check('AC4 压缩比在 10% 预算内（锚：现成件实测约 1.8%，本实现留有余量）', result.ratio <= 0.1, `实际 ratio=${(result.ratio * 100).toFixed(2)}%`);
+    // D3 review 抓到的坑（回归钉子）：ratio 和 compressedBytes 曾经用两个不同的字节数算出来，
+    // 数学上对不上——这条直接断言两者自洽，不是从旁边猜它们应该一致。
+    check(
+      'D3 回归：outcome.ratio 与 outcome.compressedBytes/originalBytes 数学自洽',
+      Math.abs(result.ratio - result.compressedBytes / result.originalBytes) < 1e-9,
+      `ratio=${result.ratio} compressedBytes/originalBytes=${result.compressedBytes / result.originalBytes}`
+    );
     console.log(`处理耗时 ${elapsedMs}ms，压缩后 ${(result.compressedBytes / 1024).toFixed(1)} KB`);
   }
 
@@ -418,9 +425,11 @@ async function testBackfillNegatives() {
     const transcriptsDir = path.join(configDir, 'projects', encoded);
     mkdirSync(transcriptsDir, { recursive: true });
 
-    const writeFakeTranscript = (sessionId, text) => {
+    const writeFakeTranscript = (sessionId, text, cwd) => {
       const p = path.join(transcriptsDir, `${sessionId}.jsonl`);
-      writeFileSync(p, JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }) + '\n', 'utf8');
+      const entry = { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } };
+      if (cwd !== undefined) entry.cwd = cwd;
+      writeFileSync(p, JSON.stringify(entry) + '\n', 'utf8');
       return p;
     };
 
@@ -441,17 +450,27 @@ async function testBackfillNegatives() {
     const activeId = 'active-session-1';
     writeFakeTranscript(activeId, '还在打字');
 
+    // 场景④（D3 review 抓到的坑）：目录编码规则是官方文档确认的多对一映射（非字母数字字符
+    // 全替换成 -），两个不同的真实路径可能编码到同一个 <projects>/<encoded>/ 目录——这里
+    // 模拟"同目录、但 cwd 字段记录的是另一个项目"，验证跨项目内容不会被误当成本项目的会话
+    // 压缩进本项目的底片目录（底片目录本就是因为涉隐私才特意排除入库的，泄漏更糟）。
+    const collisionId = 'collision-session-1';
+    const collisionPath = writeFakeTranscript(collisionId, '这其实是另一个项目的会话内容', 'C:\\SomeOtherProject-NotRoot');
+    utimesSync(collisionPath, oldTime, oldTime);
+
     const summary = await backfillNegatives({ root });
     const byId = Object.fromEntries((summary.results ?? []).map((r) => [r.sessionId, r.status]));
 
     check('AC6 补捞：漏网会话确实产出底片（status=written）', byId[missedId] === 'written', JSON.stringify(byId));
     check('AC6① 排除梦会话：梦自己的逐字稿被跳过、没压成底片', byId[dreamId] === 'skipped-dream-session');
     check('AC6② 活稿判别：mtime 太新的会话没被误冻', byId[activeId] === 'skipped-active');
+    check('D3 修复：目录编码碰撞——cwd 对不上的逐字稿被跳过，不跨项目泄漏', byId[collisionId] === 'skipped-cwd-mismatch', JSON.stringify(byId));
 
     const ledgerPath = path.join(root, '.claude', 'negatives', 'ledger.json');
     const ledger = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) : {};
     check('梦会话没有留下台账记录', !ledger[dreamId]);
     check('活会话没有留下台账记录', !ledger[activeId]);
+    check('D3 修复：cwd 不匹配的会话没有留下台账记录、没有产出底片文件', !ledger[collisionId]);
 
     const missedPage = ledger[missedId]?.pages?.[0]?.file;
     if (missedPage) {
@@ -709,12 +728,24 @@ function testNegativesZeroApiAndCompressUnit() {
 
   return import(pathToFileURL(path.join(negativesDir, 'compress.mjs')).href).then(({ compressEntries }) => {
     const marker = 'UNIT-TEST-MARKER-abc123';
+    const mixedMarker = 'MIXED-CONTENT-MARKER-xyz789';
     const entries = [
       { type: 'user', message: { role: 'user', content: [{ type: 'text', text: marker }] } },
       { type: 'user', message: { role: 'user', content: [{ tool_use_id: 't1', type: 'tool_result', content: 'x'.repeat(500), is_error: false }] } },
       { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'y'.repeat(500) }] } },
       { type: 'assistant', message: { content: [{ type: 'text', text: '回复文本' }] } },
       { type: 'this-type-does-not-exist-yet', weird: true },
+      // D3 review 回归钉子：以前 tool_result 一出现就整条早退，同数组里的文本会被吞掉。
+      { type: 'user', message: { role: 'user', content: [{ tool_use_id: 't2', type: 'tool_result', content: 'ok', is_error: false }, { type: 'text', text: mixedMarker }] } },
+      // D3 review 回归钉子：assistant content 里没列举过的子类型（真实存在的 redacted_thinking）
+      // 以前会静默消失，现在要留一行可见的桩且计进 stats.subitemUnknownCount。
+      { type: 'assistant', message: { content: [{ type: 'redacted_thinking', data: 'REDACTED-MARKER-should-be-visible' }] } },
+      // D3 review 回归钉子：queue-operation 非 remove 以前无条件丢弃，包括未来才会出现的值——
+      // 现在只有 enqueue/dequeue/popAll 这三个核实过的值丢弃，其余走未知留痕。
+      { type: 'queue-operation', operation: 'enqueue', sessionId: 's1', timestamp: 't' },
+      { type: 'queue-operation', operation: 'future-unknown-op', sessionId: 's1', timestamp: 't' },
+      // D3 review 回归钉子：未知类型单条硬上限——超过 100KB 应截断，不是无限保真。
+      { type: 'oversized-unknown-type', blob: 'z'.repeat(200 * 1024) },
     ];
     const { markdown, stats } = compressEntries(entries);
 
@@ -723,7 +754,16 @@ function testNegativesZeroApiAndCompressUnit() {
     check('AC3④ assistant thinking 摘要化：不含完整 500 字正文', !markdown.includes('y'.repeat(500)));
     check('assistant 正文原样保留', markdown.includes('回复文本'));
     check('AC3③ 未知类型保守保留＋留痕：标记 unknown 且原样带 raw', markdown.includes('UNKNOWN') && markdown.includes('this-type-does-not-exist-yet'));
-    check('stats.byKind.unknown 计数正确', stats.byKind.unknown === 1, JSON.stringify(stats.byKind));
+    check('stats.byKind.unknown 计数正确', stats.byKind.unknown >= 1, JSON.stringify(stats.byKind));
+
+    check('D3 回归：user 混合内容（tool_result+text）两者都保留，不早退丢文本', markdown.includes(mixedMarker));
+    check('D3 回归：assistant 未知子类型（redacted_thinking）留痕可见，不静默消失', markdown.includes('REDACTED-MARKER-should-be-visible'));
+    check('D3 回归：stats.subitemUnknownCount 反映未知子类型（不被 entry 整体 kind 盖住）', stats.subitemUnknownCount >= 1, JSON.stringify(stats));
+    // 全部 10 条 entries 里唯一该走 discard 的只有 enqueue 那一条（其余全是 retain/stub/unknown）——
+    // 精确等于 1 才说明 enqueue 真的被丢弃了，不是巧合凑出来的数字。
+    check('D3 回归：queue-operation 已知值（enqueue）仍无痕丢弃', stats.byKind.discard === 1, JSON.stringify(stats.byKind));
+    check('D3 回归：queue-operation 未知值走未知留痕，不再无条件丢弃', markdown.includes('future-unknown-op'));
+    check('D3 回归：超大未知类型条目按硬上限截断，不无限膨胀', markdown.includes('截断') && !markdown.includes('z'.repeat(150 * 1024)));
   });
 }
 

@@ -17,6 +17,18 @@ import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE } from './lib/pa
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// D3 review 抓到的坑：官方文档确认 SessionEnd hook 默认共享 1.5 秒预算（注意点2），改之前
+// 这里硬编码 2000ms——比外部预算还长，等于这道内部保险丝在默认配置下永远不会先于外部强杀
+// 触发，形同虚设。改成读同一个官方覆盖开关（CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS，
+// 验收考场可能会调大它）按比例收窄，默认情况下留 300ms 安全余量。
+function stdinTimeoutMs() {
+  const override = Number(process.env.CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS);
+  if (Number.isFinite(override) && override > 0) {
+    return Math.max(200, Math.round(override * 0.8));
+  }
+  return 1200;
+}
+
 async function readStdin() {
   return new Promise((resolve) => {
     let data = '';
@@ -25,7 +37,7 @@ async function readStdin() {
     process.stdin.on('end', () => resolve(data));
     process.stdin.on('error', () => resolve(data));
     // stdin 关闭（非交互调用）会立即 end；给一个保险超时防止极端情况下挂住 hook。
-    setTimeout(() => resolve(data), 2000);
+    setTimeout(() => resolve(data), stdinTimeoutMs());
   });
 }
 
