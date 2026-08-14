@@ -1,11 +1,15 @@
 #!/usr/bin/env node
-// PBI-04.1·AC3 + PBI-04.2·AC1："分离进程判条件后跑 Agent SDK"——由 session-end.mjs detached 拉起。
-// 读冷却期状态，未到期就直接退出（不重复触发）；到期则落锁再跑梦，防并发重叠。
+// PBI-04.1·AC3 + PBI-04.2·AC1 + Sprint-2 PBI-01.1：由 session-end.mjs detached 拉起的分离进程。
+// 顺序职责：①先压底片（本场会话的逐字稿，零 API、零判断，AC5 故障不阻断后续）；
+// ②再读冷却期状态，未到期就直接退出（不重复触发）；③到期则落锁再跑梦，防并发重叠。
+// 顺序不能倒——注意点7「定序」要求底片写入先于梦启动，两者同源于散会事件、显式定序，
+// 不靠"反正压得快"这种时序侥幸。三步同在一个 detached 进程里顺序跑，不是两个进程互相赛跑。
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE, DEFAULT_COOLDOWN_MINUTES } from './lib/paths.mjs';
 import { isStaleLock, acquireLock, releaseLock } from './lib/proc-lock.mjs';
+import { processSessionTranscript } from './negatives/write-negative.mjs';
 import { runDream } from './run-dream.mjs';
 
 // 锁的 pid 存活判定逻辑（D3 三轮 review 磨出来的：check-then-write 非原子、非 EEXIST 失败要清残留、
@@ -20,8 +24,30 @@ async function main() {
   }
 
   const root = process.argv[2] || process.cwd();
+  const sessionId = process.argv[3];
+  const transcriptPath = process.argv[4];
   const paths = dreamPaths(root);
   mkdirSync(paths.dreamDir, { recursive: true });
+
+  // PBI-01.1：先压本场会话的底片，无论后面冷却期判断结果如何——底片是每场会话都该有的，
+  // 不受"这次要不要拉梦"影响。sessionId/transcriptPath 缺失（例如直接 CLI 调试本文件）时
+  // 跳过压缩，不影响后续冷却/拉梦逻辑，仅当作没有会话身份信息可用。
+  // AC5：压缩过程本身的任何异常都不能向上抛——故障不阻断散会链路，写失败静默降级。
+  if (sessionId && transcriptPath) {
+    try {
+      await processSessionTranscript({ root, sessionId, transcriptPath });
+    } catch (err) {
+      try {
+        appendFileSync(
+          paths.negativeErrorTrace,
+          JSON.stringify({ ts: new Date().toISOString(), context: 'trigger-check-negative-step', error: String(err?.message ?? err) }) + '\n',
+          'utf8'
+        );
+      } catch {
+        // 连留痕都失败：不再重试，继续往下走冷却/拉梦逻辑，AC5 的底线是不阻断后续。
+      }
+    }
+  }
 
   // 「0=关掉冷却」是合法语义（冷却期可配置，0 分钟=每次会话结束都触发）。原写法 Number(env) || 默认
   // 会把 0 当 falsy 吞成默认 30 分钟——JS 的 || 陷阱，不是设计。显式判：未设置/非法/负数回退默认，其余含 0 照用。

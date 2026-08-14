@@ -3,16 +3,18 @@
 // 跑法：node test/self-test.mjs
 //
 // 覆盖：
-//  - 全链路：SessionEnd hook -> 落标记 -> 分离进程 -> 冷却判定 -> 梦 -> 报告 -> commit 拆分 -> revert -> 下次会话提示
+//  - 全链路：SessionEnd hook -> 落标记 -> 分离进程 -> 底片压缩 -> 冷却判定 -> 梦 -> 报告 -> commit 拆分 -> revert -> 下次会话提示
 //  - AC3 冷却期内不重复触发
 //  - AC4 防递归（CLAUDE_INVOKED_BY 设置时 hook 直接 no-op）
 //  - 故障注入（rogue）：越界写入确实被拒、不落盘
+//  - PBI-01.1：底片一场一文件 + 幂等（重复触发不产第二页）+ 规则表纯函数单测（含未知类型留痕）+ AC2 零 API 静态检查
+//  - PBI-01.2·AC3：埋标记话，验证底片里按原文检索得到
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE } from '../src/lib/paths.mjs';
 import { judgePath, judgeShell } from '../src/lib/scope-guard.mjs';
 
@@ -28,6 +30,26 @@ function check(name, cond, detail = '') {
 
 function git(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).trim();
+}
+
+// Sprint-2：每个沙箱配一份假逐字稿，模拟 SessionEnd payload 的 transcript_path 指向的东西。
+// 埋一条带唯一 marker 的用户消息，供 PBI-01.2·AC3「按原文检索到」类断言直接 grep 底片文件。
+function fakeTranscriptLines(sessionId, marker) {
+  const ts = new Date().toISOString();
+  return [
+    { type: 'user', sessionId, uuid: 'fake-u1', timestamp: ts, isSidechain: false, userType: 'external', cwd: '', version: 'test', parentUuid: null, message: { role: 'user', content: [{ type: 'text', text: `${marker} —— 用户说的这句话不该蒸发` }] } },
+    { type: 'assistant', sessionId, uuid: 'fake-a1', timestamp: ts, isSidechain: false, userType: 'external', cwd: '', version: 'test', parentUuid: 'fake-u1', message: { model: 'test', id: 'msg-1', type: 'message', role: 'assistant', content: [{ type: 'text', text: '收到，已记录。' }] } },
+  ].map((e) => JSON.stringify(e)).join('\n') + '\n';
+}
+
+function sandboxSessionId(label) {
+  return `${label}-session-id`;
+}
+function sandboxMarker(label) {
+  return `SELF-TEST-MARKER-${label}-${process.pid}`;
+}
+function sandboxTranscriptPath(dir) {
+  return path.join(dir, 'fake-transcript.jsonl');
 }
 
 function makeSandbox(label) {
@@ -49,7 +71,17 @@ function makeSandbox(label) {
   writeFileSync(path.join(dir, 'CLAUDE.md'), '# Sandbox Project\n\n自测沙箱，不是真实项目。\n', 'utf8');
   git(dir, ['add', '-A']);
   git(dir, ['commit', '-q', '-m', 'initial sandbox state']);
+
+  const sessionId = sandboxSessionId(label);
+  writeFileSync(sandboxTranscriptPath(dir), fakeTranscriptLines(sessionId, sandboxMarker(label)), 'utf8');
+
   return dir;
+}
+
+// Sprint-2 起 session-end.mjs 硬性要求 stdin 携带 session_id/transcript_path/cwd——
+// 每处调用都要带这三样，不能只传 cwd 了（老约定已废止，见 session-end.mjs 顶部注释）。
+function sessionEndPayload(sandbox, label) {
+  return { cwd: sandbox, session_id: sandboxSessionId(label), transcript_path: sandboxTranscriptPath(sandbox) };
 }
 
 function runNode(scriptPath, args, { cwd, stdinJson, env } = {}) {
@@ -147,14 +179,14 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
   // 1) 防递归：CLAUDE_INVOKED_BY 已设置时，hook 必须直接 no-op，不落标记、不拉梦。
   runNode(path.join(SRC, 'session-end.mjs'), [], {
     cwd: sandbox,
-    stdinJson: { cwd: sandbox },
+    stdinJson: sessionEndPayload(sandbox, 'chain'),
     env: { [RECURSION_GUARD_ENV]: RECURSION_GUARD_VALUE },
   });
   check('AC4 防递归：设了 CLAUDE_INVOKED_BY 时不落触发标记', !existsSync(paths.sessionEndMarker));
 
   // 2) 正常 SessionEnd：应落标记、detached 拉起分离进程、最终跑完一场梦。
   const before = Date.now();
-  const sessionEndRun = runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
+  const sessionEndRun = runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'chain') });
   check('SessionEnd hook 本身快速退出（不等梦跑完）', sessionEndRun.status === 0);
   check('AC2 触发标记已落盘', existsSync(paths.sessionEndMarker));
 
@@ -164,6 +196,24 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     return state.status && state.status !== 'running' && new Date(state.lastDreamAt).getTime() >= before;
   });
   check('分离进程确实跑完一场梦（last-dream.json 落地 completed/failed）', dreamDone);
+
+  // PBI-01.1：底片压缩在 trigger-check.mjs 里先于拉梦逻辑同步跑完（定序），dreamDone 为真时
+  // 底片这一步必然也已经跑过——不需要另外等。
+  const negChainSessionId = sandboxSessionId('chain');
+  const negLedgerPath = paths.negativeLedger;
+  const negLedger = existsSync(negLedgerPath) ? JSON.parse(readFileSync(negLedgerPath, 'utf8')) : {};
+  const negRecord = negLedger[negChainSessionId];
+  check('PBI-01.1·AC1 台账记录了本场会话的底片', !!negRecord, JSON.stringify(negLedger));
+  const negPageFile = negRecord?.pages?.[0]?.file;
+  const negPagePath = negPageFile ? path.join(paths.negativesDir, negPageFile) : null;
+  check('PBI-01.1·AC1 底片文件确实落盘、一场一文件、可寻址（文件名含 session id）', negPagePath && existsSync(negPagePath) && negPageFile.startsWith(negChainSessionId));
+  if (negPagePath && existsSync(negPagePath)) {
+    const negContent = readFileSync(negPagePath, 'utf8');
+    check(
+      'PBI-01.2·AC3 裁决回程有名分：埋的标记话能在底片里按原文检索到',
+      negContent.includes(sandboxMarker('chain'))
+    );
+  }
 
   const lastState = existsSync(paths.lastDreamState) ? JSON.parse(readFileSync(paths.lastDreamState, 'utf8')) : null;
   check('梦跑完状态是 completed（不是 failed）', lastState?.status === 'completed', JSON.stringify(lastState?.summary?.sdkError ?? ''));
@@ -237,10 +287,15 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
 
   // 4) 冷却期验证：紧接着再触发一次 SessionEnd，默认 30 分钟冷却内不应该再跑一场梦。
   const stateBeforeSecondTrigger = readFileSync(paths.lastDreamState, 'utf8');
-  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'chain') });
   await new Promise((r) => setTimeout(r, 3000)); // 给 detached 分离进程足够时间跑到冷却判断那一步
   const stateAfterSecondTrigger = readFileSync(paths.lastDreamState, 'utf8');
   check('AC3 冷却期内不重复触发（last-dream.json 未被再次改写）', stateBeforeSecondTrigger === stateAfterSecondTrigger);
+
+  // 同一次触发也把底片幂等一并验了：逐字稿没变，重复 SessionEnd 不该多出第二页。
+  const negLedgerAfterRetrigger = existsSync(negLedgerPath) ? JSON.parse(readFileSync(negLedgerPath, 'utf8')) : {};
+  const negPagesAfterRetrigger = negLedgerAfterRetrigger[negChainSessionId]?.pages ?? [];
+  check('PBI-01.1·AC1 幂等：逐字稿未变时重复触发不产生第二页底片', negPagesAfterRetrigger.length === 1, `pages=${negPagesAfterRetrigger.length}`);
 
   // 5) SessionStart 消费提示行。
   const startResult = runNode(path.join(SRC, 'session-start.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
@@ -258,8 +313,8 @@ async function testConcurrentTriggerLock() {
   const paths = dreamPaths(sandbox);
   console.log(`\n=== 并发触发防重（锁），沙箱: ${sandbox} ===`);
 
-  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
-  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'concurrent') });
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'concurrent') });
 
   const settled = await waitFor(() => {
     if (!existsSync(paths.lastDreamState)) return false;
@@ -428,10 +483,43 @@ function testPluginManifestShape() {
   }
 }
 
+function testNegativesZeroApiAndCompressUnit() {
+  // AC2「验法写死：压缩链路不引用 Agent SDK」——静态源码检查，不是运行时行为断言：
+  // 直接读 negatives/ 目录下每个源文件，确认没有一处 import 了 SDK 包名。
+  console.log('\n=== PBI-01.1·AC2 零 API 静态检查 + compress.mjs 纯函数单测（不起会话） ===');
+
+  const negativesDir = path.join(SRC, 'negatives');
+  const sdkPackageName = '@anthropic-ai/claude-agent-sdk';
+  for (const file of readdirSync(negativesDir).filter((f) => f.endsWith('.mjs'))) {
+    const content = readFileSync(path.join(negativesDir, file), 'utf8');
+    check(`AC2 零 API：negatives/${file} 不引用 ${sdkPackageName}`, !content.includes(sdkPackageName));
+  }
+
+  return import(pathToFileURL(path.join(negativesDir, 'compress.mjs')).href).then(({ compressEntries }) => {
+    const marker = 'UNIT-TEST-MARKER-abc123';
+    const entries = [
+      { type: 'user', message: { role: 'user', content: [{ type: 'text', text: marker }] } },
+      { type: 'user', message: { role: 'user', content: [{ tool_use_id: 't1', type: 'tool_result', content: 'x'.repeat(500), is_error: false }] } },
+      { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'y'.repeat(500) }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: '回复文本' }] } },
+      { type: 'this-type-does-not-exist-yet', weird: true },
+    ];
+    const { markdown, stats } = compressEntries(entries);
+
+    check('AC3 用户文本原文保留（两种结构之一：content 数组含 text）', markdown.includes(marker));
+    check('AC3② 工具返回（以 user 角色记录）摘要化：不含完整 500 字正文', !markdown.includes('x'.repeat(500)));
+    check('AC3④ assistant thinking 摘要化：不含完整 500 字正文', !markdown.includes('y'.repeat(500)));
+    check('assistant 正文原样保留', markdown.includes('回复文本'));
+    check('AC3③ 未知类型保守保留＋留痕：标记 unknown 且原样带 raw', markdown.includes('UNKNOWN') && markdown.includes('this-type-does-not-exist-yet'));
+    check('stats.byKind.unknown 计数正确', stats.byKind.unknown === 1, JSON.stringify(stats.byKind));
+  });
+}
+
 const sandboxes = [];
 try {
   testScopeGuardUnit();
   testPluginManifestShape();
+  await testNegativesZeroApiAndCompressUnit();
   await testNotebookEditFieldName();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
