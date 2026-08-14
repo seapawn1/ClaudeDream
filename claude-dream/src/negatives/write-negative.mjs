@@ -20,6 +20,11 @@ import { withLedgerLock, sliceNewEntries, recordPage } from './ledger.mjs';
 // 再读，有界重试（不会无限等，最坏情况这个函数多花约 1 秒）。真撞上了、且这是这个项目
 // 最后一场会话（没有下一次触发点让 AC6 补捞捞回来），内容会永久漏掉——这一点残余风险
 // 如实记录在这里，不假装能百分百堵上。
+//
+// D3 review 第二轮起：返回值是"稳定后的字节数"（拿不到任何一次有效大小时返回 null），
+// 不再是纯 void——调用方把这个数存进台账的 lastProcessedBytes，backfill.mjs 下次扫到
+// 同一个会话时先比对字节数，没变就直接跳过整套 settle-wait+整读（见 ledger.mjs 的
+// recordPage 与 backfill.mjs 的短路判据）。
 async function waitForTranscriptToSettle(transcriptPath, { maxAttempts = 4, intervalMs = 250 } = {}) {
   let lastSize = -1;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -27,12 +32,13 @@ async function waitForTranscriptToSettle(transcriptPath, { maxAttempts = 4, inte
     try {
       size = statSync(transcriptPath).size;
     } catch {
-      return; // 文件这一步没了（极端罕见），交给调用方的 existsSync 检查处理
+      return lastSize >= 0 ? lastSize : null; // 文件这一步没了（极端罕见），交给调用方的 existsSync 检查处理
     }
-    if (size === lastSize) return; // 连续两次大小不变，认为已经落盘稳定
+    if (size === lastSize) return size; // 连续两次大小不变，认为已经落盘稳定
     lastSize = size;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+  return lastSize >= 0 ? lastSize : null;
 }
 
 /** 逐行读取 jsonl，解析失败的行不中断整个流程——原样按 AC3③ 的未知留痕精神收一条占位。 */
@@ -99,8 +105,9 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
     return { status: 'skipped-missing-transcript', sessionId, transcriptPath };
   }
 
-  // 读之前先等文件大小稳定——见 waitForTranscriptToSettle 的注释。
-  await waitForTranscriptToSettle(transcriptPath);
+  // 读之前先等文件大小稳定——见 waitForTranscriptToSettle 的注释。返回值顺带存进台账
+  // （下面 recordPage 调用），给 backfill 的短路判据用。
+  const settledBytes = await waitForTranscriptToSettle(transcriptPath);
 
   const paths = dreamPaths(root);
 
@@ -190,6 +197,7 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
       toIndex,
       entryCount: toIndex - fromIndex,
       processedAt: new Date().toISOString(),
+      lastProcessedBytes: settledBytes,
     });
     });
   } catch (err) {

@@ -14,7 +14,7 @@
 //  - PBI-01.2·AC3：埋标记话，验证底片里按原文检索得到
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync, createWriteStream, statSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync, createWriteStream, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -478,10 +478,28 @@ async function testBackfillNegatives() {
       check('补捞产出的底片能按原文检索到标记话', pageContent.includes('BACKFILL-MARKER-missed'));
     }
 
-    // AC6③ 补捞可重入：再跑一遍，漏网会话不该产生第二页。
+    // AC6③ 补捞可重入：再跑一遍，漏网会话不该产生第二页。D3 review 第二轮起：走的是字节数
+    // 短路（ledger.lastProcessedBytes 命中），不是旧的整读判定——状态字符串换成
+    // skipped-no-new-by-size，专门证明短路真的生效了，不是碰巧殊途同归。
     const summary2 = await backfillNegatives({ root });
     const byId2 = Object.fromEntries((summary2.results ?? []).map((r) => [r.sessionId, r.status]));
-    check('AC6③ 补捞可重入：再跑一遍不产生第二页（幂等）', byId2[missedId] === 'skipped-no-new', JSON.stringify(byId2));
+    check('AC6③ 补捞可重入：再跑一遍不产生第二页（幂等，命中字节数短路）', byId2[missedId] === 'skipped-no-new-by-size', JSON.stringify(byId2));
+
+    // D3 review 第二轮安全网：短路判据本身不能反过来吃掉真实的新内容。往同一份逐字稿追加
+    // 一行新内容（模拟"补捞过一次之后这场会话又有新动静"），字节数必然变了，第三次跑
+    // 不能再命中短路，必须老老实实整读、产出第二页、新内容一字不少。
+    appendFileSync(missedPath, JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'BACKFILL-MARKER-grown-after-shortcut' }] } }) + '\n', 'utf8');
+    utimesSync(missedPath, oldTime, oldTime); // 追加会把 mtime 刷新成"现在"，改回旧时间让它还是活稿判别里的"够旧"候选
+    const summary3 = await backfillNegatives({ root });
+    const byId3 = Object.fromEntries((summary3.results ?? []).map((r) => [r.sessionId, r.status]));
+    check('D3 安全网：字节数变化后短路不会误判，重新走完整路径', byId3[missedId] === 'written', JSON.stringify(byId3));
+    const ledgerAfterGrowth = JSON.parse(readFileSync(ledgerPath, 'utf8'));
+    const secondPage = ledgerAfterGrowth[missedId]?.pages?.[1]?.file;
+    check('D3 安全网：追加的新内容确实产出了第二页', Boolean(secondPage), JSON.stringify(ledgerAfterGrowth[missedId]));
+    if (secondPage) {
+      const secondPageContent = readFileSync(path.join(root, '.claude', 'negatives', secondPage), 'utf8');
+      check('D3 安全网：第二页能按原文检索到追加的新标记话，没有被短路吃掉', secondPageContent.includes('BACKFILL-MARKER-grown-after-shortcut'));
+    }
 
     // AC6④：逐字稿已被清理——记账跳过、不报错。直接构造一个不存在的 transcript_path 场景，
     // 复用 processSessionTranscript（backfill 与 session-end 共用同一条编排逻辑）。

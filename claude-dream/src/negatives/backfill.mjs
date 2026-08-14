@@ -18,6 +18,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dreamPaths } from '../lib/paths.mjs';
 import { processSessionTranscript } from './write-negative.mjs';
+import { readLedger } from './ledger.mjs';
 
 const DEFAULT_STALE_MINUTES = 30;
 // 官方文档：编码后的目录名超过 200 字符会被截断并追加一段 hash，hash 算法未公开——
@@ -105,6 +106,12 @@ export async function backfillNegatives({ root }) {
     return { status: 'error', reason: String(err?.message ?? err) };
   }
 
+  // D3 review 第二轮：短路判据要读台账，一次性读进来给整个循环复用（读的是这一刻的快照，
+  // 循环中途另一个进程改了台账也没关系——最坏情况是这次跑漏用一次短路机会，退回完整路径，
+  // 从不会因为这个快照过时而误判"没有新内容"，真正的准确性仍由 processSessionTranscript
+  // 里加锁的 sliceNewEntries 兜底）。
+  const ledgerSnapshot = readLedger(paths.negativeLedger);
+
   const results = [];
   for (const file of files) {
     const sessionId = file.slice(0, -'.jsonl'.length);
@@ -119,15 +126,28 @@ export async function backfillNegatives({ root }) {
 
     // AC6②活稿判别：mtime 距今太近，说明这场会话大概率还在进行中，不碰——
     // 「口径如 mtime 静默超阈值」，阈值可配（CLAUDE_DREAM_BACKFILL_STALE_MINUTES），默认 30 分钟。
-    let mtimeMs;
+    let stat;
     try {
-      mtimeMs = statSync(transcriptPath).mtimeMs;
+      stat = statSync(transcriptPath);
     } catch {
       results.push({ sessionId, status: 'skipped-stat-failed' });
       continue;
     }
-    if (Date.now() - mtimeMs < staleMs) {
+    if (Date.now() - stat.mtimeMs < staleMs) {
       results.push({ sessionId, status: 'skipped-active' });
+      continue;
+    }
+
+    // D3 review 第二轮抓到的坑：这里以前的注释断言"已覆盖的会话是 O(1) 判断"，实际不是——
+    // 判定"没有新内容"要先做 settle-wait 再整读完整份 jsonl，成本随文件体积和历史会话数
+    // 线性增长，每次散会触发的 backfill 都要重扫一遍。这里用上面 statSync 顺手拿到的当前
+    // 字节数，跟台账里记的"上次稳定读取时的字节数"比一比——jsonl 只追加不改写历史（这也是
+    // sliceNewEntries 本身依赖的不变量），字节数没变就等于没有新内容，可以安全跳过下面的
+    // cwd-peek 和整套 settle-wait+整读。台账没这条记录（从没成功写过一页）或字节数对不上——
+    // 落回原来的完整路径，不冒险。
+    const priorBytes = ledgerSnapshot[sessionId]?.lastProcessedBytes;
+    if (typeof priorBytes === 'number' && priorBytes === stat.size) {
+      results.push({ sessionId, status: 'skipped-no-new-by-size' });
       continue;
     }
 

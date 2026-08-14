@@ -81,12 +81,19 @@ export function sliceNewEntries(entries, sessionRecord) {
 /**
  * 纯函数：把一页的处理结果记进台账（不落盘，调用方经 withLedgerLock 的 mutator 使用）。
  */
-export function recordPage(ledger, sessionId, { file, fromIndex, toIndex, entryCount, processedAt }) {
+export function recordPage(ledger, sessionId, { file, fromIndex, toIndex, entryCount, processedAt, lastProcessedBytes }) {
   const prev = ledger[sessionId] ?? { pages: [] };
   return {
     ...ledger,
     [sessionId]: {
       lastProcessedCount: toIndex,
+      // D3 review 第二轮抓到的坑：backfill.mjs 每次触发都要重扫这个项目名下全部历史逐字稿，
+      // 对"早就处理完、没有新内容"的会话，判定这件事本身也要付出一次 settle-wait + 整读的代价，
+      // 随历史会话数线性增长。这个字段记的是"稳定读取那一刻"的逐字稿字节数（见
+      // write-negative.mjs 的 waitForTranscriptToSettle 返回值），backfill 拿它跟 statSync 的
+      // 当前字节数比一比——jsonl 只追加不改写历史，字节数没变就等于没有新内容，可以直接跳过
+      // 整套读取流程。
+      lastProcessedBytes,
       lastProcessedAt: processedAt,
       pages: [...prev.pages, { file, fromIndex, toIndex, entryCount, processedAt }],
     },
