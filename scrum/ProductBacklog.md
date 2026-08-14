@@ -32,6 +32,8 @@
 - [ ] D2 **不破坏官方 auto-memory 契约**：一记一文件 + MEMORY.md 纯指针索引，增量改动后契约完好
 - [ ] D3 **过审才算完**：增量完成后必须经独立 review——调用 review agent 或 PO 亲审，通过才算 Done
 - [ ] D4 **绿灯点过烟**：凡「拦坏事」的自动检查（安全阀/白名单/冷却/防递归等守卫，及需特殊状况才触发的分支），上岗前故意造一次它该拦的坏情况、亲眼看它红过一次——从没红过的绿灯可能只是坏事没来过；从没真正跑过的分支不算已覆盖。普通正向断言（错了自己会红）不受此限（2026-08-13 Sprint-1 Retro 增设，Sprint-2 Planning 收窄适用面）
+- [ ] D5 **接口公开、打分保密**：凡验收考卷对 developers 保密，则「接口长什么样」（adapter 键名、占位符、source 指向、命令形状）一律写死进公开的交付接口约定；只有「怎么打分」（判据表、场景、标记、夹具）留在保密卷。考卷不得私藏约定外的接口键名（2026-08-14 Sprint-2 正式 test 增设）
+- [ ] D6 **开考先自检**：验收考卷交付前，verify.mjs 必须先自检一遍「是否消费了 adapter.json 声明的全部接口（commands/source 键、旗标、环境变量、占位符）」——有声明未消费就报红，不许开考。防止考卷自身脱靶，把接口对齐问题伪装成答卷人的缺陷反复打回（2026-08-14 Sprint-2 Retro 增设，PO 批注「未来再审」）
 
 *这是对每个增量、每条 PBI 通用的质量底线，Sprint 内不得削弱、只能加强。设计冲刺的 C1–C7 类条款（证据栏形态、抽查点、回滚行为、删除票……）是特定功能的验收标准，refinement 时归位到对应 PBI 的 Acceptance Criteria，不占用全增量的 DoD。*
 
@@ -44,6 +46,7 @@
 | PBI-03 | Agent SDK canUseTool 结构缴械 | 梦在结构上碰不到它不该碰的东西 | 横切 S5–S7 | Sprint-1 已交付（随 PBI-04 吸收） | M | `.claude` 是受保护路径、headless 下 hook 不加载——从「推荐」升为「必选」；PBI-02 的前提（DesignReview §7、原型实测） |
 | PBI-04 | 插件骨架与回环 | 插件形态立起来：无人值守转完一圈「触发→快照→占位整合→报告→提交→提示」，后续引擎内容有处可装 | S5 + P0 + S8 + S9（S6/S7 占位） | Sprint-1 已交付（2026-08-13 Review 收口） | L | 吸收 PBI-03；OC 兑现：环真转一圈，dream commit 可 revert；验收 15/16，遗留 04.3·AC4 用户可见部分 → PBI-05（Review 记录见 sprint-01-skeleton/SprintBacklog 第四节） |
 | PBI-05 | 梦提示行送到用户眼前 | 用户不问也知道昨夜做过梦——知情的最后一米 | S9 | Sprint-1 Review 遗留（2026-08-13），待精化 | S | H-A8：session-start 纯 stdout 只进 AI 上下文，用户看不见。修复方向已调研（`5c04dd3`）：hook JSON `systemMessage`（官方标注 shown to the user，SessionStart 下是否真渲染**待实测**，备选 `terminalSequence`）；冷却 0 值语义已由 developers 先行裁决支持；2026-08-13 Sprint-2 Planning 议过不搭车，留档待下窗口 |
+| PBI-06 | 底片压缩复用成熟开源方案（重做） | 压缩链路不再自维护留/剔规则表，改复用成熟开源方案＋简单修改适配，降低格式漂移维护成本 | S4（同 PBI-01） | 待精化（2026-08-14 Sprint-2 Review 增设） | 待估 | Sprint-2 验收暴露自建 RETAIN-RULES.md 覆盖缺口（agent-setting/relocated/worktree-state/file-history-delta 四类未覆盖，真实长会话 688 条 unknown、压缩比 5%→8.85%）。PO 判「自建路线很可能有问题」，倾向复用成熟开源方案＋简单修改而非自建。前置校验：候选方案须①覆盖官方最新类型（claude-code-log models.py 实测旧版、同样缺新类型）、②不引入安装税（Python 依赖等）、③不破 AC3「行为可审计」（渲染器≠审计器） |
 
 *本表是达成 Product Goal 的唯一工作来源：行序即优先序，由 Product Owner 排定；编号是不随排序变的稳定 ID。粗条目经 Refinement 拆小后写入对应 Sprint 的 SprintBacklog 第二节（层级编号如 PBI-04.1，AC/OC 须 PO 通过、sizing 归 Product Developers），本表对应行状态改「已精化」。size 是未经 refinement 的 T 恤码初估，Sprint Planning 时由 Product Developers 重估。依赖提示：PBI-03 是 PBI-02 的结构前提。入场条件：verdict §3 的 C1–C3 已裁（C1 后置、C2/C3 随 PBI-02，见该行备注）。**2026-08-13 Sprint-2 Planning 已裁：料先行，PBI-01 先动工**；PBI-02 排后一棒。*
 
