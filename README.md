@@ -10,7 +10,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 **非目标（本轮收窄）**：团队共享记忆（`team/`、多人协作）；跨项目记忆（未来方向）。
 
-**当前处于产物开发段**：设计冲刺已完成（2026-08-02），方案定稿并在真实腐烂记忆库上跑通验证；Sprint-1（骨架回环）已收口（2026-08-13）；Sprint-2（底片层）已收口（2026-08-14）；2026-08-15 refinement 完成，Sprint-3 Planning 进行中。要一次看懂设计结论，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)；要看产物开发的目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前处于产物开发段**：设计冲刺已完成（2026-08-02），方案定稿并在真实腐烂记忆库上跑通验证；Sprint-1（骨架回环）已收口（2026-08-13）；Sprint-2（底片层）已收口（2026-08-14）；2026-08-15 refinement 完成，Sprint-3 Planning 定案——PBI-02（引擎主干·纯机械梦切口）主菜施工中。要一次看懂设计结论，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)；要看产物开发的目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
 ## 为什么需要它
 
@@ -114,7 +114,9 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 
 **2026-08-14：Sprint-2 收口。** 三轮验收逐次收敛（12/9/6 → 15/6/6 → 16/5/6），PO 裁定不追绿先收口。两大发现：自建 RETAIN-RULES.md 覆盖缺口（真实长会话压测暴露四类未覆盖类型，压缩比 5%→8.85%）触发 PBI-06（复用成熟开源方案重做，不自建）；考卷侧三轮接口脱靶触发 DoD 增设 D5「接口公开、打分保密」与 D6「开考先自检」。Review/Retro 落盘 SprintBacklog 第四/五节。
 
-**2026-08-15：Sprint-2 收口后 refinement。** 检视 DoD 六条：D1–D4 保留，D5/D6 归位重构——增量侧半条改写为 D5「接口自述随增量交付」，考卷侧规则移至 ProductBacklog 新立的「验收流程约定」小节（DoD 只挂增量，不挂考卷）；Backlog 表精简为仅列在办条目（PBI-06/05/02），已交付条目移出；行序刷新——PBI-06（底片压缩复用重做）拟为 Sprint-3 主菜，PBI-05（梦提示行）拟搭车，PBI-02（引擎产品化）接棒下轮。Sprint-3 Planning 进行中。
+**2026-08-15：Sprint-2 收口后 refinement。** 检视 DoD 六条：D1–D4 保留，D5/D6 归位重构——增量侧半条改写为 D5「接口自述随增量交付」，考卷侧规则移至 ProductBacklog 新立的「验收流程约定」小节（DoD 只挂增量，不挂考卷）；Backlog 表精简为仅列在办条目（PBI-06/05/02），已交付条目移出；行序刷新——PBI-06（底片压缩复用重做）拟为 Sprint-3 主菜，PBI-05（梦提示行）拟搭车，PBI-02（引擎产品化）接棒下轮。
+
+**同日 Sprint-3 Planning 定案。** PO 改判——refinement 建议的「PBI-06 主菜、PBI-05 搭车」未被采纳，主菜定为 **PBI-02（引擎主干产品化，纯机械梦切口）**：零 API 跑 M1–M5 机械体检、L0/确凿删除/L3 处置、熔断器、C2/C3 报告证据改造、G9 定向翻底片；LLM 层（S1–S3 判据 + L1 合并/connection + L2 阀门管辖）拆出新条目 **PBI-07** 接棒；PBI-05/06 本轮不做。底片消费契约随本轮定为稳定公开接口，反转对 PBI-06 的依赖方向。SprintBacklog 建档 [scrum/sprint-03-engine/SprintBacklog.md](scrum/sprint-03-engine/SprintBacklog.md)，施工走独立工作树 `.claude/worktrees/sprint-03-engine`。
 
 设计冲刺结论摘要（2026-08-02 结算）：定稿方案的主干成立——体检判据（M1–M5 机械 + S1–S3 语义）、四级处置权限、三道安全阀、git 回滚层，在一个 42 条记忆的腐烂库上真跑通并经故障注入验证；兑现层三处待改——报告的证据形态、回滚的隔离性、机器推论的身份标识。完整结算见 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)。
 
@@ -133,6 +135,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | 2026-08-13 | Sprint-1 收口：D3 三轮 + 复审闭环；验收首考挂 7 条经查全为考卷侧接口想当然、developers 零改动，修卷三轮（`b3ad44d`）后 13 自动判据全绿 + 人工两项过；Review 增量收下（15/16，H-A8→PBI-05），Retro 立「空转冒充覆盖」病根、「绿灯点过烟」入 DoD·D4；开发版插件全局关闭 |
 | 2026-08-13 | Sprint-2（底片层）Planning：Goal「白天留底，夜里读得到」；PBI-01 先动工（料先行），PBI-05 不搭车；opus 独立审阅 29 条全收；`sprint-02-negatives` 施工分支与 `sprint-02-acceptance` 出卷线（worktree 隔离）并行落盘 |
 | 2026-08-14 | Sprint-2 收口：三轮验收逐次收敛（12/9/6→15/6/6→16/5/6），PO 裁定不追绿先收口；两大发现——自建规则表覆盖缺口→PBI-06（复用重做），考卷接口脱靶→DoD 增设 D5/D6 |
-| 2026-08-15 | Sprint-2 收口后 refinement：DoD 归位（D1–D4 保留，D5/D6 拆并重构、增设「验收流程约定」小节）；backlog 精简为在办三条，行序刷新（PBI-06 拟主菜、PBI-05 拟搭车、PBI-02 接棒）；Sprint-3 Planning 进行中 |
+| 2026-08-15 | Sprint-2 收口后 refinement：DoD 归位（D1–D4 保留，D5/D6 拆并重构、增设「验收流程约定」小节）；backlog 精简为在办三条，行序刷新（PBI-06 拟主菜、PBI-05 拟搭车、PBI-02 接棒） |
+| 2026-08-15 | Sprint-3 Planning 定案：主菜改判为 PBI-02（引擎主干·纯机械梦切口），LLM 层拆出新条目 PBI-07；PBI-05/06 本轮不做；底片消费契约反转依赖方向；SprintBacklog 建档 `scrum/sprint-03-engine/`，施工走独立工作树 |
 
 *过程细节与每一次拍板的理由由 git 历史承载，不堆回本文件。*

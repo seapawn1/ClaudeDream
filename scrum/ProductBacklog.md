@@ -45,22 +45,23 @@
 
 ## 第二部分 · Product Backlog
 
-| 编号 | 标题 | 产品意图 | 架构定位 | 当前状态 | size | 备注（依据） |
-|---|---|---|---|---|---|---|
-| PBI-06 | 底片压缩复用成熟开源方案（重做） | 压缩链路不再自维护留/剔规则表，改复用成熟开源方案＋简单修改适配，降低格式漂移维护成本 | S4 | **Sprint-3 拟主菜**（2026-08-15 refinement 建议，Planning 定案）；待精化，精化含候选方案调研 spike | 待估 | Sprint-2 验收暴露自建 RETAIN-RULES.md 覆盖缺口（agent-setting/relocated/worktree-state/file-history-delta 四类未覆盖，真实长会话 688 条 unknown、压缩比 5%→8.85%）。PO 判「自建路线很可能有问题」，倾向复用成熟开源方案＋简单修改而非自建。前置校验：候选方案须①覆盖官方最新类型（claude-code-log models.py 实测旧版、同样缺新类型）、②不引入安装税（Python 依赖等）、③不破「行为可审计」（渲染器≠审计器） |
-| PBI-05 | 梦提示行送到用户眼前 | 用户不问也知道昨夜做过梦——知情的最后一米 | S9 | **Sprint-3 拟搭车**（2026-08-15 refinement 建议，Planning 定案）；待精化 | S | H-A8：session-start 纯 stdout 只进 AI 上下文，用户看不见。修复方向已调研（`5c04dd3`）：hook JSON `systemMessage`（官方标注 shown to the user，SessionStart 下是否真渲染**待实测**，备选 `terminalSequence`）；冷却 0 值语义已由 developers 先行裁决支持；连续两轮议不搭车后，2026-08-15 refinement 依「S 码小活勿无限期漂」建议本轮搭车 |
-| PBI-02 | 引擎主干产品化 | 原型验证过的体检与处置能真装进 Claude Code 用 | S6–S7 | 原型已跑通，待产品化；**排 PBI-06 之后**（2026-08-15 refinement 建议：引擎进料口不对着将被重做换掉的底片格式开发） | L | M1–M5 / S1–S3 判据、L0–L3 处置、三道安全阀从脚本变插件形态（Sketches、verdict §2）；C2/C3 随本条作 AC（证据栏贴执行日志、抽查点以梦前状态为基准且必须能失败）；**C1（单笔精撤/dream-undo）后置**——2026-08-13 PO 改判不卡首版，整梦全撤（Sprint-1 已交付）兜底；**G9 后半**（梦 D3 定向翻底片找用户留话）随本条 |
+| 编号   | 标题                             | 产品意图                                                                              | 架构定位 | 当前状态                                                                                                                 | size | 备注（依据）                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------ | -------------------------------- | ------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PBI-02 | 引擎主干产品化（纯机械梦切口） | 原型验证过的体检与处置能真装进 Claude Code 用 | S6–S7 | Sprint-3 主菜施工中；已精化——拆条与 AC 见 sprint-03-engine/SprintBacklog.md 第二节 | L（切口后待 Developers 重估） | M1–M5 判据、L0/确凿删除/L3 处置、熔断器从脚本变插件形态（Sketches、verdict §2）；C2/C3 随本条作 AC；**G9 后半**（梦 D3 定向翻底片找用户留话）随本条；S1–S3/L1/L2 拆出为 PBI-07；**C1（单笔精撤）后置**，整梦全撤（Sprint-1 已交付）兜底 |
+| PBI-07 | 引擎 LLM 层（L1 余项：合并/建 connection + L2 阀门管辖） | 机械层筛出的候选交给 LLM 判——记忆互矛盾裁决、记忆 vs CLAUDE.md 冲突、连接候选，引擎闭环「越用越懂」 | S6–S7 | 待精化（2026-08-15 Sprint-3 Planning 自 PBI-02 拆出） | M（待估） | 无证不理纪律（每项判断引双方原文出处）；S3 连接候选单梦限建 2 条（`max_new_connections` 配置键随本条引入）；**确凿删除已随 PBI-02 交付，本条 LLM 只能否决/标注/降级，不得新增删除票**；L2 走 `claude_md_edits` 阀门；`llm_checks: on` 档位随本条生效；隔离条目「连续两梦无翻案升候删」判定随本条；**C4（机器推论贴身份证：origin/confidence/generated_at/verified_at，未确认 connection 顶部警告）随本条交付**；C5 后半（提示行同源生成）随 PBI-05 |
+| PBI-06 | 底片压缩复用成熟开源方案（重做） | 压缩链路不再自维护留/剔规则表，改复用成熟开源方案＋简单修改适配，降低格式漂移维护成本 | S4 | Planning 定案后置（2026-08-15）；底片消费契约已随 PBI-02 定为稳定公开接口（见 sprint-03-engine/SprintBacklog PBI-02.6-AC2，含台账结构/原话保留/用户发言段落标记三点），重做时必须保住 | 待估 | Sprint-2 验收暴露自建 RETAIN-RULES.md 覆盖缺口（agent-setting/relocated/worktree-state/file-history-delta 四类未覆盖，真实长会话 688 条 unknown、压缩比 5%→8.85%）。PO 判「自建路线很可能有问题」，倾向复用成熟开源方案＋简单修改而非自建。前置校验：候选方案须①覆盖官方最新类型（claude-code-log models.py 实测旧版、同样缺新类型）、②不引入安装税（Python 依赖等）、③不破「行为可审计」（渲染器≠审计器） |
+| PBI-05 | 梦提示行送到用户眼前 | 用户不问也知道昨夜做过梦——知情的最后一米 | S9 | Planning 定案本轮不做（2026-08-15，连续第三轮未排）；下轮 refinement 再议 | S | H-A8：session-start 纯 stdout 只进 AI 上下文，用户看不见。修复方向已调研（`5c04dd3`）：hook JSON `systemMessage`（官方标注 shown to the user，SessionStart 下是否真渲染**待实测**，备选 `terminalSequence`）；冷却 0 值语义已由 developers 先行裁决支持；连续两轮议不搭车后，2026-08-15 refinement 依「S 码小活勿无限期漂」建议本轮搭车，但 Sprint-3 Planning 未采纳（PO 定主菜 PBI-02），连续第三轮未排；C5 后半（提示行同源生成）随本条精化时一并读入 |
 
-*本表是达成 Product Goal 的唯一工作来源：行序即优先序，由 Product Owner 排定；编号是不随排序变的稳定 ID。**已交付条目不再列示（PO 裁定 2026-08-15）**：PBI-01（底片产线，Sprint-2）、PBI-03/04（缴械与骨架回环，Sprint-1）——档案见各 sprint 目录与 git 历史，编号永不复用。粗条目经 Refinement 拆小后写入对应 Sprint 的 SprintBacklog 第二节（层级编号如 PBI-06.1，AC/OC 须 PO 通过、sizing 归 Product Developers），本表对应行状态改「已精化」。依赖提示：PBI-02 的结构前提（canUseTool 缴械，原 PBI-03）已随 Sprint-1 交付在位；PBI-06 重做会动底片格式，故排在 PBI-02 之前。入场条件：verdict §3 的 C1–C3 已裁（C1 后置、C2/C3 随 PBI-02，见该行备注）。**2026-08-15 refinement 刷新行序（待 Sprint-3 Planning 定案）**：PBI-06 主菜先行、PBI-05 搭车、PBI-02 接棒下轮。*
+*本表是达成 Product Goal 的唯一工作来源：行序即优先序，由 Product Owner 排定；编号是不随排序变的稳定 ID。**已交付条目不再列示（PO 裁定 2026-08-15）**：PBI-01（底片产线，Sprint-2）、PBI-03/04（缴械与骨架回环，Sprint-1）——档案见各 sprint 目录与 git 历史，编号永不复用。粗条目经 Refinement 拆小后写入对应 Sprint 的 SprintBacklog 第二节（层级编号如 PBI-06.1，AC/OC 须 PO 通过、sizing 归 Product Developers），本表对应行状态改「已精化」。依赖提示：PBI-02 的结构前提（canUseTool 缴械，原 PBI-03）已随 Sprint-1 交付在位；**底片消费契约已反转依赖方向**（见 sprint-03-engine/SprintBacklog PBI-02.6-AC2），PBI-02 不再等 PBI-06。入场条件：verdict §3 的 C1–C3 已裁（C1 后置、C2/C3 随 PBI-02，见该行备注）。**2026-08-15 Sprint-3 Planning 定案**：PBI-02（纯机械梦切口）为本轮主菜，LLM 层拆出新条目 PBI-07 接棒；PBI-06/PBI-05 本轮不做，后置候排。*
 
 ## 第三部分 · 架构
 
 ### 角色
 
-| 角色 | 解释 |
-|---|---|
-| 长期用户 | 产品的顾客：要 agent 像昨天刚一起工作过，且随时能推翻产品的改动 |
-| 会话 agent | 记忆的生产者与消费者：会话中产生信号，开新会话时取用记忆 |
+| 角色       | 解释                                                            |
+| ---------- | --------------------------------------------------------------- |
+| 长期用户   | 产品的顾客：要 agent 像昨天刚一起工作过，且随时能推翻产品的改动 |
+| 会话 agent | 记忆的生产者与消费者：会话中产生信号，开新会话时取用记忆        |
 
 ### 架构图
 
@@ -75,22 +76,22 @@ flowchart TD
     S4 --> S5{"S5 Dream 触发<br/>SessionEnd hook 零 API 写标记 + 冷却期<br/>分离进程判条件后跑 Agent SDK，CLAUDE_INVOKED_BY 防递归<br/>✅ Sprint-1 已交付——hook 触发 + 冷却 + 防递归实测"}
     Dream([Dream 整合进程]) --> S5
     S5 --> P0["梦前快照：git 快照提交<br/>pathspec 仅 .claude/memory/ + CLAUDE.md + .claude/dream/<br/>✅ Sprint-1 已交付"]
-    P0 --> S6["S6 体检：对照项目现状，两层判据<br/>机械层 M1–M5 零 LLM 成本先跑：断链/孤儿/悬空溯源/实体失效+git 讣告/索引漂移<br/>LLM 层 S1–S3 只吃机械层筛出的候选：记忆互矛盾/记忆 vs CLAUDE.md/连接候选<br/>🟡 占位过场在位（Sprint-1），真判据待产品化——PBI-02"]
-    S6 --> S7["S7 整合：memory 文件系统 + CLAUDE.md 一起改<br/>四级处置：L0 随手修 / L1 自主改+建 connection / L2 阀门管辖 CLAUDE.md / L3 隔离观察<br/>铁律：LLM 无删除开票权；三道安全阀：熔断器 · 配置层缴械 · 隔离优先<br/>🟡 占位过场在位（Sprint-1），真处置待产品化——PBI-02"]
-    S7 --> S8["S8 写梦报告 .claude/dream/&lt;时间或主题&gt;.md<br/>六节：图 delta 对账 / 30 秒版 / 明细四要素+单条回滚 / 隔离观察区 / 抽查点 / 阀门状态<br/>🟡 六节骨架 Sprint-1 已交付，证据形态改造待做（C2）"]
-    S8 --> S9["S9 git 单提交 dream: 前缀 = 回滚原子<br/>下次开会话一行提示<br/>✅ Sprint-1 已交付；提示行用户可见一米遗留——PBI-05（Sprint-3 拟收）"]
+    P0 --> S6["S6 体检：对照项目现状，两层判据<br/>机械层 M1–M5 零 LLM 成本先跑：断链/孤儿/悬空溯源/实体失效+git 讣告/索引漂移<br/>LLM 层 S1–S3 只吃机械层筛出的候选：记忆互矛盾/记忆 vs CLAUDE.md/连接候选<br/>🟡 Sprint-3 施工中——纯机械梦切口（PBI-02），LLM 层接棒 PBI-07"]
+    S6 --> S7["S7 整合：memory 文件系统 + CLAUDE.md 一起改<br/>四级处置：L0 随手修 / L1 自主改+建 connection / L2 阀门管辖 CLAUDE.md / L3 隔离观察<br/>铁律：LLM 无删除开票权；三道安全阀：熔断器 · 配置层缴械 · 隔离优先<br/>🟡 Sprint-3 施工中——纯机械梦切口（PBI-02），LLM 层接棒 PBI-07"]
+    S7 --> S8["S8 写梦报告 .claude/dream/<时间或主题>.md<br/>六节：图 delta 对账 / 30 秒版 / 明细四要素+单条回滚 / 隔离观察区 / 抽查点 / 阀门状态<br/>🟡 Sprint-3 施工中——C2/C3 证据改造（PBI-02.5）"]
+    S8 --> S9["S9 git 单提交 dream: 前缀 = 回滚原子<br/>下次开会话一行提示<br/>✅ Sprint-1 已交付；提示行用户可见一米遗留——PBI-05（Planning 定案后置）"]
     S9 --> S10["S10 新会话开场：找对容器 → 取索引<br/>⬜ 靶外，转 Target-2"]
     S10 --> S11["S11 引用前现场校验：记忆说 X 存在 ≠ X 现在存在<br/>⬜ 靶外，转 Target-2"]
     S11 --> END([像昨天刚一起工作过<br/>越用越懂你])
     END -.->|下一轮会话，记忆产生复利| S1
 ```
 
-| 批注 |
-|---|
-| Dream 整合进程即产品自身——无人值守跑 S5–S9，人不参与梦，报告即汇报 |
-| 官方 auto-memory 契约是硬约束：一记一文件 + MEMORY.md 纯指针索引，不得破坏 |
+| 批注                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dream 整合进程即产品自身——无人值守跑 S5–S9，人不参与梦，报告即汇报                                                                                       |
+| 官方 auto-memory 契约是硬约束：一记一文件 + MEMORY.md 纯指针索引，不得破坏                                                                                  |
 | 底片层（S4 产物）是硬约束的另一半：底片目录在梦的 canUseTool 白名单与梦前快照 pathspec 之外——梦对底片零写权、快照不吞底片（Sprint-2 落实，D4 点烟验证过） |
-| 取用在架构上不被保证——记忆是 context，不是 enforced configuration，S11 只是最后一道拦截 |
-| 记忆容器按工作目录路径字符串键控，项目改名/搬盘会静默孤立记忆（本项目 2026-07-29 实际发生过） |
+| 取用在架构上不被保证——记忆是 context，不是 enforced configuration，S11 只是最后一道拦截                                                                   |
+| 记忆容器按工作目录路径字符串键控，项目改名/搬盘会静默孤立记忆（本项目 2026-07-29 实际发生过）                                                               |
 
 *出处：数据流与角色取自 [.IDEO/design-sprint/DesignMap.md](.IDEO/design-sprint/DesignMap.md)；S5–S8 内部结构（触发、快照、判据、处置、阀门、报告六节）取自 [Sketches.md](.IDEO/design-sprint/Target-1-Consolidation/Prototype-01-FirstDream/Sketches.md) 定稿方案，完整论证与阀门配置回该文件查；实现状态标注综合 [TargetMap.md](.IDEO/design-sprint/Target-1-Consolidation/TargetMap.md)、[DesignReview.md](.IDEO/design-sprint/DesignReview.md) §5、§7 与 [verdict.md](.IDEO/design-sprint/Target-1-Consolidation/Prototype-01-FirstDream/verdict.md)；状态标注已于 2026-08-15 Sprint-2 收口后 refinement 刷新。*
