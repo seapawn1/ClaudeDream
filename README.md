@@ -102,7 +102,7 @@ ClaudeDream 是一个 Claude Code 插件，目标是升级 Claude Code 的记忆
 | `seapawn.md` | 本地私人笔记，不可阅读 |
 | `.claude/` | 本项目的 auto-memory 记忆库（`memory/` + `MEMORY.md` 索引）——本项目自身用，不是产物 |
 | `.claude-plugin/` | `marketplace.json` — 插件分发骨架，指向 [`./claude-dream`](claude-dream/) |
-| `claude-dream/` | **插件产物代码**（与 `reference/claude-dream/` 是两回事，那个是只读参考材料）——Sprint-1 骨架回环：`hooks/`（SessionEnd/SessionStart）、`src/`（触发链、canUseTool 围栏、占位体检整合引擎、梦报告与 `dream:` 提交）。自证脚本 `claude-dream/test/self-test.mjs`（DoD·D1，覆盖全链路/冷却期/防递归/故障注入） |
+| `claude-dream/` | **插件产物代码**（与 `reference/claude-dream/` 是两回事，那个是只读参考材料）——Sprint-1 骨架回环：`hooks/`（SessionEnd/SessionStart）、`src/`（触发链、canUseTool 围栏、占位体检整合引擎、梦报告与 `dream:` 提交）。自证脚本 `claude-dream/test/self-test.mjs`（DoD·D1，覆盖全链路/冷却期/防递归/故障注入）；前置冒烟 `claude-dream/test/smoke-check.mjs`（Sprint-2 E0·AC1，一条命令查登录态/token/SDK 可达） |
 | `scrum/` | **Scrum 段工作区（当前阶段）**——总入口 [scrum/README.md](scrum/README.md)：产品待办与架构 [ProductBacklog.md](scrum/ProductBacklog.md)、Sprint-1 [sprint-01-skeleton/](scrum/sprint-01-skeleton/README.md)（已收口）、Sprint-2 [sprint-02-negatives/SprintBacklog.md](scrum/sprint-02-negatives/SprintBacklog.md)（底片层，Planning 完成、施工中；出卷线 `sprint-02-acceptance` 分支，卷面保密）、设计冲刺全部档案归档于 `scrum/.IDEO/design-sprint/`（总入口 [DesignReview](scrum/.IDEO/design-sprint/DesignReview.md)） |
 | `reference/` | 方案类比参考资料 — auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · **claude-dream/**（AI 转化产物：claude-memory-compiler 改写为插件形态，无独立上游，只读不可信）— 详见 [reference/README](reference/README.md) |
 

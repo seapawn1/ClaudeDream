@@ -3,16 +3,21 @@
 // 跑法：node test/self-test.mjs
 //
 // 覆盖：
-//  - 全链路：SessionEnd hook -> 落标记 -> 分离进程 -> 冷却判定 -> 梦 -> 报告 -> commit 拆分 -> revert -> 下次会话提示
+//  - 全链路：SessionEnd hook -> 落标记 -> 分离进程 -> 底片压缩 -> 冷却判定 -> 梦 -> 报告 -> commit 拆分 -> revert -> 下次会话提示
 //  - AC3 冷却期内不重复触发
 //  - AC4 防递归（CLAUDE_INVOKED_BY 设置时 hook 直接 no-op）
 //  - 故障注入（rogue）：越界写入确实被拒、不落盘
+//  - PBI-01.1：底片一场一文件 + 幂等（重复触发不产第二页）+ 规则表纯函数单测（含未知类型留痕）+ AC2 零 API 静态检查
+//  - PBI-01.1·AC4：超大稿压力测试（合成 20MB 逐字稿，验流式处理不崩 + 压缩比不失控）
+//  - PBI-01.1·AC5：底片写失败故障注入（D4 点烟）
+//  - PBI-01.1·AC6：漏网场补捞（排除梦会话/活稿判别/可重入/清理跳过，D4 点烟）
+//  - PBI-01.2·AC3：埋标记话，验证底片里按原文检索得到
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync, createWriteStream, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE } from '../src/lib/paths.mjs';
 import { judgePath, judgeShell } from '../src/lib/scope-guard.mjs';
 
@@ -28,6 +33,26 @@ function check(name, cond, detail = '') {
 
 function git(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).trim();
+}
+
+// Sprint-2：每个沙箱配一份假逐字稿，模拟 SessionEnd payload 的 transcript_path 指向的东西。
+// 埋一条带唯一 marker 的用户消息，供 PBI-01.2·AC3「按原文检索到」类断言直接 grep 底片文件。
+function fakeTranscriptLines(sessionId, marker) {
+  const ts = new Date().toISOString();
+  return [
+    { type: 'user', sessionId, uuid: 'fake-u1', timestamp: ts, isSidechain: false, userType: 'external', cwd: '', version: 'test', parentUuid: null, message: { role: 'user', content: [{ type: 'text', text: `${marker} —— 用户说的这句话不该蒸发` }] } },
+    { type: 'assistant', sessionId, uuid: 'fake-a1', timestamp: ts, isSidechain: false, userType: 'external', cwd: '', version: 'test', parentUuid: 'fake-u1', message: { model: 'test', id: 'msg-1', type: 'message', role: 'assistant', content: [{ type: 'text', text: '收到，已记录。' }] } },
+  ].map((e) => JSON.stringify(e)).join('\n') + '\n';
+}
+
+function sandboxSessionId(label) {
+  return `${label}-session-id`;
+}
+function sandboxMarker(label) {
+  return `SELF-TEST-MARKER-${label}-${process.pid}`;
+}
+function sandboxTranscriptPath(dir) {
+  return path.join(dir, 'fake-transcript.jsonl');
 }
 
 function makeSandbox(label) {
@@ -49,7 +74,17 @@ function makeSandbox(label) {
   writeFileSync(path.join(dir, 'CLAUDE.md'), '# Sandbox Project\n\n自测沙箱，不是真实项目。\n', 'utf8');
   git(dir, ['add', '-A']);
   git(dir, ['commit', '-q', '-m', 'initial sandbox state']);
+
+  const sessionId = sandboxSessionId(label);
+  writeFileSync(sandboxTranscriptPath(dir), fakeTranscriptLines(sessionId, sandboxMarker(label)), 'utf8');
+
   return dir;
+}
+
+// Sprint-2 起 session-end.mjs 硬性要求 stdin 携带 session_id/transcript_path/cwd——
+// 每处调用都要带这三样，不能只传 cwd 了（老约定已废止，见 session-end.mjs 顶部注释）。
+function sessionEndPayload(sandbox, label) {
+  return { cwd: sandbox, session_id: sandboxSessionId(label), transcript_path: sandboxTranscriptPath(sandbox) };
 }
 
 function runNode(scriptPath, args, { cwd, stdinJson, env } = {}) {
@@ -127,6 +162,62 @@ function testScopeGuardUnit() {
   );
 }
 
+async function testNegativesLargeTranscriptStress() {
+  // PBI-01.1·AC4：超大稿有声明的行为（本实现选了流式处理，不设人为体积上限）——这条测的
+  // 不是"代码里写了流式"，是"真造一份比本仓库现存最大逐字稿更大的合成稿，实测流式处理
+  // 不崩、压缩比仍在 10% 预算内"。多数条目是大 tool_result（模拟读大文件的返回），这既是
+  // 真实场景体积的最大头，也是"丢弃大正文、留桩"这条规则真正被大量数据考验的地方。
+  console.log('\n=== PBI-01.1·AC4 超大稿压力测试（流式处理 + 压缩比不失控） ===');
+
+  const { processSessionTranscript } = await import(pathToFileURL(path.join(SRC, 'negatives', 'write-negative.mjs')).href);
+
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-largefile-'));
+  const transcriptPath = path.join(root, 'large-transcript.jsonl');
+  const sessionId = 'large-session-1';
+
+  const targetBytes = 20 * 1024 * 1024; // 20MB，本仓库实测现存最大约 10MB 的两倍
+  const bigBody = 'x'.repeat(50000); // 模拟一次读大文件的工具返回，50KB/条
+  await new Promise((resolve, reject) => {
+    const ws = createWriteStream(transcriptPath, { encoding: 'utf8' });
+    let written = 0;
+    let i = 0;
+    ws.on('error', reject);
+    ws.on('finish', resolve);
+    while (written < targetBytes) {
+      const lines =
+        JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: `第 ${i} 轮：请读一下这个文件` }] } }) + '\n' +
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `t${i}`, name: 'Read', input: { file_path: `/fake/file-${i}.txt` } }] } }) + '\n' +
+        JSON.stringify({ type: 'user', message: { content: [{ tool_use_id: `t${i}`, type: 'tool_result', content: bigBody, is_error: false }] } }) + '\n';
+      ws.write(lines);
+      written += lines.length;
+      i++;
+    }
+    ws.end();
+  });
+
+  const actualBytes = statSync(transcriptPath).size;
+  console.log(`合成逐字稿实际体积：${(actualBytes / 1024 / 1024).toFixed(1)} MB`);
+
+  const start = Date.now();
+  const result = await processSessionTranscript({ root, sessionId, transcriptPath });
+  const elapsedMs = Date.now() - start;
+
+  check('AC4 大稿处理成功（流式读取未崩溃）', result.status === 'written', JSON.stringify({ status: result.status, reason: result.reason }));
+  if (result.status === 'written') {
+    check('AC4 压缩比在 10% 预算内（锚：现成件实测约 1.8%，本实现留有余量）', result.ratio <= 0.1, `实际 ratio=${(result.ratio * 100).toFixed(2)}%`);
+    // D3 review 抓到的坑（回归钉子）：ratio 和 compressedBytes 曾经用两个不同的字节数算出来，
+    // 数学上对不上——这条直接断言两者自洽，不是从旁边猜它们应该一致。
+    check(
+      'D3 回归：outcome.ratio 与 outcome.compressedBytes/originalBytes 数学自洽',
+      Math.abs(result.ratio - result.compressedBytes / result.originalBytes) < 1e-9,
+      `ratio=${result.ratio} compressedBytes/originalBytes=${result.compressedBytes / result.originalBytes}`
+    );
+    console.log(`处理耗时 ${elapsedMs}ms，压缩后 ${(result.compressedBytes / 1024).toFixed(1)} KB`);
+  }
+
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+}
+
 async function testNotebookEditFieldName() {
   // 直接跑真实的 createCanUseTool（不是重新实现一遍字段选择逻辑）——D3 review 抓到的坑：
   // SDK 的 NotebookEdit 输入字段叫 notebook_path，曾经的代码读的是 file_path（恒为 undefined，恒被拒）。
@@ -147,14 +238,14 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
   // 1) 防递归：CLAUDE_INVOKED_BY 已设置时，hook 必须直接 no-op，不落标记、不拉梦。
   runNode(path.join(SRC, 'session-end.mjs'), [], {
     cwd: sandbox,
-    stdinJson: { cwd: sandbox },
+    stdinJson: sessionEndPayload(sandbox, 'chain'),
     env: { [RECURSION_GUARD_ENV]: RECURSION_GUARD_VALUE },
   });
   check('AC4 防递归：设了 CLAUDE_INVOKED_BY 时不落触发标记', !existsSync(paths.sessionEndMarker));
 
   // 2) 正常 SessionEnd：应落标记、detached 拉起分离进程、最终跑完一场梦。
   const before = Date.now();
-  const sessionEndRun = runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
+  const sessionEndRun = runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'chain') });
   check('SessionEnd hook 本身快速退出（不等梦跑完）', sessionEndRun.status === 0);
   check('AC2 触发标记已落盘', existsSync(paths.sessionEndMarker));
 
@@ -164,6 +255,24 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     return state.status && state.status !== 'running' && new Date(state.lastDreamAt).getTime() >= before;
   });
   check('分离进程确实跑完一场梦（last-dream.json 落地 completed/failed）', dreamDone);
+
+  // PBI-01.1：底片压缩在 trigger-check.mjs 里先于拉梦逻辑同步跑完（定序），dreamDone 为真时
+  // 底片这一步必然也已经跑过——不需要另外等。
+  const negChainSessionId = sandboxSessionId('chain');
+  const negLedgerPath = paths.negativeLedger;
+  const negLedger = existsSync(negLedgerPath) ? JSON.parse(readFileSync(negLedgerPath, 'utf8')) : {};
+  const negRecord = negLedger[negChainSessionId];
+  check('PBI-01.1·AC1 台账记录了本场会话的底片', !!negRecord, JSON.stringify(negLedger));
+  const negPageFile = negRecord?.pages?.[0]?.file;
+  const negPagePath = negPageFile ? path.join(paths.negativesDir, negPageFile) : null;
+  check('PBI-01.1·AC1 底片文件确实落盘、一场一文件、可寻址（文件名含 session id）', negPagePath && existsSync(negPagePath) && negPageFile.startsWith(negChainSessionId));
+  if (negPagePath && existsSync(negPagePath)) {
+    const negContent = readFileSync(negPagePath, 'utf8');
+    check(
+      'PBI-01.2·AC3 裁决回程有名分：埋的标记话能在底片里按原文检索到',
+      negContent.includes(sandboxMarker('chain'))
+    );
+  }
 
   const lastState = existsSync(paths.lastDreamState) ? JSON.parse(readFileSync(paths.lastDreamState, 'utf8')) : null;
   check('梦跑完状态是 completed（不是 failed）', lastState?.status === 'completed', JSON.stringify(lastState?.summary?.sdkError ?? ''));
@@ -194,6 +303,13 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     const report = readFileSync(reportPath, 'utf8');
     const sixSections = ['图 delta 对账', '30 秒版', '明细', '隔离观察区', '抽查点', '阀门状态'];
     check('梦报告六节骨架齐全', sixSections.every((s) => report.includes(s)), sixSections.filter((s) => !report.includes(s)).join(','));
+
+    // PBI-01.2·AC1：进料对账须包含触发本次梦的那场会话的底片，session id 对得上——
+    // 这里的 sandboxSessionId('chain') 就是本场触发 session-end.mjs 的那个 session_id，
+    // 断言报告文本里能看到它、且明确写着"已读到"（不是含糊带过）。
+    check('PBI-01.2·AC1 进料对账行出现在报告里', report.includes('进料对账'));
+    check('PBI-01.2·AC1 进料对账含触发会话 session id', report.includes(sandboxSessionId('chain')));
+    check('PBI-01.2·AC1 进料对账明确写着已读到底片', report.includes('已读到'));
   }
 
   const logPath = runId ? path.join(sandbox, '.claude', 'dream', `${runId}-canUseTool.log`) : null;
@@ -237,10 +353,15 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
 
   // 4) 冷却期验证：紧接着再触发一次 SessionEnd，默认 30 分钟冷却内不应该再跑一场梦。
   const stateBeforeSecondTrigger = readFileSync(paths.lastDreamState, 'utf8');
-  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'chain') });
   await new Promise((r) => setTimeout(r, 3000)); // 给 detached 分离进程足够时间跑到冷却判断那一步
   const stateAfterSecondTrigger = readFileSync(paths.lastDreamState, 'utf8');
   check('AC3 冷却期内不重复触发（last-dream.json 未被再次改写）', stateBeforeSecondTrigger === stateAfterSecondTrigger);
+
+  // 同一次触发也把底片幂等一并验了：逐字稿没变，重复 SessionEnd 不该多出第二页。
+  const negLedgerAfterRetrigger = existsSync(negLedgerPath) ? JSON.parse(readFileSync(negLedgerPath, 'utf8')) : {};
+  const negPagesAfterRetrigger = negLedgerAfterRetrigger[negChainSessionId]?.pages ?? [];
+  check('PBI-01.1·AC1 幂等：逐字稿未变时重复触发不产生第二页底片', negPagesAfterRetrigger.length === 1, `pages=${negPagesAfterRetrigger.length}`);
 
   // 5) SessionStart 消费提示行。
   const startResult = runNode(path.join(SRC, 'session-start.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
@@ -248,6 +369,211 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
   check('提示行载体读一次后被消费', !existsSync(paths.promptCarrier));
 
   return sandbox;
+}
+
+async function testNegativesFaultInjection() {
+  // AC5（守卫类，D4 点烟）：写失败时静默降级、不阻塞散会链路；错误留痕落点在底片目录之外。
+  // 真造一次写失败（环境变量注入开关），亲眼看降级与留痕——不是读代码猜它"应该"没事。
+  const sandbox = makeSandbox('fault');
+  const paths = dreamPaths(sandbox);
+  console.log(`\n=== PBI-01.1·AC5 底片写失败故障注入（D4 点烟），沙箱: ${sandbox} ===`);
+
+  const before = Date.now();
+  runNode(path.join(SRC, 'session-end.mjs'), [], {
+    cwd: sandbox,
+    stdinJson: sessionEndPayload(sandbox, 'fault'),
+    env: { CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE: 'true' },
+  });
+
+  const dreamDone = await waitFor(() => {
+    if (!existsSync(paths.lastDreamState)) return false;
+    const state = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+    return state.status && state.status !== 'running' && new Date(state.lastDreamAt).getTime() >= before;
+  });
+  check('AC5 底片写失败不阻塞散会链路：梦依然正常跑完', dreamDone);
+  const lastState = existsSync(paths.lastDreamState) ? JSON.parse(readFileSync(paths.lastDreamState, 'utf8')) : null;
+  check('梦本身状态 completed（底片故障没有连带搞垮拉梦逻辑）', lastState?.status === 'completed');
+
+  const negLedger = existsSync(paths.negativeLedger) ? JSON.parse(readFileSync(paths.negativeLedger, 'utf8')) : {};
+  check('AC5 红：注入生效时确实没有产出底片页（台账里没有这个 session 的记录）', !negLedger[sandboxSessionId('fault')]);
+  const negFilesAfterFault = existsSync(paths.negativesDir) ? readdirSync(paths.negativesDir) : [];
+  check('AC5 红：底片目录里没有产出任何 .md 页面（目录本身可能因 mkdir 而存在，但不该有页面）', !negFilesAfterFault.some((f) => f.endsWith('.md')), JSON.stringify(negFilesAfterFault));
+
+  check('AC5 错误留痕落点确实在底片目录之外', existsSync(paths.negativeErrorTrace) && path.dirname(paths.negativeErrorTrace) !== paths.negativesDir);
+  if (existsSync(paths.negativeErrorTrace)) {
+    const trace = readFileSync(paths.negativeErrorTrace, 'utf8');
+    check('错误留痕内容包含注入失败的原因', trace.includes('CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE'));
+  }
+
+  return sandbox;
+}
+
+async function testBackfillNegatives() {
+  // PBI-01.1·AC6：漏网场补捞。CLAUDE_CONFIG_DIR 指向临时目录，不碰真实 ~/.claude/projects/
+  // （沙箱纪律：不碰本仓库真实 .claude/，这里连全局 ~/.claude/ 都不能碰）。
+  console.log('\n=== PBI-01.1·AC6 漏网场补捞（D4 点烟：真造一场无结束事件的会话） ===');
+
+  const { backfillNegatives } = await import(pathToFileURL(path.join(SRC, 'negatives', 'backfill.mjs')).href);
+
+  const prevConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  const configDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-config-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-root-'));
+
+  try {
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    const encoded = root.replace(/[^a-zA-Z0-9]/g, '-');
+    const transcriptsDir = path.join(configDir, 'projects', encoded);
+    mkdirSync(transcriptsDir, { recursive: true });
+
+    const writeFakeTranscript = (sessionId, text, cwd) => {
+      const p = path.join(transcriptsDir, `${sessionId}.jsonl`);
+      const entry = { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } };
+      if (cwd !== undefined) entry.cwd = cwd;
+      writeFileSync(p, JSON.stringify(entry) + '\n', 'utf8');
+      return p;
+    };
+
+    // 场景①：一场真实的、够旧的、没触发过 SessionEnd 的会话——这是 AC6 要补的主角。
+    const missedId = 'missed-session-1';
+    const missedPath = writeFakeTranscript(missedId, 'BACKFILL-MARKER-missed');
+    const oldTime = new Date(Date.now() - 60 * 60 * 1000);
+    utimesSync(missedPath, oldTime, oldTime);
+
+    // 场景②：梦自己的会话，登记进 dreamSessionIdsLog——AC6①必须排除，不能自吞。
+    const dreamId = 'dream-own-session-1';
+    const dreamTranscriptPath = writeFakeTranscript(dreamId, '不该被压成底片');
+    utimesSync(dreamTranscriptPath, oldTime, oldTime);
+    mkdirSync(path.join(root, '.claude', 'dream'), { recursive: true });
+    writeFileSync(path.join(root, '.claude', 'dream', 'dream-session-ids.log'), dreamId + '\n', 'utf8');
+
+    // 场景③：mtime 是刚刚——大概率还在进行中的活会话，AC6②不得误冻。
+    const activeId = 'active-session-1';
+    writeFakeTranscript(activeId, '还在打字');
+
+    // 场景④（D3 review 抓到的坑）：目录编码规则是官方文档确认的多对一映射（非字母数字字符
+    // 全替换成 -），两个不同的真实路径可能编码到同一个 <projects>/<encoded>/ 目录——这里
+    // 模拟"同目录、但 cwd 字段记录的是另一个项目"，验证跨项目内容不会被误当成本项目的会话
+    // 压缩进本项目的底片目录（底片目录本就是因为涉隐私才特意排除入库的，泄漏更糟）。
+    const collisionId = 'collision-session-1';
+    const collisionPath = writeFakeTranscript(collisionId, '这其实是另一个项目的会话内容', 'C:\\SomeOtherProject-NotRoot');
+    utimesSync(collisionPath, oldTime, oldTime);
+
+    const summary = await backfillNegatives({ root });
+    const byId = Object.fromEntries((summary.results ?? []).map((r) => [r.sessionId, r.status]));
+
+    check('AC6 补捞：漏网会话确实产出底片（status=written）', byId[missedId] === 'written', JSON.stringify(byId));
+    check('AC6① 排除梦会话：梦自己的逐字稿被跳过、没压成底片', byId[dreamId] === 'skipped-dream-session');
+    check('AC6② 活稿判别：mtime 太新的会话没被误冻', byId[activeId] === 'skipped-active');
+    check('D3 修复：目录编码碰撞——cwd 对不上的逐字稿被跳过，不跨项目泄漏', byId[collisionId] === 'skipped-cwd-mismatch', JSON.stringify(byId));
+
+    const ledgerPath = path.join(root, '.claude', 'negatives', 'ledger.json');
+    const ledger = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) : {};
+    check('梦会话没有留下台账记录', !ledger[dreamId]);
+    check('活会话没有留下台账记录', !ledger[activeId]);
+    check('D3 修复：cwd 不匹配的会话没有留下台账记录、没有产出底片文件', !ledger[collisionId]);
+
+    // 验收打回抓到的坑（回归钉子）：ledger 原子写的 tmp 文件曾经落在 negativeDir 里，外部把
+    // negativeDir 当"稳定内容"目录去枚举时可能撞见这个瞬时文件，下一刻再开它就 ENOENT。
+    // 验证写完之后 negativeDir 目录枚举里干干净净、没有任何 .tmp 残留，且 tmp 目录确实换成了
+    // negativeDir 的同级兄弟目录（证明走的是新机制，不是巧合没撞上）。
+    const filesInNegativesDir = readdirSync(path.dirname(ledgerPath));
+    check('验收打回修复：negativeDir 目录枚举里不出现任何 .tmp 残留文件', !filesInNegativesDir.some((f) => f.endsWith('.tmp')), JSON.stringify(filesInNegativesDir));
+    const negativesTmpSiblingDir = path.join(root, '.claude', '.negatives-tmp');
+    check('验收打回修复：ledger 原子写的 tmp 目录确实换成了 negativeDir 的同级兄弟目录', existsSync(negativesTmpSiblingDir));
+
+    const missedPage = ledger[missedId]?.pages?.[0]?.file;
+    if (missedPage) {
+      const pageContent = readFileSync(path.join(root, '.claude', 'negatives', missedPage), 'utf8');
+      check('补捞产出的底片能按原文检索到标记话', pageContent.includes('BACKFILL-MARKER-missed'));
+    }
+
+    // AC6③ 补捞可重入：再跑一遍，漏网会话不该产生第二页。D3 review 第二轮起：走的是字节数
+    // 短路（ledger.lastProcessedBytes 命中），不是旧的整读判定——状态字符串换成
+    // skipped-no-new-by-size，专门证明短路真的生效了，不是碰巧殊途同归。
+    const summary2 = await backfillNegatives({ root });
+    const byId2 = Object.fromEntries((summary2.results ?? []).map((r) => [r.sessionId, r.status]));
+    check('AC6③ 补捞可重入：再跑一遍不产生第二页（幂等，命中字节数短路）', byId2[missedId] === 'skipped-no-new-by-size', JSON.stringify(byId2));
+
+    // D3 review 第二轮安全网：短路判据本身不能反过来吃掉真实的新内容。往同一份逐字稿追加
+    // 一行新内容（模拟"补捞过一次之后这场会话又有新动静"），字节数必然变了，第三次跑
+    // 不能再命中短路，必须老老实实整读、产出第二页、新内容一字不少。
+    appendFileSync(missedPath, JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'BACKFILL-MARKER-grown-after-shortcut' }] } }) + '\n', 'utf8');
+    utimesSync(missedPath, oldTime, oldTime); // 追加会把 mtime 刷新成"现在"，改回旧时间让它还是活稿判别里的"够旧"候选
+    const summary3 = await backfillNegatives({ root });
+    const byId3 = Object.fromEntries((summary3.results ?? []).map((r) => [r.sessionId, r.status]));
+    check('D3 安全网：字节数变化后短路不会误判，重新走完整路径', byId3[missedId] === 'written', JSON.stringify(byId3));
+    const ledgerAfterGrowth = JSON.parse(readFileSync(ledgerPath, 'utf8'));
+    const secondPage = ledgerAfterGrowth[missedId]?.pages?.[1]?.file;
+    check('D3 安全网：追加的新内容确实产出了第二页', Boolean(secondPage), JSON.stringify(ledgerAfterGrowth[missedId]));
+    if (secondPage) {
+      const secondPageContent = readFileSync(path.join(root, '.claude', 'negatives', secondPage), 'utf8');
+      check('D3 安全网：第二页能按原文检索到追加的新标记话，没有被短路吃掉', secondPageContent.includes('BACKFILL-MARKER-grown-after-shortcut'));
+    }
+
+    // AC6④：逐字稿已被清理——记账跳过、不报错。直接构造一个不存在的 transcript_path 场景，
+    // 复用 processSessionTranscript（backfill 与 session-end 共用同一条编排逻辑）。
+    const { processSessionTranscript } = await import(pathToFileURL(path.join(SRC, 'negatives', 'write-negative.mjs')).href);
+    const cleanedUpResult = await processSessionTranscript({
+      root,
+      sessionId: 'already-cleaned-up-session',
+      transcriptPath: path.join(root, 'does-not-exist-anymore.jsonl'),
+    });
+    check('AC6④ 逐字稿已被官方清理：记账跳过、不报错', cleanedUpResult.status === 'skipped-missing-transcript', JSON.stringify(cleanedUpResult));
+
+    // 验收打回抓到的坑：backfill 需要接受显式 transcriptsDir 覆盖，供验收考场重定向到自备的
+    // 沙箱逐字稿目录，不依赖 root 反推编码目录名。这里用一个跟 root 编码结果完全对不上的
+    // 独立目录验证：只传 transcriptsDir 也能扫到并处理里面的会话，且回显的扫描目录对得上。
+    const overrideTranscriptsDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-override-'));
+    try {
+      const overrideId = 'override-session-1';
+      const overridePath = path.join(overrideTranscriptsDir, `${overrideId}.jsonl`);
+      writeFileSync(overridePath, JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'BACKFILL-MARKER-transcriptsDir-override' }] } }) + '\n', 'utf8');
+      utimesSync(overridePath, oldTime, oldTime);
+
+      const overrideSummary = await backfillNegatives({ root, transcriptsDir: overrideTranscriptsDir });
+      const byIdOverride = Object.fromEntries((overrideSummary.results ?? []).map((r) => [r.sessionId, r.status]));
+      check('验收打回修复：backfill 的 transcriptsDir 覆盖参数确实生效（扫的是显式目录，不是编码推导目录）', byIdOverride[overrideId] === 'written', JSON.stringify(byIdOverride));
+      check('验收打回修复：transcriptsDir 覆盖后回显的扫描目录对得上传入值', overrideSummary.transcriptsDir === overrideTranscriptsDir, overrideSummary.transcriptsDir);
+    } finally {
+      rmSync(overrideTranscriptsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+
+    // 第二轮验收实锤的真回归：commands.sessionEnd 内部顺带触发的补捞没有 CLI flag 通道可用，
+    // 必须靠环境变量重定向——这里直接模拟那个场景：不传 transcriptsDir 参数（就像
+    // trigger-check.mjs 现有调用 backfillNegatives({root}) 那样），只设环境变量。夹具的
+    // cwd 字段故意写成跟 root 不一样的值，顺带验证「显式指定扫描目录时 cwd-mismatch 守卫
+    // 应该被跳过」——如果守卫没被正确跳过，这条会话会被误判成 skipped-cwd-mismatch 而不是
+    // written，测试能抓到；上面场景②的 collision-session-1（自动推导模式）不受影响，仍应
+    // 触发 skipped-cwd-mismatch，证明原有防跨项目泄漏能力没被一起弄丢。
+    const envOverrideTranscriptsDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-envoverride-'));
+    const prevTranscriptsDirEnv = process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR;
+    try {
+      const envOverrideId = 'env-override-session-1';
+      const envOverridePath = path.join(envOverrideTranscriptsDir, `${envOverrideId}.jsonl`);
+      const mismatchedCwd = 'C:\\SomeOtherProject-NotRoot-EnvOverrideCase';
+      writeFileSync(
+        envOverridePath,
+        JSON.stringify({ type: 'user', cwd: mismatchedCwd, message: { role: 'user', content: [{ type: 'text', text: 'BACKFILL-MARKER-env-transcripts-dir-override' }] } }) + '\n',
+        'utf8'
+      );
+      utimesSync(envOverridePath, oldTime, oldTime);
+
+      process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR = envOverrideTranscriptsDir;
+      const envOverrideSummary = await backfillNegatives({ root }); // 故意不传 transcriptsDir 参数，模拟 sessionEnd 内部调用
+      const byIdEnvOverride = Object.fromEntries((envOverrideSummary.results ?? []).map((r) => [r.sessionId, r.status]));
+      check('验收打回修复：CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR 环境变量在无显式参数时也能生效（模拟 sessionEnd 内部补捞）', byIdEnvOverride[envOverrideId] === 'written', JSON.stringify(byIdEnvOverride));
+      check('验收打回修复：环境变量覆盖模式下 cwd-mismatch 守卫被正确跳过，不误吞合法夹具', byIdEnvOverride[envOverrideId] !== 'skipped-cwd-mismatch', JSON.stringify(byIdEnvOverride));
+    } finally {
+      if (prevTranscriptsDirEnv === undefined) delete process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR;
+      else process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR = prevTranscriptsDirEnv;
+      rmSync(envOverrideTranscriptsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+  } finally {
+    if (prevConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = prevConfigDir;
+    rmSync(configDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
 }
 
 async function testConcurrentTriggerLock() {
@@ -258,8 +584,8 @@ async function testConcurrentTriggerLock() {
   const paths = dreamPaths(sandbox);
   console.log(`\n=== 并发触发防重（锁），沙箱: ${sandbox} ===`);
 
-  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
-  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: { cwd: sandbox } });
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'concurrent') });
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'concurrent') });
 
   const settled = await waitFor(() => {
     if (!existsSync(paths.lastDreamState)) return false;
@@ -302,6 +628,50 @@ async function testRogue() {
       'canUseTool 日志里有一条针对 ROGUE-TARGET.md 的 deny',
       invocations.some((i) => i.decision === 'deny' && i.input?.file_path?.includes('ROGUE-TARGET.md'))
     );
+    check(
+      '验收打回修复：日志条目的顶层 targetPath 字段也能独立定位到被拒路径',
+      invocations.some((i) => i.decision === 'deny' && typeof i.targetPath === 'string' && i.targetPath.includes('ROGUE-TARGET.md'))
+    );
+  }
+
+  return sandbox;
+}
+
+async function testRogueTargetsNegativesDir() {
+  // PBI-01.2·AC2（守卫类，D4 点烟）：梦对底片零写权。canUseTool 白名单结构上不含
+  // negativesDir（scope-guard.mjs 的 judgePath 只认 memory/dream/CLAUDE.md 三处），
+  // 这里不是读代码猜"应该拒绝"，是真让作恶模式指向 .claude/negatives/ 里的具体文件，
+  // 亲眼看它被拒、且拒绝日志里能看到这个路径。
+  const sandbox = makeSandbox('rogue-negatives');
+  console.log(`\n=== PBI-01.2·AC2 作恶模式指定目标为底片目录（D4 点烟），沙箱: ${sandbox} ===`);
+
+  const target = '.claude/negatives/rogue-attempt.md';
+  const result = runNode(path.join(SRC, 'run-dream.mjs'), ['--rogue', `--target=${target}`, sandbox], { cwd: sandbox });
+  check('指定底片目录为目标：rogue 模式跑完退出码为 0（越界被拒不算梦失败）', result.status === 0, result.stderr);
+
+  let summary = null;
+  try {
+    summary = JSON.parse(result.stdout);
+  } catch {
+    // ignore
+  }
+  check('summary.rogueTargetPath 确实是指定的底片目录路径', summary?.rogueTargetPath === target, JSON.stringify(summary?.rogueTargetPath));
+  check('AC2 红：指向底片目录的越界文件确实没有落盘', !existsSync(path.join(sandbox, target)));
+  check('summary.rogueBlocked 为 true', summary?.rogueBlocked === true);
+
+  if (summary?.runId) {
+    const logPath = path.join(sandbox, '.claude', 'dream', `${summary.runId}-canUseTool.log`);
+    const invocations = existsSync(logPath)
+      ? readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      : [];
+    check(
+      'AC2 拒绝日志里能看到该路径（底片目录内具体文件）',
+      invocations.some((i) => i.decision === 'deny' && i.input?.file_path?.replace(/\\/g, '/').includes('.claude/negatives/rogue-attempt.md'))
+    );
+    check(
+      '验收打回修复：日志条目的顶层 targetPath 字段也能独立定位到底片目录内具体文件',
+      invocations.some((i) => i.decision === 'deny' && typeof i.targetPath === 'string' && i.targetPath.replace(/\\/g, '/').includes('.claude/negatives/rogue-attempt.md'))
+    );
   }
 
   return sandbox;
@@ -335,7 +705,7 @@ async function testStaleLockDetection() {
   check('读不出 pid 的损坏锁按残留处理', isStaleLock(lockPath) === true);
 
   releaseLock(lockPath);
-  rmSync(tmpDir, { recursive: true, force: true });
+  rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 async function testCommitPathspecDoesNotSwallowHumanStaged() {
@@ -428,15 +798,73 @@ function testPluginManifestShape() {
   }
 }
 
+function testNegativesZeroApiAndCompressUnit() {
+  // AC2「验法写死：压缩链路不引用 Agent SDK」——静态源码检查，不是运行时行为断言：
+  // 直接读 negatives/ 目录下每个源文件，确认没有一处 import 了 SDK 包名。
+  console.log('\n=== PBI-01.1·AC2 零 API 静态检查 + compress.mjs 纯函数单测（不起会话） ===');
+
+  const negativesDir = path.join(SRC, 'negatives');
+  const sdkPackageName = '@anthropic-ai/claude-agent-sdk';
+  for (const file of readdirSync(negativesDir).filter((f) => f.endsWith('.mjs'))) {
+    const content = readFileSync(path.join(negativesDir, file), 'utf8');
+    check(`AC2 零 API：negatives/${file} 不引用 ${sdkPackageName}`, !content.includes(sdkPackageName));
+  }
+
+  return import(pathToFileURL(path.join(negativesDir, 'compress.mjs')).href).then(({ compressEntries }) => {
+    const marker = 'UNIT-TEST-MARKER-abc123';
+    const mixedMarker = 'MIXED-CONTENT-MARKER-xyz789';
+    const entries = [
+      { type: 'user', message: { role: 'user', content: [{ type: 'text', text: marker }] } },
+      { type: 'user', message: { role: 'user', content: [{ tool_use_id: 't1', type: 'tool_result', content: 'x'.repeat(500), is_error: false }] } },
+      { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'y'.repeat(500) }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: '回复文本' }] } },
+      { type: 'this-type-does-not-exist-yet', weird: true },
+      // D3 review 回归钉子：以前 tool_result 一出现就整条早退，同数组里的文本会被吞掉。
+      { type: 'user', message: { role: 'user', content: [{ tool_use_id: 't2', type: 'tool_result', content: 'ok', is_error: false }, { type: 'text', text: mixedMarker }] } },
+      // D3 review 回归钉子：assistant content 里没列举过的子类型（真实存在的 redacted_thinking）
+      // 以前会静默消失，现在要留一行可见的桩且计进 stats.subitemUnknownCount。
+      { type: 'assistant', message: { content: [{ type: 'redacted_thinking', data: 'REDACTED-MARKER-should-be-visible' }] } },
+      // D3 review 回归钉子：queue-operation 非 remove 以前无条件丢弃，包括未来才会出现的值——
+      // 现在只有 enqueue/dequeue/popAll 这三个核实过的值丢弃，其余走未知留痕。
+      { type: 'queue-operation', operation: 'enqueue', sessionId: 's1', timestamp: 't' },
+      { type: 'queue-operation', operation: 'future-unknown-op', sessionId: 's1', timestamp: 't' },
+      // D3 review 回归钉子：未知类型单条硬上限——超过 100KB 应截断，不是无限保真。
+      { type: 'oversized-unknown-type', blob: 'z'.repeat(200 * 1024) },
+    ];
+    const { markdown, stats } = compressEntries(entries);
+
+    check('AC3 用户文本原文保留（两种结构之一：content 数组含 text）', markdown.includes(marker));
+    check('AC3② 工具返回（以 user 角色记录）摘要化：不含完整 500 字正文', !markdown.includes('x'.repeat(500)));
+    check('AC3④ assistant thinking 摘要化：不含完整 500 字正文', !markdown.includes('y'.repeat(500)));
+    check('assistant 正文原样保留', markdown.includes('回复文本'));
+    check('AC3③ 未知类型保守保留＋留痕：标记 unknown 且原样带 raw', markdown.includes('UNKNOWN') && markdown.includes('this-type-does-not-exist-yet'));
+    check('stats.byKind.unknown 计数正确', stats.byKind.unknown >= 1, JSON.stringify(stats.byKind));
+
+    check('D3 回归：user 混合内容（tool_result+text）两者都保留，不早退丢文本', markdown.includes(mixedMarker));
+    check('D3 回归：assistant 未知子类型（redacted_thinking）留痕可见，不静默消失', markdown.includes('REDACTED-MARKER-should-be-visible'));
+    check('D3 回归：stats.subitemUnknownCount 反映未知子类型（不被 entry 整体 kind 盖住）', stats.subitemUnknownCount >= 1, JSON.stringify(stats));
+    // 全部 10 条 entries 里唯一该走 discard 的只有 enqueue 那一条（其余全是 retain/stub/unknown）——
+    // 精确等于 1 才说明 enqueue 真的被丢弃了，不是巧合凑出来的数字。
+    check('D3 回归：queue-operation 已知值（enqueue）仍无痕丢弃', stats.byKind.discard === 1, JSON.stringify(stats.byKind));
+    check('D3 回归：queue-operation 未知值走未知留痕，不再无条件丢弃', markdown.includes('future-unknown-op'));
+    check('D3 回归：超大未知类型条目按硬上限截断，不无限膨胀', markdown.includes('截断') && !markdown.includes('z'.repeat(150 * 1024)));
+  });
+}
+
 const sandboxes = [];
 try {
   testScopeGuardUnit();
   testPluginManifestShape();
+  await testNegativesZeroApiAndCompressUnit();
+  await testNegativesLargeTranscriptStress();
   await testNotebookEditFieldName();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
+  sandboxes.push(await testNegativesFaultInjection());
+  await testBackfillNegatives();
   sandboxes.push(await testConcurrentTriggerLock());
   sandboxes.push(await testRogue());
+  sandboxes.push(await testRogueTargetsNegativesDir());
   sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());
 } finally {
   const failed = results.filter((r) => !r.pass);
@@ -447,7 +875,16 @@ try {
   }
   console.log(`\n沙箱目录（失败时保留供排查，全绿可删）: ${sandboxes.join(', ')}`);
   if (!failed.length) {
-    for (const s of sandboxes) rmSync(s, { recursive: true, force: true });
+    for (const s of sandboxes) {
+      try {
+        // Windows 下 git.exe/杀毒软件等偶发地在进程刚退出那一刻仍占着文件句柄，rmSync 会报
+        // 瞬时性的 EPERM——maxRetries/retryDelay 是 Node 官方给这个场景的解法（间隔重试等锁自然释放）。
+        // 清理失败本身不该让一次全绿的测试跑报出非零退出码：这是收尾动作,不是断言。
+        rmSync(s, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (err) {
+        console.log(`（沙箱清理失败，忽略，不影响测试结果）: ${s} :: ${String(err?.message ?? err)}`);
+      }
+    }
   }
   process.exit(failed.length ? 1 : 0);
 }

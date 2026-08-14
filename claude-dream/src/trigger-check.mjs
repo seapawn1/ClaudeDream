@@ -1,76 +1,23 @@
 #!/usr/bin/env node
-// PBI-04.1·AC3 + PBI-04.2·AC1："分离进程判条件后跑 Agent SDK"——由 session-end.mjs detached 拉起。
-// 读冷却期状态，未到期就直接退出（不重复触发）；到期则落锁再跑梦，防并发重叠。
+// PBI-04.1·AC3 + PBI-04.2·AC1 + Sprint-2 PBI-01.1：由 session-end.mjs detached 拉起的分离进程。
+// 顺序职责：①先压底片（本场会话的逐字稿，零 API、零判断，AC5 故障不阻断后续）；
+// ②再读冷却期状态，未到期就直接退出（不重复触发）；③到期则落锁再跑梦，防并发重叠。
+// 顺序不能倒——注意点7「定序」要求底片写入先于梦启动，两者同源于散会事件、显式定序，
+// 不靠"反正压得快"这种时序侥幸。三步同在一个 detached 进程里顺序跑，不是两个进程互相赛跑。
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE, DEFAULT_COOLDOWN_MINUTES } from './lib/paths.mjs';
+import { isStaleLock, acquireLock, releaseLock } from './lib/proc-lock.mjs';
+import { processSessionTranscript } from './negatives/write-negative.mjs';
+import { backfillNegatives } from './negatives/backfill.mjs';
 import { runDream } from './run-dream.mjs';
 
-// D3 review 抓到的坑：原来的"锁"只是"读冷却期时间戳、没到期就写 running"——纯 check-then-write，
-// 两个 SessionEnd 靠得够近时能同时读到"还没人在跑"，然后都往下走，跑出两场并发的梦、两遍互相打架的 git
-// commit。冷却期检查留着当快速路径（大多数时候不会真的撞上，没必要每次都走一遍系统调用），但真正的互斥
-// 靠这把锁：'wx' 是排他创建，文件已存在就抛 EEXIST——这一步是原子的，检查和创建没有中间状态可插队。
-// D3 review 二轮抓到的坑：openSync 成功但后面 writeFileSync/closeSync 失败（少见，但真实存在——磁盘满、
-// 权限变化中途发生等）时，锁文件已经在磁盘上创建了，原来的写法会把这个非 EEXIST 错误再抛出去，
-// 但没人负责删这个半成品锁文件——之后所有触发都会一直撞见"锁已存在"，梦从此再也跑不起来，
-// 且没有人值守能发现。改成：非 EEXIST 的失败也当成"这次没拿到锁"处理，同时把可能已创建的残留清掉，
-// 不让一次偶发 I/O 错误变成永久性卡死。
-// 三轮补上最后一块：EEXIST 不一定代表"有人在跑"，也可能是上一场梦硬死（kill -9 / 断电 / OOM）没走到
-// finally 的 releaseLock 留下的残留。锁里记了持锁进程的 pid，进程死了 pid 就查无此进程——据此区分活锁
-// 和死锁残留，残留就清掉重抢，崩溃后无需人工干预也能自愈，同时不会误抢活锁引发并发（见 isStaleLock）。
-export function isStaleLock(lockPath) {
-  let pid = null;
-  try {
-    const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
-    pid = lock?.pid;
-  } catch {
-    // 读不出（空/半写）：可能是活锁正被 writeFileSync 写入的极窄窗口，也可能真损坏。重读一次再判，
-    // 避免把"刚创建还没写完"的活锁误判成残留删掉（复审发现的 TOCTOU：创建与写入之间另一个进程读到空）。
-    const until = Date.now() + 10;
-    while (Date.now() < until) { /* 忙等 10ms，让正在写入的持锁者写完 */ }
-    try {
-      const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
-      pid = lock?.pid;
-    } catch {
-      return true; // 重读仍读不出，按残留处理——比永久卡死强
-    }
-  }
-  if (typeof pid !== 'number' || pid <= 0) {
-    return true; // 没有有效 pid 可判，按残留处理
-  }
-  try {
-    process.kill(pid, 0);
-    return false; // 没抛错 = 进程还活着（或存在但无权限），不是残留，别抢
-  } catch (err) {
-    return err?.code === 'ESRCH'; // ESRCH = 查无此进程 = 残留；EPERM 等 = 进程存在
-  }
-}
-
-export function acquireLock(lockPath) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      // 'wx' 单调用：不存在则创建并写入，存在则抛 EEXIST 不碰文件——比 openSync('wx') + write + close
-      // 三步少了"已创建空文件、还没写 pid"的中间态（复审发现的非原子窗口），跨进程撞窗概率收窄到最小。
-      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }), { flag: 'wx' });
-      return true;
-    } catch (err) {
-      if (err?.code === 'EEXIST' && isStaleLock(lockPath)) {
-        rmSync(lockPath, { force: true }); // 崩溃残留：清掉重抢一次，让触发链自愈
-        continue;
-      }
-      if (err?.code !== 'EEXIST') {
-        rmSync(lockPath, { force: true }); // 非 EEXIST 的 I/O 失败：清掉可能已创建的半成品锁
-      }
-      return false;
-    }
-  }
-  return false;
-}
-
-export function releaseLock(lockPath) {
-  rmSync(lockPath, { force: true });
-}
+// 锁的 pid 存活判定逻辑（D3 三轮 review 磨出来的：check-then-write 非原子、非 EEXIST 失败要清残留、
+// EEXIST 不代表活锁可能是崩溃残留……）已抽到 lib/proc-lock.mjs——Sprint-2 台账写入
+// （negatives/ledger.mjs）要用同一套语义，这里重导出，保持这三个名字可从本文件 import 不变
+// （self-test.mjs 现有引用不用跟着改）。
+export { isStaleLock, acquireLock, releaseLock };
 
 async function main() {
   if (process.env[RECURSION_GUARD_ENV] === RECURSION_GUARD_VALUE) {
@@ -78,8 +25,47 @@ async function main() {
   }
 
   const root = process.argv[2] || process.cwd();
+  const sessionId = process.argv[3];
+  const transcriptPath = process.argv[4];
   const paths = dreamPaths(root);
   mkdirSync(paths.dreamDir, { recursive: true });
+
+  // PBI-01.1：先压本场会话的底片，无论后面冷却期判断结果如何——底片是每场会话都该有的，
+  // 不受"这次要不要拉梦"影响。sessionId/transcriptPath 缺失（例如直接 CLI 调试本文件）时
+  // 跳过压缩，不影响后续冷却/拉梦逻辑，仅当作没有会话身份信息可用。
+  // AC5：压缩过程本身的任何异常都不能向上抛——故障不阻断散会链路，写失败静默降级。
+  if (sessionId && transcriptPath) {
+    try {
+      await processSessionTranscript({ root, sessionId, transcriptPath });
+    } catch (err) {
+      try {
+        appendFileSync(
+          paths.negativeErrorTrace,
+          JSON.stringify({ ts: new Date().toISOString(), context: 'trigger-check-negative-step', error: String(err?.message ?? err) }) + '\n',
+          'utf8'
+        );
+      } catch {
+        // 连留痕都失败：不再重试，继续往下走冷却/拉梦逻辑，AC5 的底线是不阻断后续。
+      }
+    }
+  }
+
+  // AC6：漏网场补捞——「下一个机械触发点」就是这里，每次散会都顺带扫一遍这个项目名下
+  // 还没处理过的逐字稿。每个已覆盖的会话在 processSessionTranscript 里都是 O(1) 的台账
+  // 命中判断，不会让这一步显著拖慢检查链路。同样不允许向上抛出去阻断后续逻辑。
+  try {
+    await backfillNegatives({ root });
+  } catch (err) {
+    try {
+      appendFileSync(
+        paths.negativeErrorTrace,
+        JSON.stringify({ ts: new Date().toISOString(), context: 'trigger-check-backfill-step', error: String(err?.message ?? err) }) + '\n',
+        'utf8'
+      );
+    } catch {
+      // 同上，留痕失败也不阻断。
+    }
+  }
 
   // 「0=关掉冷却」是合法语义（冷却期可配置，0 分钟=每次会话结束都触发）。原写法 Number(env) || 默认
   // 会把 0 当 falsy 吞成默认 30 分钟——JS 的 || 陷阱，不是设计。显式判：未设置/非法/负数回退默认，其余含 0 照用。
@@ -112,7 +98,9 @@ async function main() {
 
   try {
     writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), status: 'running' }, null, 2), 'utf8');
-    const summary = await runDream({ root });
+    // PBI-01.2·AC1：把触发本次梦的 sessionId 带给 runDream，报告里的进料对账行才有据可查——
+    // 底片写入（本函数顶部第①步）与这里显式定序，不是两个互不相关的动作凑巧都发生了。
+    const summary = await runDream({ root, triggeringSessionId: sessionId });
     writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), status: 'completed', summary }, null, 2), 'utf8');
   } catch (err) {
     writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), status: 'failed', error: String(err?.message ?? err) }, null, 2), 'utf8');
