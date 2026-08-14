@@ -8,12 +8,13 @@
 //  - AC4 防递归（CLAUDE_INVOKED_BY 设置时 hook 直接 no-op）
 //  - 故障注入（rogue）：越界写入确实被拒、不落盘
 //  - PBI-01.1：底片一场一文件 + 幂等（重复触发不产第二页）+ 规则表纯函数单测（含未知类型留痕）+ AC2 零 API 静态检查
+//  - PBI-01.1·AC4：超大稿压力测试（合成 20MB 逐字稿，验流式处理不崩 + 压缩比不失控）
 //  - PBI-01.1·AC5：底片写失败故障注入（D4 点烟）
 //  - PBI-01.1·AC6：漏网场补捞（排除梦会话/活稿判别/可重入/清理跳过，D4 点烟）
 //  - PBI-01.2·AC3：埋标记话，验证底片里按原文检索得到
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync, createWriteStream, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -159,6 +160,55 @@ function testScopeGuardUnit() {
     '第二轮 review 实测出的漏洞⑤（回归钉子）：PowerShell 数组子表达式 @(...)，真跑会执行里面的命令',
     !judgeShell('git log @(New-Item pwned.txt)').allow
   );
+}
+
+async function testNegativesLargeTranscriptStress() {
+  // PBI-01.1·AC4：超大稿有声明的行为（本实现选了流式处理，不设人为体积上限）——这条测的
+  // 不是"代码里写了流式"，是"真造一份比本仓库现存最大逐字稿更大的合成稿，实测流式处理
+  // 不崩、压缩比仍在 10% 预算内"。多数条目是大 tool_result（模拟读大文件的返回），这既是
+  // 真实场景体积的最大头，也是"丢弃大正文、留桩"这条规则真正被大量数据考验的地方。
+  console.log('\n=== PBI-01.1·AC4 超大稿压力测试（流式处理 + 压缩比不失控） ===');
+
+  const { processSessionTranscript } = await import(pathToFileURL(path.join(SRC, 'negatives', 'write-negative.mjs')).href);
+
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-largefile-'));
+  const transcriptPath = path.join(root, 'large-transcript.jsonl');
+  const sessionId = 'large-session-1';
+
+  const targetBytes = 20 * 1024 * 1024; // 20MB，本仓库实测现存最大约 10MB 的两倍
+  const bigBody = 'x'.repeat(50000); // 模拟一次读大文件的工具返回，50KB/条
+  await new Promise((resolve, reject) => {
+    const ws = createWriteStream(transcriptPath, { encoding: 'utf8' });
+    let written = 0;
+    let i = 0;
+    ws.on('error', reject);
+    ws.on('finish', resolve);
+    while (written < targetBytes) {
+      const lines =
+        JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: `第 ${i} 轮：请读一下这个文件` }] } }) + '\n' +
+        JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `t${i}`, name: 'Read', input: { file_path: `/fake/file-${i}.txt` } }] } }) + '\n' +
+        JSON.stringify({ type: 'user', message: { content: [{ tool_use_id: `t${i}`, type: 'tool_result', content: bigBody, is_error: false }] } }) + '\n';
+      ws.write(lines);
+      written += lines.length;
+      i++;
+    }
+    ws.end();
+  });
+
+  const actualBytes = statSync(transcriptPath).size;
+  console.log(`合成逐字稿实际体积：${(actualBytes / 1024 / 1024).toFixed(1)} MB`);
+
+  const start = Date.now();
+  const result = await processSessionTranscript({ root, sessionId, transcriptPath });
+  const elapsedMs = Date.now() - start;
+
+  check('AC4 大稿处理成功（流式读取未崩溃）', result.status === 'written', JSON.stringify({ status: result.status, reason: result.reason }));
+  if (result.status === 'written') {
+    check('AC4 压缩比在 10% 预算内（锚：现成件实测约 1.8%，本实现留有余量）', result.ratio <= 0.1, `实际 ratio=${(result.ratio * 100).toFixed(2)}%`);
+    console.log(`处理耗时 ${elapsedMs}ms，压缩后 ${(result.compressedBytes / 1024).toFixed(1)} KB`);
+  }
+
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 async function testNotebookEditFieldName() {
@@ -682,6 +732,7 @@ try {
   testScopeGuardUnit();
   testPluginManifestShape();
   await testNegativesZeroApiAndCompressUnit();
+  await testNegativesLargeTranscriptStress();
   await testNotebookEditFieldName();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
