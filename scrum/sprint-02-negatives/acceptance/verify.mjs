@@ -243,7 +243,22 @@ function runSessionEnd(sessionId, { env = {}, transcriptOverride } = {}) {
   const payload = sessionId === null ? '' : (transcriptOverride
     ? JSON.stringify({ session_id: sessionId, transcript_path: transcriptOverride, cwd: LAB })
     : sessionEndPayload(sessionId))
-  return runCmdWithStdin(sessionEnd, payload, { env })
+  return runCmdWithStdin(sessionEnd, payload, { env: { ...backfillTranscriptsEnv(), ...env } })
+}
+
+// sessionEnd 只吃 stdin JSON、没有 CLI flag 通道，它内部顺带触发的补捞只能靠环境变量重定向
+// 扫描目录（否则落回自动推导、扫真实 ~/.claude/projects——第二轮验收暴露的真回归）。
+// 环境变量名由 adapter.backfill.transcriptsDirOverrideEnvVar 声明。
+function backfillTranscriptsEnv() {
+  const name = adapter.backfill?.transcriptsDirOverrideEnvVar
+  return name ? { [name]: TRANSCRIPTS } : {}
+}
+
+// H-D2 要验「对账行含触发本场梦的会话 session id」，得给 runDream 显式指定触发会话；
+// flag 由 adapter.report.triggeringSessionCliFlag 声明（<...> 占位替换成 MAIN 的 session id）。
+function triggeringSessionFlag() {
+  const flag = adapter.report?.triggeringSessionCliFlag
+  return flag ? ` ${flag.replace(/<[^>]+>/, SESSION_IDS.MAIN)}` : ''
 }
 
 function runBackfill(env = {}) {
@@ -445,7 +460,7 @@ function scenarioD() {
   if (!runDream) {
     for (const id of ['H-D1', 'H-D2']) fail(id, 'adapter 未声明 commands.runDream')
   } else {
-    const r = runCmd(runDream)
+    const r = runCmd(runDream + triggeringSessionFlag())
     const reportGlob = path_('reportGlob')
     const reports = reportGlob ? findFiles(reportGlob) : []
     if (!reportGlob || reports.length === 0) {
@@ -616,6 +631,7 @@ async function scenarioH() {
       const out = execSync(resolveCmdPaths(sessionEnd), {
         cwd: LAB, encoding: 'utf8', input: sessionEndPayload(sessionId),
         stdio: ['pipe', 'pipe', 'pipe'], timeout: adapter.timeoutMs ?? 300000,
+        env: { ...process.env, ...backfillTranscriptsEnv() },
       })
       resolve({ ok: true, out })
     } catch (err) {
