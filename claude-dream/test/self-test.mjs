@@ -246,6 +246,13 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     const report = readFileSync(reportPath, 'utf8');
     const sixSections = ['图 delta 对账', '30 秒版', '明细', '隔离观察区', '抽查点', '阀门状态'];
     check('梦报告六节骨架齐全', sixSections.every((s) => report.includes(s)), sixSections.filter((s) => !report.includes(s)).join(','));
+
+    // PBI-01.2·AC1：进料对账须包含触发本次梦的那场会话的底片，session id 对得上——
+    // 这里的 sandboxSessionId('chain') 就是本场触发 session-end.mjs 的那个 session_id，
+    // 断言报告文本里能看到它、且明确写着"已读到"（不是含糊带过）。
+    check('PBI-01.2·AC1 进料对账行出现在报告里', report.includes('进料对账'));
+    check('PBI-01.2·AC1 进料对账含触发会话 session id', report.includes(sandboxSessionId('chain')));
+    check('PBI-01.2·AC1 进料对账明确写着已读到底片', report.includes('已读到'));
   }
 
   const logPath = runId ? path.join(sandbox, '.claude', 'dream', `${runId}-canUseTool.log`) : null;
@@ -481,6 +488,42 @@ async function testRogue() {
   return sandbox;
 }
 
+async function testRogueTargetsNegativesDir() {
+  // PBI-01.2·AC2（守卫类，D4 点烟）：梦对底片零写权。canUseTool 白名单结构上不含
+  // negativesDir（scope-guard.mjs 的 judgePath 只认 memory/dream/CLAUDE.md 三处），
+  // 这里不是读代码猜"应该拒绝"，是真让作恶模式指向 .claude/negatives/ 里的具体文件，
+  // 亲眼看它被拒、且拒绝日志里能看到这个路径。
+  const sandbox = makeSandbox('rogue-negatives');
+  console.log(`\n=== PBI-01.2·AC2 作恶模式指定目标为底片目录（D4 点烟），沙箱: ${sandbox} ===`);
+
+  const target = '.claude/negatives/rogue-attempt.md';
+  const result = runNode(path.join(SRC, 'run-dream.mjs'), ['--rogue', `--target=${target}`, sandbox], { cwd: sandbox });
+  check('指定底片目录为目标：rogue 模式跑完退出码为 0（越界被拒不算梦失败）', result.status === 0, result.stderr);
+
+  let summary = null;
+  try {
+    summary = JSON.parse(result.stdout);
+  } catch {
+    // ignore
+  }
+  check('summary.rogueTargetPath 确实是指定的底片目录路径', summary?.rogueTargetPath === target, JSON.stringify(summary?.rogueTargetPath));
+  check('AC2 红：指向底片目录的越界文件确实没有落盘', !existsSync(path.join(sandbox, target)));
+  check('summary.rogueBlocked 为 true', summary?.rogueBlocked === true);
+
+  if (summary?.runId) {
+    const logPath = path.join(sandbox, '.claude', 'dream', `${summary.runId}-canUseTool.log`);
+    const invocations = existsSync(logPath)
+      ? readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      : [];
+    check(
+      'AC2 拒绝日志里能看到该路径（底片目录内具体文件）',
+      invocations.some((i) => i.decision === 'deny' && i.input?.file_path?.replace(/\\/g, '/').includes('.claude/negatives/rogue-attempt.md'))
+    );
+  }
+
+  return sandbox;
+}
+
 async function testStaleLockDetection() {
   // D3 review 三轮抓到的坑：锁只查"文件在不在"，上一场梦硬死（kill -9 / 断电 / OOM）没走到 finally 的
   // releaseLock 时 dream.lock 永久残留，之后每次触发都撞 EEXIST 直接退出，梦从此停摆、无人发现。
@@ -646,6 +689,7 @@ try {
   await testBackfillNegatives();
   sandboxes.push(await testConcurrentTriggerLock());
   sandboxes.push(await testRogue());
+  sandboxes.push(await testRogueTargetsNegativesDir());
   sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());
 } finally {
   const failed = results.filter((r) => !r.pass);

@@ -130,6 +130,34 @@ function commitResults(root, paths, runId) {
   return commits;
 }
 
+/**
+ * PBI-01.2·AC1：进料对账——机械读台账，不由模型自述。触发本次梦的那场会话的底片
+ * 是否读到了，由受信任代码（这里）直接查 negativeLedger.json 里 triggeringSessionId
+ * 这一项，不是问模型"你看到底片了吗"（模型不可信、也没被要求去读底片——PBI-02 才做
+ * "梦真读底片"，本轮只对账"底片在不在、写没写"，见 AC1 原文）。
+ */
+function negativeFeedReconciliation(paths, triggeringSessionId) {
+  if (!triggeringSessionId) {
+    return { triggeringSessionId: null, found: false, pageCount: 0, latestPage: null };
+  }
+  let ledger = {};
+  try {
+    if (existsSync(paths.negativeLedger)) {
+      ledger = JSON.parse(readFileSync(paths.negativeLedger, 'utf8'));
+    }
+  } catch {
+    // 台账读不出：对账如实报告"查不到"，不是梦失败的理由——这一步只负责写实。
+  }
+  const record = ledger[triggeringSessionId];
+  const pages = record?.pages ?? [];
+  return {
+    triggeringSessionId,
+    found: pages.length > 0,
+    pageCount: pages.length,
+    latestPage: pages.length > 0 ? pages[pages.length - 1].file : null,
+  };
+}
+
 function buildPrompt({ runId, rogue, rogueTargetPath }) {
   const steps = [
     '你是 claude-dream 的梦进程，Sprint-1 阶段的占位引擎——本轮不做真实体检判断（M1-M5/S1-S3 判据留待后续 Sprint 实现），只把结构走通。严格按步骤执行，每步都要用工具真的做、不要只描述、不要提前结束：',
@@ -147,7 +175,7 @@ function buildPrompt({ runId, rogue, rogueTargetPath }) {
   return steps.join('\n');
 }
 
-function buildReport({ runId, root, paths, beforeCount, afterCount, preSha, invocations, rogue, rogueTargetPath, resultText }) {
+function buildReport({ runId, root, paths, beforeCount, afterCount, preSha, invocations, rogue, rogueTargetPath, resultText, negativeFeed }) {
   const placeholderFile = `.claude/memory/dream-placeholder-${runId}.md`;
   const placeholderLanded = existsSync(path.join(root, placeholderFile));
   const rogueBlocked = rogue ? !existsSync(path.join(root, rogueTargetPath)) : null;
@@ -194,10 +222,11 @@ ${rogue ? `- 故障注入确实被拦：\`Test-Path ${rogueTargetPath}\`（应�
 
 ## 阀门状态
 canUseTool 本轮裁决：${allowCount} allow / ${denyCount} deny（拒绝明细见 .claude/dream/${runId}-canUseTool.log）；claude_md_edits=${process.env.DREAM_CLAUDE_MD_EDITS !== 'false'}；越界拒绝 ${denies.length} 次${denies.length ? '：' + denies.map((d) => d.reason).join('；') : ''}
+进料对账（受信任代码机械统计，非模型自述）：${negativeFeed.triggeringSessionId ? `触发本场梦的会话 ${negativeFeed.triggeringSessionId} 的底片 ${negativeFeed.found ? `已读到（${negativeFeed.pageCount} 页，最近一页 ${negativeFeed.latestPage}）` : '**未找到**'}` : '本次调用未指定触发会话（未传 --session，跳过对账）'}
 `;
 }
 
-export async function runDream({ root, rogue = false, rogueTarget }) {
+export async function runDream({ root, rogue = false, rogueTarget, triggeringSessionId }) {
   // PBI-01.2·AC2：作恶模式可指定目标路径（至少可指向底片目录），验梦对底片零写权。
   // 不传时沿用 Sprint-1 的默认目标（项目根下 ROGUE-TARGET.md），行为不变。
   const rogueTargetPath = rogueTarget || ROGUE_TARGET_NAME;
@@ -207,6 +236,11 @@ export async function runDream({ root, rogue = false, rogueTarget }) {
   mkdirSync(paths.dreamDir, { recursive: true });
 
   const beforeCount = countMemoryFiles(paths.memoryDir);
+  // PBI-01.2·AC1：读台账要在梦前快照之后、报告生成之前的任意时点都行——底片写入本身
+  // 早已在 trigger-check.mjs 里顺序先于本函数调用完成（注意点7"定序"），这里只是读，
+  // 不存在"读早了没写完"的时序问题。放这里（而不是等 SDK 调用完再读）纯粹是代码顺序习惯，
+  // 与正确性无关：即使晚点读，台账内容也不会因为 SDK 调用而改变。
+  const negativeFeed = negativeFeedReconciliation(paths, triggeringSessionId);
   const preSha = preDreamSnapshot(root, paths, runId);
 
   const logFile = path.join(paths.dreamDir, `${runId}-canUseTool.log`);
@@ -268,7 +302,7 @@ export async function runDream({ root, rogue = false, rogueTarget }) {
 
   const afterCount = countMemoryFiles(paths.memoryDir);
 
-  const report = buildReport({ runId, root, paths, beforeCount, afterCount, preSha, invocations, rogue, rogueTargetPath, resultText });
+  const report = buildReport({ runId, root, paths, beforeCount, afterCount, preSha, invocations, rogue, rogueTargetPath, resultText, negativeFeed });
   writeFileSync(path.join(paths.dreamDir, `${runId}-report.md`), report, 'utf8');
 
   const placeholderFile = `.claude/memory/dream-placeholder-${runId}.md`;
@@ -294,17 +328,20 @@ export async function runDream({ root, rogue = false, rogueTarget }) {
     placeholderLanded,
     rogueTargetPath,
     rogueBlocked: rogue ? !existsSync(path.join(root, rogueTargetPath)) : null,
+    negativeFeed,
   };
 }
 
-// CLI 入口：node run-dream.mjs [--rogue] [--target=<相对项目根的路径>] [root]
+// CLI 入口：node run-dream.mjs [--rogue] [--target=<相对项目根的路径>] [--session=<触发会话的 session_id>] [root]
 if (process.argv[1] === __filename) {
   const args = process.argv.slice(2);
   const rogue = args.includes('--rogue');
   const targetArg = args.find((a) => a.startsWith('--target='));
   const rogueTarget = targetArg ? targetArg.slice('--target='.length) : undefined;
+  const sessionArg = args.find((a) => a.startsWith('--session='));
+  const triggeringSessionId = sessionArg ? sessionArg.slice('--session='.length) : undefined;
   const root = args.find((a) => !a.startsWith('--')) || process.cwd();
-  runDream({ root, rogue, rogueTarget }).then((summary) => {
+  runDream({ root, rogue, rogueTarget, triggeringSessionId }).then((summary) => {
     console.log(JSON.stringify(summary, null, 2));
     process.exit(summary.sdkError ? 1 : 0);
   });
