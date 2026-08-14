@@ -73,20 +73,23 @@ export function createCanUseTool({ root, logFile }) {
       // 后果是"fail safe"（不会放行任何东西），但判断依据是错的，且从没被跑到过（占位引擎不用这个工具）。
       const targetPath = toolName === 'NotebookEdit' ? input.notebook_path : input.file_path;
       const { allow, reason } = judgePath(targetPath ?? '', root);
-      log({ ...base, decision: allow ? 'allow' : 'deny', reason });
+      // 第二轮验收：被拒的具体路径此前只藏在 input 字段里、或碰运气出现在 reason 文案的字符串
+      // 拼接里，没有一个独立、稳定的字段名能直接取。补一个顶层 targetPath——不管 reason 怎么写、
+      // input 结构长什么样，路径都有固定地方能读到。
+      log({ ...base, targetPath: targetPath ?? null, decision: allow ? 'allow' : 'deny', reason });
       return allow
         ? { behavior: 'allow', updatedInput: input }
         : { behavior: 'deny', message: reason };
     }
     if (SHELL_TOOLS.has(toolName)) {
       const { allow, reason } = judgeShell(input.command);
-      log({ ...base, decision: allow ? 'allow' : 'deny', reason });
+      log({ ...base, targetPath: null, decision: allow ? 'allow' : 'deny', reason });
       return allow
         ? { behavior: 'allow', updatedInput: input }
         : { behavior: 'deny', message: reason };
     }
     const reason = `梦进程不发放此工具: ${toolName}`;
-    log({ ...base, decision: 'deny', reason });
+    log({ ...base, targetPath: null, decision: 'deny', reason });
     return { behavior: 'deny', message: reason };
   };
 }

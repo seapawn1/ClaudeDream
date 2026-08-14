@@ -78,15 +78,22 @@ function loadDreamSessionIds(paths) {
  * @param {string} opts.root 项目根目录
  * @param {string} [opts.transcriptsDir] 显式指定扫描目录，覆盖「按 root 反推编码目录名」的
  *   默认推导——验收考场需要把 backfill 指向自备的沙箱逐字稿目录，跳过对真实
- *   ~/.claude/projects/<编码> 的依赖。提供时连带跳过下面的长度上限检查（那条检查只保护
- *   自动推导路径，显式传入的目录不受它管）；root/cwd 仍照常决定 negativeDir/ledger 等
- *   产出落点，两者互不影响。
+ *   ~/.claude/projects/<编码> 的依赖。不传时回退读 CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR
+ *   环境变量（同一个覆盖口径，供 commands.sessionEnd 这种只吃 stdin JSON、没有 CLI flag
+ *   通道的调用方用——子进程默认继承父进程环境变量，考场只需在起 sessionEnd 那个进程上设
+ *   这个变量即可透传到它内部顺带触发的补捞，不用改 session-end.mjs/trigger-check.mjs 一行代码；
+ *   第二轮验收实锤的真回归——sessionEnd 内部补捞此前没有任何重定向通道，落回自动推导扫了
+ *   真实 ~/.claude/projects，把历史会话底片污染进了考场）。两种途径提供时都连带跳过下面的
+ *   长度上限检查（那条检查只保护自动推导路径）与 cwd-mismatch 碰撞守卫（那条守卫防的是
+ *   "按 root 反推编码目录发生多对一碰撞"，显式指定扫描目录时调用方已经明确知道要扫哪里，
+ *   碰撞前提不存在）；root/cwd 仍照常决定 negativeDir/ledger 等产出落点，两者互不影响。
  * @returns {Promise<object>} 扫描摘要，含每个候选会话的处理结果
  */
 export async function backfillNegatives({ root, transcriptsDir: transcriptsDirOverride } = {}) {
   const paths = dreamPaths(root);
 
-  let transcriptsDir = transcriptsDirOverride;
+  let transcriptsDir = transcriptsDirOverride || process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR || undefined;
+  const isExplicitTranscriptsDir = Boolean(transcriptsDir);
   if (!transcriptsDir) {
     const encoded = encodedProjectDir(root);
     if (encoded.length > MAX_ENCODED_LENGTH) {
@@ -161,15 +168,21 @@ export async function backfillNegatives({ root, transcriptsDir: transcriptsDirOv
     // 目录编码碰撞防线（D3 review）：这份逐字稿自己记录的 cwd 跟 root 对不上，说明它属于
     // 另一个编码到同一目录名的项目——跳过，不把别人的会话内容压缩进这个项目的底片目录。
     // peek 不出 cwd（罕见——前 20 行都没有该字段）时保守放行，不因为读不到就不敢处理正常数据。
-    let entryCwd;
-    try {
-      entryCwd = await peekTranscriptCwd(transcriptPath);
-    } catch {
-      entryCwd = null;
-    }
-    if (entryCwd && normalizeForCompare(entryCwd) !== normalizeForCompare(root)) {
-      results.push({ sessionId, status: 'skipped-cwd-mismatch', entryCwd });
-      continue;
+    // 第二轮验收抓到的坑：这条守卫只对"按 root 反推编码目录"的自动推导路径有意义（碰撞是
+    // 编码规则的多对一映射造成的）；transcriptsDir 由调用方显式指定时，调用方已经明确知道
+    // 要扫哪个目录，不存在"猜错目录撞上别的项目"这回事，继续套用这条守卫反而会把 cwd 字段
+    // 跟 root 参数碰巧不一致的合法夹具（比如验收考场的合成逐字稿）误判成跨项目内容而丢弃。
+    if (!isExplicitTranscriptsDir) {
+      let entryCwd;
+      try {
+        entryCwd = await peekTranscriptCwd(transcriptPath);
+      } catch {
+        entryCwd = null;
+      }
+      if (entryCwd && normalizeForCompare(entryCwd) !== normalizeForCompare(root)) {
+        results.push({ sessionId, status: 'skipped-cwd-mismatch', entryCwd });
+        continue;
+      }
     }
 
     // AC6④（逐字稿已被官方清理跳过不报错）与 AC6③（台账原子写、补捞可重入）都由

@@ -77,13 +77,14 @@
     "_writeFailureEnv_note": "PBI-01.1·AC5（守卫类，D4 点烟）：把 writeFailureEnv 指名的环境变量设为字符串 true（即 writeFailureEnvTruthyValue，代码按精确字符串比较，不是宽泛 truthy）时，底片写入在正要落盘那一刻抛出注入的错误，验证——降级不阻断散会链路（梦依旧正常跑完）、底片目录没有多出页面、错误留痕落在 paths.errorTrace（底片目录之外）且含注入原因。"
   },
   "backfill": {
-    "_note": "PBI-01.1·AC6：漏网场补捞。每次 commands.sessionEnd 触发的分离进程都会顺带跑一次（『下一个机械触发点』），commands.backfill 亦可单独调用做同样的事。",
+    "_note": "PBI-01.1·AC6：漏网场补捞。每次 commands.sessionEnd 触发的分离进程都会顺带跑一次（『下一个机械触发点』），commands.backfill 亦可单独调用做同样的事——两条路径要重定向扫描目录都得用 transcriptsDirOverrideEnvVar（sessionEnd 没有 CLI flag 通道），commands.backfill 额外可用 transcriptsDirOverrideCliFlag。",
     "staleMinutesEnvVar": "CLAUDE_DREAM_BACKFILL_STALE_MINUTES",
     "defaultStaleMinutes": 30,
     "staleSemantics": "会话逐字稿的 mtime 距今 < staleMinutes 视为『可能还在进行』，本轮跳过不碰（AC6②活稿判别）；≥ staleMinutes 才纳入补捞候选。",
     "transcriptsDirFormula": "<CLAUDE_CONFIG_DIR 或 ~/.claude>/projects/<项目工作目录路径将非字母数字字符替换为 - 后的编码>，官方文档 sessions#where-transcripts-are-stored 明写的规则，已用真实目录名核对过。",
     "transcriptsDirOverrideCliFlag": "--transcripts-dir=<绝对路径>",
-    "_transcriptsDirOverride_note": "验收考场重定向用：提供该参数时 backfillNegatives 跳过按 root 反推编码目录名的默认推导（连带跳过 MAX_ENCODED_LENGTH 长度上限检查，那条检查只保护自动推导路径），直接扫描给定目录；root/cwd 仍照常决定 negativeDir/ledger 等产出落点，两者互不影响。"
+    "transcriptsDirOverrideEnvVar": "CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR",
+    "_transcriptsDirOverride_note": "验收考场重定向用：CLI flag（commands.backfill 专用）与环境变量（两个 command 都吃）任一提供即生效，backfillNegatives 跳过按 root 反推编码目录名的默认推导（连带跳过 MAX_ENCODED_LENGTH 长度上限检查与 cwd-mismatch 碰撞守卫——两者都只保护/服务自动推导路径，显式指定扫描目录时调用方已经明确知道要扫哪里，不存在猜错目录撞上别的项目的风险，继续套用碰撞守卫反而会把夹具里 cwd 字段跟 root 参数碰巧不一致的合法数据误判成跨项目内容丢弃），直接扫描给定目录；root/cwd 仍照常决定 negativeDir/ledger 等产出落点，两者互不影响。**环境变量这条路径是 commands.sessionEnd 唯一可用的重定向通道**——sessionEnd 只吃 stdin JSON、没有 CLI flag，它内部顺带触发的补捞（见 backfill._note）若不设这个环境变量就会落回自动推导、扫描真实 ~/.claude/projects（第二轮验收实锤的真回归，已修复）；子进程默认继承父进程环境变量（session-end.mjs 的 spawn() 未显式覆盖 env），在起 commands.sessionEnd 那个进程上设置即可透传。"
   },
   "oversizedPolicy": {
     "mode": "streaming",

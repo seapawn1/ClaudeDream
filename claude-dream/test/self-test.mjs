@@ -537,6 +537,37 @@ async function testBackfillNegatives() {
     } finally {
       rmSync(overrideTranscriptsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     }
+
+    // 第二轮验收实锤的真回归：commands.sessionEnd 内部顺带触发的补捞没有 CLI flag 通道可用，
+    // 必须靠环境变量重定向——这里直接模拟那个场景：不传 transcriptsDir 参数（就像
+    // trigger-check.mjs 现有调用 backfillNegatives({root}) 那样），只设环境变量。夹具的
+    // cwd 字段故意写成跟 root 不一样的值，顺带验证「显式指定扫描目录时 cwd-mismatch 守卫
+    // 应该被跳过」——如果守卫没被正确跳过，这条会话会被误判成 skipped-cwd-mismatch 而不是
+    // written，测试能抓到；上面场景②的 collision-session-1（自动推导模式）不受影响，仍应
+    // 触发 skipped-cwd-mismatch，证明原有防跨项目泄漏能力没被一起弄丢。
+    const envOverrideTranscriptsDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-envoverride-'));
+    const prevTranscriptsDirEnv = process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR;
+    try {
+      const envOverrideId = 'env-override-session-1';
+      const envOverridePath = path.join(envOverrideTranscriptsDir, `${envOverrideId}.jsonl`);
+      const mismatchedCwd = 'C:\\SomeOtherProject-NotRoot-EnvOverrideCase';
+      writeFileSync(
+        envOverridePath,
+        JSON.stringify({ type: 'user', cwd: mismatchedCwd, message: { role: 'user', content: [{ type: 'text', text: 'BACKFILL-MARKER-env-transcripts-dir-override' }] } }) + '\n',
+        'utf8'
+      );
+      utimesSync(envOverridePath, oldTime, oldTime);
+
+      process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR = envOverrideTranscriptsDir;
+      const envOverrideSummary = await backfillNegatives({ root }); // 故意不传 transcriptsDir 参数，模拟 sessionEnd 内部调用
+      const byIdEnvOverride = Object.fromEntries((envOverrideSummary.results ?? []).map((r) => [r.sessionId, r.status]));
+      check('验收打回修复：CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR 环境变量在无显式参数时也能生效（模拟 sessionEnd 内部补捞）', byIdEnvOverride[envOverrideId] === 'written', JSON.stringify(byIdEnvOverride));
+      check('验收打回修复：环境变量覆盖模式下 cwd-mismatch 守卫被正确跳过，不误吞合法夹具', byIdEnvOverride[envOverrideId] !== 'skipped-cwd-mismatch', JSON.stringify(byIdEnvOverride));
+    } finally {
+      if (prevTranscriptsDirEnv === undefined) delete process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR;
+      else process.env.CLAUDE_DREAM_BACKFILL_TRANSCRIPTS_DIR = prevTranscriptsDirEnv;
+      rmSync(envOverrideTranscriptsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
   } finally {
     if (prevConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
     else process.env.CLAUDE_CONFIG_DIR = prevConfigDir;
@@ -597,6 +628,10 @@ async function testRogue() {
       'canUseTool 日志里有一条针对 ROGUE-TARGET.md 的 deny',
       invocations.some((i) => i.decision === 'deny' && i.input?.file_path?.includes('ROGUE-TARGET.md'))
     );
+    check(
+      '验收打回修复：日志条目的顶层 targetPath 字段也能独立定位到被拒路径',
+      invocations.some((i) => i.decision === 'deny' && typeof i.targetPath === 'string' && i.targetPath.includes('ROGUE-TARGET.md'))
+    );
   }
 
   return sandbox;
@@ -632,6 +667,10 @@ async function testRogueTargetsNegativesDir() {
     check(
       'AC2 拒绝日志里能看到该路径（底片目录内具体文件）',
       invocations.some((i) => i.decision === 'deny' && i.input?.file_path?.replace(/\\/g, '/').includes('.claude/negatives/rogue-attempt.md'))
+    );
+    check(
+      '验收打回修复：日志条目的顶层 targetPath 字段也能独立定位到底片目录内具体文件',
+      invocations.some((i) => i.decision === 'deny' && typeof i.targetPath === 'string' && i.targetPath.replace(/\\/g, '/').includes('.claude/negatives/rogue-attempt.md'))
     );
   }
 
