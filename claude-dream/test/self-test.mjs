@@ -305,6 +305,43 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
   return sandbox;
 }
 
+async function testNegativesFaultInjection() {
+  // AC5（守卫类，D4 点烟）：写失败时静默降级、不阻塞散会链路；错误留痕落点在底片目录之外。
+  // 真造一次写失败（环境变量注入开关），亲眼看降级与留痕——不是读代码猜它"应该"没事。
+  const sandbox = makeSandbox('fault');
+  const paths = dreamPaths(sandbox);
+  console.log(`\n=== PBI-01.1·AC5 底片写失败故障注入（D4 点烟），沙箱: ${sandbox} ===`);
+
+  const before = Date.now();
+  runNode(path.join(SRC, 'session-end.mjs'), [], {
+    cwd: sandbox,
+    stdinJson: sessionEndPayload(sandbox, 'fault'),
+    env: { CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE: 'true' },
+  });
+
+  const dreamDone = await waitFor(() => {
+    if (!existsSync(paths.lastDreamState)) return false;
+    const state = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+    return state.status && state.status !== 'running' && new Date(state.lastDreamAt).getTime() >= before;
+  });
+  check('AC5 底片写失败不阻塞散会链路：梦依然正常跑完', dreamDone);
+  const lastState = existsSync(paths.lastDreamState) ? JSON.parse(readFileSync(paths.lastDreamState, 'utf8')) : null;
+  check('梦本身状态 completed（底片故障没有连带搞垮拉梦逻辑）', lastState?.status === 'completed');
+
+  const negLedger = existsSync(paths.negativeLedger) ? JSON.parse(readFileSync(paths.negativeLedger, 'utf8')) : {};
+  check('AC5 红：注入生效时确实没有产出底片页（台账里没有这个 session 的记录）', !negLedger[sandboxSessionId('fault')]);
+  const negFilesAfterFault = existsSync(paths.negativesDir) ? readdirSync(paths.negativesDir) : [];
+  check('AC5 红：底片目录里没有产出任何 .md 页面（目录本身可能因 mkdir 而存在，但不该有页面）', !negFilesAfterFault.some((f) => f.endsWith('.md')), JSON.stringify(negFilesAfterFault));
+
+  check('AC5 错误留痕落点确实在底片目录之外', existsSync(paths.negativeErrorTrace) && path.dirname(paths.negativeErrorTrace) !== paths.negativesDir);
+  if (existsSync(paths.negativeErrorTrace)) {
+    const trace = readFileSync(paths.negativeErrorTrace, 'utf8');
+    check('错误留痕内容包含注入失败的原因', trace.includes('CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE'));
+  }
+
+  return sandbox;
+}
+
 async function testConcurrentTriggerLock() {
   // D3 review 抓到的坑：原来的"锁"是 check-then-write，靠得够近的两次 SessionEnd 能一起穿过冷却期检查、
   // 都去跑梦。这里真刀真枪触发两次几乎同时的 SessionEnd（不等第一次的 detached 子进程跑完），
@@ -523,6 +560,7 @@ try {
   await testNotebookEditFieldName();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
+  sandboxes.push(await testNegativesFaultInjection());
   sandboxes.push(await testConcurrentTriggerLock());
   sandboxes.push(await testRogue());
   sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());

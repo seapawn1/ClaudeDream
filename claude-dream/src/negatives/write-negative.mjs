@@ -96,7 +96,9 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
   // "目录不存在"（ENOENT），不是"锁被占用"（EEXIST），会被误判成锁忙而白白放弃全部重试。
   mkdirSync(negativesDir, { recursive: true });
 
-  const lockResult = withLedgerLock(paths.negativeLedgerLock, paths.negativeLedger, (ledger) => {
+  let lockResult;
+  try {
+    lockResult = withLedgerLock(paths.negativeLedgerLock, paths.negativeLedger, (ledger) => {
     const sessionRecord = ledger[sessionId];
     const { newEntries, fromIndex, toIndex, anomaly } = sliceNewEntries(entries, sessionRecord);
 
@@ -122,6 +124,13 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
     mkdirSync(negativesDir, { recursive: true });
     const header = pageHeader({ sessionId, transcriptPath, runId, fromIndex, toIndex, stats, originalBytes, compressedBytes: compressedBytes + 0 });
     const fullContent = header + '\n' + markdown + '\n';
+    // AC5 故障注入入口：设了这个环境变量就在真正写文件前抛错，模拟磁盘满/权限拒绝等真实
+    // 写失败场景。抛出点选在"已经算完所有东西、正要落盘"这一刻，模拟最贴近真实的失败位置——
+    // 不是提前在函数入口就拦截，那样测的是"能不能识别开关"，不是"写失败这条路径本身走不走得通"。
+    if (process.env.CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE === 'true') {
+      throw new Error('注入的写失败（CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE=true）');
+    }
+
     // 先写页面文件，台账的 mutator 返回值随后由 withLedgerLock 原子落盘——万一在两步之间
     // 崩溃，最坏情况是台账没记上这页（下次重跑会再产一页，冗余但不丢信息），好过台账记了
     // 一页实际不存在的文件（那会让这段历史从此在校验时"查得到台账、查不到文件"）。
@@ -149,7 +158,13 @@ export async function processSessionTranscript({ root, sessionId, transcriptPath
       entryCount: toIndex - fromIndex,
       processedAt: new Date().toISOString(),
     });
-  });
+    });
+  } catch (err) {
+    // AC5 底线：写失败（真实的，或上面注入的）不能向上抛出去阻断散会链路——记录后返回一个
+    // 'error' 状态，调用方（trigger-check.mjs）该干嘛继续干嘛，不因为底片这一步栽了就停摆。
+    logError(root, 'write-negative-page', err);
+    return { status: 'error', sessionId, transcriptPath, reason: String(err?.message ?? err) };
+  }
 
   if (lockResult === null) {
     return { status: 'skipped-lock-busy', sessionId, transcriptPath };

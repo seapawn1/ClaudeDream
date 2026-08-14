@@ -14,6 +14,13 @@ setting.local.json
 .claude/dream/session-end-marker.json
 .claude/dream/dream.lock
 .claude/dream/next-session-prompt.txt
+# Sprint-2 底片层（PBI-01.1 注意点6）：默认不入库，涉隐私（底片正文是会话原文的机械压缩）。
+# 精确忽略到文件，不整目录 ignore——Sprint-1 曾因 .claude/dream/ 整目录 ignore 让 git add
+# 报 "ignored" 炸掉梦（5c04dd3）；这里列举具体文件/通配，不拿目录本身开刀。
+.claude/negatives/*.md
+.claude/negatives/ledger.json
+.claude/negatives/ledger.lock
+.claude/negatives-error.log
 reference/**/.git/
 reference/.git/
 **/.git/
