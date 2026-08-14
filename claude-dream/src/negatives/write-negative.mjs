@@ -2,9 +2,12 @@
 // 产出一页底片。session-end.mjs（活场触发）与 backfill.mjs（漏网场补捞）共用本模块，
 // 保证两条路径的产出行为完全一致——不是各写一套、指望它们碰巧同步。
 //
-// AC4 声明的行为：逐行流式读取 transcript（node:readline + createReadStream），
-// 峰值内存跟着「这一页要处理的新增行数」走，不随全稿体积（本仓库现存最大见自证报告）
-// 整体飙升，不设人为体积上限。
+// AC4 声明的行为：I/O 层逐行流式读取 transcript（node:readline + createReadStream），
+// 不会把整份文件当一个大字符串/buffer 一次性读进内存。但解析出的条目数组装的是全稿
+// （不是只装新增部分）——sliceNewEntries 要等整份读完解析完才能切出新增段，所以峰值内存
+// 跟着「全稿条目数」走，不是只跟新增行数走；不设人为体积上限（本仓库现存最大见自证报告，
+// self-test.mjs 有 20MB 合成大稿的压力测试验证过不崩溃）。验收复核实测抓到的坑：这条注释
+// 原先误写成"峰值内存只跟着新增行数走"，与实际不符，已订正。
 
 import { createReadStream, existsSync, mkdirSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';

@@ -19,11 +19,17 @@ export function readLedger(ledgerPath) {
   }
 }
 
-// tmp 文件必须和目标同目录，rename 才能保证同文件系统内的原子性（跨盘/跨网络挂载点的
-// rename 不是原子操作，但 tmp 与目标本就同目录，不存在这个问题）。
+// tmp 文件不能落在 negativeDir 里——验收实测抓到的坑：外部把 negativeDir 当成"稳定内容"
+// 目录去枚举（列出全部文件逐个打开校验），可能刚好撞上 write→rename 之间的窗口看到这个
+// 瞬时文件，下一刻再开它就 ENOENT（已经被 rename 走）。挪到 negativeDir 的同级兄弟目录——
+// 与目标同一父目录，仍保证同文件系统（rename 原子性前提不变），但不出现在 negativeDir
+// 自己的目录枚举里。
 export function writeLedgerAtomic(ledgerPath, data) {
-  mkdirSync(path.dirname(ledgerPath), { recursive: true });
-  const tmpPath = path.join(path.dirname(ledgerPath), `.ledger-${crypto.randomBytes(6).toString('hex')}.tmp`);
+  const negativeDir = path.dirname(ledgerPath);
+  mkdirSync(negativeDir, { recursive: true });
+  const tmpDir = path.join(path.dirname(negativeDir), '.negatives-tmp');
+  mkdirSync(tmpDir, { recursive: true });
+  const tmpPath = path.join(tmpDir, `.ledger-${crypto.randomBytes(6).toString('hex')}.tmp`);
   writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
   renameSync(tmpPath, ledgerPath);
 }

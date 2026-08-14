@@ -76,17 +76,24 @@ function loadDreamSessionIds(paths) {
 /**
  * @param {object} opts
  * @param {string} opts.root 项目根目录
+ * @param {string} [opts.transcriptsDir] 显式指定扫描目录，覆盖「按 root 反推编码目录名」的
+ *   默认推导——验收考场需要把 backfill 指向自备的沙箱逐字稿目录，跳过对真实
+ *   ~/.claude/projects/<编码> 的依赖。提供时连带跳过下面的长度上限检查（那条检查只保护
+ *   自动推导路径，显式传入的目录不受它管）；root/cwd 仍照常决定 negativeDir/ledger 等
+ *   产出落点，两者互不影响。
  * @returns {Promise<object>} 扫描摘要，含每个候选会话的处理结果
  */
-export async function backfillNegatives({ root }) {
+export async function backfillNegatives({ root, transcriptsDir: transcriptsDirOverride } = {}) {
   const paths = dreamPaths(root);
-  const encoded = encodedProjectDir(root);
 
-  if (encoded.length > MAX_ENCODED_LENGTH) {
-    return { status: 'skipped-path-too-long', encodedLength: encoded.length };
+  let transcriptsDir = transcriptsDirOverride;
+  if (!transcriptsDir) {
+    const encoded = encodedProjectDir(root);
+    if (encoded.length > MAX_ENCODED_LENGTH) {
+      return { status: 'skipped-path-too-long', encodedLength: encoded.length };
+    }
+    transcriptsDir = path.join(projectsRoot(), encoded);
   }
-
-  const transcriptsDir = path.join(projectsRoot(), encoded);
   if (!existsSync(transcriptsDir)) {
     // 全新项目、一场会话都还没跑过——没什么可补的，不是故障。
     return { status: 'no-transcripts-dir', transcriptsDir };
@@ -175,10 +182,13 @@ export async function backfillNegatives({ root }) {
   return { status: 'scanned', transcriptsDir, fileCount: files.length, results };
 }
 
-// CLI 入口：node backfill.mjs [root]（adapter.json commands.backfill）
+// CLI 入口：node backfill.mjs [--transcripts-dir=<扫描目录覆盖>] [root]（adapter.json commands.backfill）
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const root = process.argv[2] || process.cwd();
-  backfillNegatives({ root }).then((summary) => {
+  const args = process.argv.slice(2);
+  const transcriptsDirArg = args.find((a) => a.startsWith('--transcripts-dir='));
+  const transcriptsDir = transcriptsDirArg ? transcriptsDirArg.slice('--transcripts-dir='.length) : undefined;
+  const root = args.find((a) => !a.startsWith('--')) || process.cwd();
+  backfillNegatives({ root, transcriptsDir }).then((summary) => {
     console.log(JSON.stringify(summary, null, 2));
   });
 }

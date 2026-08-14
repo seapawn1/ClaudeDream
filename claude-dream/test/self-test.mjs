@@ -472,6 +472,15 @@ async function testBackfillNegatives() {
     check('活会话没有留下台账记录', !ledger[activeId]);
     check('D3 修复：cwd 不匹配的会话没有留下台账记录、没有产出底片文件', !ledger[collisionId]);
 
+    // 验收打回抓到的坑（回归钉子）：ledger 原子写的 tmp 文件曾经落在 negativeDir 里，外部把
+    // negativeDir 当"稳定内容"目录去枚举时可能撞见这个瞬时文件，下一刻再开它就 ENOENT。
+    // 验证写完之后 negativeDir 目录枚举里干干净净、没有任何 .tmp 残留，且 tmp 目录确实换成了
+    // negativeDir 的同级兄弟目录（证明走的是新机制，不是巧合没撞上）。
+    const filesInNegativesDir = readdirSync(path.dirname(ledgerPath));
+    check('验收打回修复：negativeDir 目录枚举里不出现任何 .tmp 残留文件', !filesInNegativesDir.some((f) => f.endsWith('.tmp')), JSON.stringify(filesInNegativesDir));
+    const negativesTmpSiblingDir = path.join(root, '.claude', '.negatives-tmp');
+    check('验收打回修复：ledger 原子写的 tmp 目录确实换成了 negativeDir 的同级兄弟目录', existsSync(negativesTmpSiblingDir));
+
     const missedPage = ledger[missedId]?.pages?.[0]?.file;
     if (missedPage) {
       const pageContent = readFileSync(path.join(root, '.claude', 'negatives', missedPage), 'utf8');
@@ -510,6 +519,24 @@ async function testBackfillNegatives() {
       transcriptPath: path.join(root, 'does-not-exist-anymore.jsonl'),
     });
     check('AC6④ 逐字稿已被官方清理：记账跳过、不报错', cleanedUpResult.status === 'skipped-missing-transcript', JSON.stringify(cleanedUpResult));
+
+    // 验收打回抓到的坑：backfill 需要接受显式 transcriptsDir 覆盖，供验收考场重定向到自备的
+    // 沙箱逐字稿目录，不依赖 root 反推编码目录名。这里用一个跟 root 编码结果完全对不上的
+    // 独立目录验证：只传 transcriptsDir 也能扫到并处理里面的会话，且回显的扫描目录对得上。
+    const overrideTranscriptsDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-backfill-override-'));
+    try {
+      const overrideId = 'override-session-1';
+      const overridePath = path.join(overrideTranscriptsDir, `${overrideId}.jsonl`);
+      writeFileSync(overridePath, JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'BACKFILL-MARKER-transcriptsDir-override' }] } }) + '\n', 'utf8');
+      utimesSync(overridePath, oldTime, oldTime);
+
+      const overrideSummary = await backfillNegatives({ root, transcriptsDir: overrideTranscriptsDir });
+      const byIdOverride = Object.fromEntries((overrideSummary.results ?? []).map((r) => [r.sessionId, r.status]));
+      check('验收打回修复：backfill 的 transcriptsDir 覆盖参数确实生效（扫的是显式目录，不是编码推导目录）', byIdOverride[overrideId] === 'written', JSON.stringify(byIdOverride));
+      check('验收打回修复：transcriptsDir 覆盖后回显的扫描目录对得上传入值', overrideSummary.transcriptsDir === overrideTranscriptsDir, overrideSummary.transcriptsDir);
+    } finally {
+      rmSync(overrideTranscriptsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
   } finally {
     if (prevConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
     else process.env.CLAUDE_CONFIG_DIR = prevConfigDir;

@@ -1,12 +1,12 @@
 {
-  "_pathConvention": "commands 与 source.* 的路径相对本仓库根；paths.*（除 retainRules/spikeRecord 外）相对『考场项目根』——即各 command 执行时的 cwd。",
+  "_pathConvention": "commands 与 source.* 的路径相对本仓库根；paths.*（除 retainRules/spikeRecord 外）相对『考场项目根』——即各 command 执行时的 cwd；commands 里形如 {XXX} 的占位符由验收脚本运行时替换成具体值（真实路径），不是字面量。",
   "commands": {
     "install": "",
     "_install_note": "留空，同 Sprint-1：三条命令直接调用插件脚本本身，不经过 marketplace 安装流程。",
     "sessionEnd": "node claude-dream/src/session-end.mjs",
     "runDream": "node claude-dream/src/run-dream.mjs",
-    "runDreamRogue": "node claude-dream/src/run-dream.mjs --rogue",
-    "backfill": "node claude-dream/src/negatives/backfill.mjs"
+    "runDreamRogue": "node claude-dream/src/run-dream.mjs --rogue --target={ROGUE_TARGET}",
+    "backfill": "node claude-dream/src/negatives/backfill.mjs --transcripts-dir={TRANSCRIPTS_DIR} {CWD}"
   },
   "sessionEndInput": {
     "_note": "Sprint-2 起硬性要求：commands.sessionEnd 必须从 stdin 喂一份合法 JSON，字段名 snake_case（官方 SessionEnd hook payload 形状，对照官方文档 hooks#sessionend-input 核实）。stdin 空、非 JSON、或缺 requiredFields 任一字段——不落底片、不拉梦触发链，只在 paths.errorTrace 留痕退出（Sprint-1 老的『stdin 关闭裸用 process.cwd()』静默 fallback 本轮起废止）。transcript_path 指向的文件必须真实存在、可读、是一行一个 JSON 对象的 jsonl——验收方需自备测试用逐字稿（真实或构造均可，构造时至少含一条 type:\"user\"、message.content 为 [{type:\"text\",text:...}] 的条目，用于验证 AC1/AC3 的产出与检索）。",
@@ -31,10 +31,11 @@
     "dreamEntry": "claude-dream/src/run-dream.mjs",
     "pluginManifest": "claude-dream/.claude-plugin/plugin.json",
     "negativesRuleTable": "claude-dream/src/negatives/RETAIN-RULES.md",
-    "negativesCompressor": "claude-dream/src/negatives/compress.mjs",
+    "negativeCompressor": "claude-dream/src/negatives/compress.mjs",
     "negativesOrchestrator": "claude-dream/src/negatives/write-negative.mjs",
     "negativesLedgerModule": "claude-dream/src/negatives/ledger.mjs",
-    "negativesBackfill": "claude-dream/src/negatives/backfill.mjs"
+    "negativesBackfill": "claude-dream/src/negatives/backfill.mjs",
+    "scopeGuard": "claude-dream/src/lib/scope-guard.mjs"
   },
   "sdkModule": "@anthropic-ai/claude-agent-sdk",
   "cooldown": {
@@ -57,32 +58,36 @@
   "report": {
     "sections": ["图 delta 对账", "30 秒版", "明细（占位版，四要素+单条回滚）", "隔离观察区", "抽查点", "阀门状态"],
     "commitPolicy": "separate — 与 Sprint-1 一致：记忆/CLAUDE.md 改动收在 dream: 前缀提交；报告与 canUseTool 日志收在 dream-evidence: 前缀提交。",
-    "negativeFeedReconciliationField": "negativeFeed",
-    "_negativeFeedReconciliation_note": "PBI-01.2·AC1：进料对账由 run-dream.mjs 机械统计写入报告（不由模型自述，触发本函数前底片压缩已在 trigger-check.mjs 里显式定序完成，这里只读台账不重算）。落点在『阀门状态』节最后一行，固定含『进料对账』四字；触发会话已指定且底片存在时，行内含该 session_id 与『已读到』字样；未指定触发会话（如直接调用 commands.runDream 不带 --session）时行内写『未指定触发会话』。runDream() 的返回对象里同一份数据在 negativeFeedReconciliationField 键（{triggeringSessionId, found, pageCount, latestPage}）。",
+    "feedReconciliationMarker": "进料对账",
+    "_feedReconciliationMarker_note": "PBI-01.2·AC1：进料对账由 run-dream.mjs 机械统计写入报告（不由模型自述，触发本函数前底片压缩已在 trigger-check.mjs 里显式定序完成，这里只读台账不重算）。落点在『阀门状态』节最后一行，固定以 feedReconciliationMarker 这四个字『进料对账』开头，供脚本按字面标记在报告正文里检索；触发会话已指定且底片存在时，行内含该 session_id 与『已读到』字样；未指定触发会话（如直接调用 commands.runDream 不带 --session）时行内写『未指定触发会话』。runDream() 的返回对象里同一份数据在 negativeFeed 键（{triggeringSessionId, found, pageCount, latestPage}）。",
     "triggeringSessionCliFlag": "--session=<触发本次梦的 session_id>",
     "exampleCommand": "node claude-dream/src/run-dream.mjs --session=<session_id>"
   },
   "offWhitelistTarget": "ROGUE-TARGET.md",
   "offWhitelistTargetParam": {
-    "_note": "PBI-01.2·AC2：作恶模式现在可用 --target 指定越界目标路径（相对项目根），用于验证梦对底片目录零写权——canUseTool 白名单结构上不包含 negativeDir，越界会被拒且日志（paths.canUseToolLogGlob）里能看到该路径。",
+    "_note": "PBI-01.2·AC2：作恶模式现在可用 --target 指定越界目标路径（相对项目根），用于验证梦对底片目录零写权——canUseTool 白名单结构上不包含 negativeDir，越界会被拒且日志（paths.canUseToolLogGlob）里能看到该路径。commands.runDreamRogue 已把这个 flag 内嵌为 {ROGUE_TARGET} 占位符，通用越界测试替换成 defaultWhenOmitted 的值即可，本 AC2 场景替换成 exampleNegativesTarget。",
     "cliFlag": "--target=<相对项目根路径>",
     "exampleNegativesTarget": ".claude/negatives/rogue-attempt.md",
     "exampleCommand": "node claude-dream/src/run-dream.mjs --rogue --target=.claude/negatives/rogue-attempt.md",
     "defaultWhenOmitted": "ROGUE-TARGET.md（Sprint-1 行为，未传 --target 时不变）"
   },
   "faultInjection": {
-    "negativesWriteFailureEnvVar": {
-      "name": "CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE",
-      "truthyValue": "true",
-      "_note": "PBI-01.1·AC5（守卫类，D4 点烟）：设为字符串 true 时，底片写入在正要落盘那一刻抛出注入的错误，验证——降级不阻断散会链路（梦依旧正常跑完）、底片目录没有多出页面、错误留痕落在 paths.errorTrace（底片目录之外）且含注入原因。"
-    }
+    "writeFailureEnv": "CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE",
+    "writeFailureEnvTruthyValue": "true",
+    "_writeFailureEnv_note": "PBI-01.1·AC5（守卫类，D4 点烟）：把 writeFailureEnv 指名的环境变量设为字符串 true（即 writeFailureEnvTruthyValue，代码按精确字符串比较，不是宽泛 truthy）时，底片写入在正要落盘那一刻抛出注入的错误，验证——降级不阻断散会链路（梦依旧正常跑完）、底片目录没有多出页面、错误留痕落在 paths.errorTrace（底片目录之外）且含注入原因。"
   },
   "backfill": {
     "_note": "PBI-01.1·AC6：漏网场补捞。每次 commands.sessionEnd 触发的分离进程都会顺带跑一次（『下一个机械触发点』），commands.backfill 亦可单独调用做同样的事。",
     "staleMinutesEnvVar": "CLAUDE_DREAM_BACKFILL_STALE_MINUTES",
     "defaultStaleMinutes": 30,
     "staleSemantics": "会话逐字稿的 mtime 距今 < staleMinutes 视为『可能还在进行』，本轮跳过不碰（AC6②活稿判别）；≥ staleMinutes 才纳入补捞候选。",
-    "transcriptsDirFormula": "<CLAUDE_CONFIG_DIR 或 ~/.claude>/projects/<项目工作目录路径将非字母数字字符替换为 - 后的编码>，官方文档 sessions#where-transcripts-are-stored 明写的规则，已用真实目录名核对过。"
+    "transcriptsDirFormula": "<CLAUDE_CONFIG_DIR 或 ~/.claude>/projects/<项目工作目录路径将非字母数字字符替换为 - 后的编码>，官方文档 sessions#where-transcripts-are-stored 明写的规则，已用真实目录名核对过。",
+    "transcriptsDirOverrideCliFlag": "--transcripts-dir=<绝对路径>",
+    "_transcriptsDirOverride_note": "验收考场重定向用：提供该参数时 backfillNegatives 跳过按 root 反推编码目录名的默认推导（连带跳过 MAX_ENCODED_LENGTH 长度上限检查，那条检查只保护自动推导路径），直接扫描给定目录；root/cwd 仍照常决定 negativeDir/ledger 等产出落点，两者互不影响。"
+  },
+  "oversizedPolicy": {
+    "mode": "streaming",
+    "_note": "AC4 声明的真实行为：write-negative.mjs 用 node:readline + createReadStream 做 I/O 层的逐行流式读取（不会把整份文件当一个大字符串/buffer 一次性读进内存）。但解析出的条目数组装的是全稿、不是只装新增部分——要等整份读完解析完才用 sliceNewEntries 切出新增段，所以峰值内存跟着『全稿条目数』走，不是只跟新增行数走；不设人为的整稿体积上限（本仓库现存最大 9.19MB，self-test.mjs 另有 20MB 合成大稿的压力测试验证过不崩溃且压缩比仍在预算内）。唯一存在的截断点是 compress.mjs 对『未知类型』条目的单条硬上限 100KB（UNKNOWN_RAW_CAP_BYTES）——这是 RETAIN-RULES.md 早就承诺的『未知类型超过单条硬上限时截断，标注截断前字节数』，只对无法归类的兜底路径生效，不是整稿体积上限。"
   },
   "spikeRecord": "scrum/sprint-01-skeleton/spike-ac0/SPIKE-RECORD.md",
   "timeoutMs": 180000,

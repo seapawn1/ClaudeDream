@@ -22,6 +22,9 @@ setting.local.json
 .claude/negatives/ledger.json
 .claude/negatives/ledger.lock
 .claude/negatives-error.log
+# 原子写 tmp 文件的临时落点（ledger.mjs 的 writeLedgerAtomic）——结构上只装崩溃残留的
+# 瞬时文件，正常运行下写完即 rename 清空，不存在"精确到文件"要保留可见性的顾虑，整目录忽略。
+.claude/.negatives-tmp/
 reference/**/.git/
 reference/.git/
 **/.git/
