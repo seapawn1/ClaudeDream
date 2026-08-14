@@ -1,0 +1,217 @@
+// PBI-01.1 编排层：把 compress.mjs（机械压缩）与 ledger.mjs（台账/幂等）接起来，
+// 产出一页底片。session-end.mjs（活场触发）与 backfill.mjs（漏网场补捞）共用本模块，
+// 保证两条路径的产出行为完全一致——不是各写一套、指望它们碰巧同步。
+//
+// AC4 声明的行为：I/O 层逐行流式读取 transcript（node:readline + createReadStream），
+// 不会把整份文件当一个大字符串/buffer 一次性读进内存。但解析出的条目数组装的是全稿
+// （不是只装新增部分）——sliceNewEntries 要等整份读完解析完才能切出新增段，所以峰值内存
+// 跟着「全稿条目数」走，不是只跟新增行数走；不设人为体积上限（本仓库现存最大见自证报告，
+// self-test.mjs 有 20MB 合成大稿的压力测试验证过不崩溃）。验收复核实测抓到的坑：这条注释
+// 原先误写成"峰值内存只跟着新增行数走"，与实际不符，已订正。
+
+import { createReadStream, existsSync, mkdirSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+import path from 'node:path';
+import { dreamPaths, runIdNow } from '../lib/paths.mjs';
+import { compressEntries } from './compress.mjs';
+import { withLedgerLock, sliceNewEntries, recordPage } from './ledger.mjs';
+
+// D3 review 抓到的坑：官方文档确认 transcript_path 是异步写入的，SessionEnd 触发那一刻
+// 文件可能还没追上内存里最新的对话——如果恰好赶上文件还在被写，读到的内容会缺散会前
+// 最后几句话（偏偏是 PBI-01.2·AC3 最在意的"裁决"场景）。这不是能彻底根治的问题（官方
+// 没承诺最大滞后时长），只能降低撞上的概率：读之前看文件大小是否还在变化，变化就等一下
+// 再读，有界重试（不会无限等，最坏情况这个函数多花约 1 秒）。真撞上了、且这是这个项目
+// 最后一场会话（没有下一次触发点让 AC6 补捞捞回来），内容会永久漏掉——这一点残余风险
+// 如实记录在这里，不假装能百分百堵上。
+//
+// D3 review 第二轮起：返回值是"稳定后的字节数"（拿不到任何一次有效大小时返回 null），
+// 不再是纯 void——调用方把这个数存进台账的 lastProcessedBytes，backfill.mjs 下次扫到
+// 同一个会话时先比对字节数，没变就直接跳过整套 settle-wait+整读（见 ledger.mjs 的
+// recordPage 与 backfill.mjs 的短路判据）。
+async function waitForTranscriptToSettle(transcriptPath, { maxAttempts = 4, intervalMs = 250 } = {}) {
+  let lastSize = -1;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let size;
+    try {
+      size = statSync(transcriptPath).size;
+    } catch {
+      return lastSize >= 0 ? lastSize : null; // 文件这一步没了（极端罕见），交给调用方的 existsSync 检查处理
+    }
+    if (size === lastSize) return size; // 连续两次大小不变，认为已经落盘稳定
+    lastSize = size;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return lastSize >= 0 ? lastSize : null;
+}
+
+/** 逐行读取 jsonl，解析失败的行不中断整个流程——原样按 AC3③ 的未知留痕精神收一条占位。 */
+async function readTranscriptEntries(transcriptPath) {
+  const entries = [];
+  let rawBytes = 0;
+  const rl = createInterface({ input: createReadStream(transcriptPath, { encoding: 'utf8' }), crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    rawBytes += Buffer.byteLength(line, 'utf8') + 1; // +1 近似换行符，量级对即可，非精确计费
+    try {
+      entries.push(JSON.parse(line));
+    } catch {
+      entries.push({ type: '(unparseable-line)', raw: line.slice(0, 2000) });
+    }
+  }
+  return { entries, rawBytes };
+}
+
+function pageHeader({ sessionId, transcriptPath, runId, fromIndex, toIndex, stats, originalBytes, compressedBytes }) {
+  const ratio = originalBytes > 0 ? ((compressedBytes / originalBytes) * 100).toFixed(2) : '0.00';
+  return [
+    '---',
+    `sessionId: ${sessionId}`,
+    `transcriptPath: ${transcriptPath}`,
+    `runId: ${runId}`,
+    `entryRange: [${fromIndex}, ${toIndex})`,
+    `entryCount: ${toIndex - fromIndex}`,
+    `originalBytes: ${originalBytes}`,
+    `compressedBytes: ${compressedBytes}`,
+    `compressionRatio: ${ratio}%`,
+    `byKind: ${JSON.stringify(stats.byKind)}`,
+    '---',
+    '',
+  ].join('\n');
+}
+
+function logError(root, context, err) {
+  try {
+    const paths = dreamPaths(root);
+    mkdirSync(path.dirname(paths.negativeErrorTrace), { recursive: true });
+    const line = JSON.stringify({ ts: new Date().toISOString(), context, error: String(err?.message ?? err) });
+    appendFileSync(paths.negativeErrorTrace, line + '\n', 'utf8');
+  } catch {
+    // AC5 的底线：错误留痕本身失败也不能抛出去炸调用方。到这一步只能放弃留痕。
+  }
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.root 项目根目录
+ * @param {string} opts.sessionId
+ * @param {string} opts.transcriptPath 逐字稿绝对路径
+ * @returns {Promise<{status: string, [key:string]: any}>}
+ *   status: 'written' | 'skipped-no-new' | 'skipped-missing-transcript' | 'skipped-lock-busy' | 'error'
+ */
+export async function processSessionTranscript({ root, sessionId, transcriptPath }) {
+  if (!sessionId || !transcriptPath) {
+    return { status: 'error', reason: 'missing sessionId or transcriptPath' };
+  }
+
+  // AC6④：逐字稿已被官方 30 天清理——记账跳过，不报错，这是预期分支不是故障。
+  if (!existsSync(transcriptPath)) {
+    return { status: 'skipped-missing-transcript', sessionId, transcriptPath };
+  }
+
+  // 读之前先等文件大小稳定——见 waitForTranscriptToSettle 的注释。返回值顺带存进台账
+  // （下面 recordPage 调用），给 backfill 的短路判据用。
+  const settledBytes = await waitForTranscriptToSettle(transcriptPath);
+
+  const paths = dreamPaths(root);
+
+  let entries, rawBytesTotal;
+  try {
+    ({ entries, rawBytes: rawBytesTotal } = await readTranscriptEntries(transcriptPath));
+  } catch (err) {
+    logError(root, 'read-transcript', err);
+    return { status: 'error', reason: String(err?.message ?? err) };
+  }
+
+  // 只用来算「这一页」的原始字节数（AC4 的体积对账要的是这一页的压缩前后对比，不是全稿累计）。
+  // 简化：按条目在文件中的平均字节数估算新增切片的原始体积——转 sliceNewEntries 之后再精确算。
+  let outcome;
+  const runId = runIdNow();
+  const negativesDir = paths.negativesDir;
+  // 锁文件与台账都住在 negativesDir 里——必须先把目录建出来再拿锁，否则 acquireLock 撞见的是
+  // "目录不存在"（ENOENT），不是"锁被占用"（EEXIST），会被误判成锁忙而白白放弃全部重试。
+  mkdirSync(negativesDir, { recursive: true });
+
+  let lockResult;
+  try {
+    lockResult = withLedgerLock(paths.negativeLedgerLock, paths.negativeLedger, (ledger) => {
+    const sessionRecord = ledger[sessionId];
+    const { newEntries, fromIndex, toIndex, anomaly } = sliceNewEntries(entries, sessionRecord);
+
+    if (anomaly) {
+      logError(root, 'ledger-anomaly', new Error(`${anomaly} sessionId=${sessionId}`));
+    }
+
+    if (newEntries.length === 0) {
+      outcome = { status: 'skipped-no-new', sessionId, transcriptPath, anomaly };
+      return ledger; // 台账不变，AC1 幂等——不产生第二页
+    }
+
+    const { markdown, stats } = compressEntries(newEntries);
+    // 新增切片的原始体积：按整稿字节数乘以「新增条目数/总条目数」估算，量级对即可——
+    // 逐行精确计费需要在 sliceNewEntries 之前就分别累计，为了保持 ledger.mjs 是纯函数
+    // （不碰字节计费）这里用估算，AC4 要的是「压缩前后体积对账」这个数量级，不是逐字节审计。
+    const sliceRatio = entries.length > 0 ? newEntries.length / entries.length : 1;
+    const originalBytes = Math.round(rawBytesTotal * sliceRatio);
+    // D3 review 抓到的坑：以前这里定义的 compressedBytes（markdown 正文，不含头部元数据块）
+    // 和后面写进 outcome 对象、同名字段却用 fullContent（头部+正文）算出来的值不是一回事，
+    // 但 ratio 又是用这里这个 markdown-only 的值算的——同一个返回对象里 ratio 与
+    // compressedBytes 数学上对不上。现在统一：全程只用 markdownBytes 这一个基准（正文，
+    // 不含头部）——头部本身要显示 compressedBytes 才能拼出 fullContent，先有值才能拼头部，
+    // 拿 fullContent 的体积反过来定义 compressedBytes 会成循环依赖，索性头部的体积开销
+    // （几百字节）本就不是 AC4 关心的"压缩前后对比"的重点，不算进这个字段更干净。
+    const markdownBytes = Buffer.byteLength(markdown, 'utf8');
+
+    const fileName = `${sessionId}--${runId}.md`;
+    const filePath = path.join(negativesDir, fileName);
+    mkdirSync(negativesDir, { recursive: true });
+    const header = pageHeader({ sessionId, transcriptPath, runId, fromIndex, toIndex, stats, originalBytes, compressedBytes: markdownBytes });
+    const fullContent = header + '\n' + markdown + '\n';
+    // AC5 故障注入入口：设了这个环境变量就在真正写文件前抛错，模拟磁盘满/权限拒绝等真实
+    // 写失败场景。抛出点选在"已经算完所有东西、正要落盘"这一刻，模拟最贴近真实的失败位置——
+    // 不是提前在函数入口就拦截，那样测的是"能不能识别开关"，不是"写失败这条路径本身走不走得通"。
+    if (process.env.CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE === 'true') {
+      throw new Error('注入的写失败（CLAUDE_DREAM_NEGATIVES_INJECT_WRITE_FAILURE=true）');
+    }
+
+    // 先写页面文件，台账的 mutator 返回值随后由 withLedgerLock 原子落盘——万一在两步之间
+    // 崩溃，最坏情况是台账没记上这页（下次重跑会再产一页，冗余但不丢信息），好过台账记了
+    // 一页实际不存在的文件（那会让这段历史从此在校验时"查得到台账、查不到文件"）。
+    writeFileSync(filePath, fullContent, 'utf8');
+
+    outcome = {
+      status: 'written',
+      sessionId,
+      transcriptPath,
+      file: fileName,
+      filePath,
+      fromIndex,
+      toIndex,
+      entryCount: toIndex - fromIndex,
+      stats,
+      originalBytes,
+      // 正文体积（不含头部元数据块）——与 ratio 用同一个基准，两个字段现在数学上自洽。
+      compressedBytes: markdownBytes,
+      ratio: originalBytes > 0 ? markdownBytes / originalBytes : 0,
+    };
+
+    return recordPage(ledger, sessionId, {
+      file: fileName,
+      fromIndex,
+      toIndex,
+      entryCount: toIndex - fromIndex,
+      processedAt: new Date().toISOString(),
+      lastProcessedBytes: settledBytes,
+    });
+    });
+  } catch (err) {
+    // AC5 底线：写失败（真实的，或上面注入的）不能向上抛出去阻断散会链路——记录后返回一个
+    // 'error' 状态，调用方（trigger-check.mjs）该干嘛继续干嘛，不因为底片这一步栽了就停摆。
+    logError(root, 'write-negative-page', err);
+    return { status: 'error', sessionId, transcriptPath, reason: String(err?.message ?? err) };
+  }
+
+  if (lockResult === null) {
+    return { status: 'skipped-lock-busy', sessionId, transcriptPath };
+  }
+  return outcome;
+}

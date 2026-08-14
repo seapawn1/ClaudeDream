@@ -6,10 +6,11 @@
 
 新会话先读 [README.md](README.md)（项目地图与当前状态）。要理解**方案是什么、为什么这么设计**，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)——设计冲刺的总结算与全部档案入口；要看 Scrum 段产品目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
-**当前阶段**：设计冲刺已完成（2026-08-02，Target-1 带条件通过），归档至 `scrum/.IDEO/design-sprint/`；Sprint-1（骨架回环）已于 2026-08-13 收口——验收 16 判据 15 过（考卷与考场见 `scrum/sprint-01-skeleton/acceptance/`，在 `sprint-01-acceptance` 分支），遗留 H-A8 立为 PBI-05，Review 与 Retro 记录在 [scrum/sprint-01-skeleton/SprintBacklog.md](scrum/sprint-01-skeleton/SprintBacklog.md) 第四/五节，DoD 增设 D4「绿灯点过烟」。下一步：Sprint-2 Planning（PBI-01 vs PBI-02 排序开场定），产品待办与架构见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前阶段**：Sprint-1（骨架回环）已收口；当前 Sprint-2（底片层），Goal「白天留底，夜里读得到」，施工与出卷并行推进中。详见 [README.md](README.md) 当前状态与 [scrum/sprint-02-negatives/SprintBacklog.md](scrum/sprint-02-negatives/SprintBacklog.md)。
 
 ## 常用命令
 
+- `node claude-dream/test/smoke-check.mjs` —— E0·AC1 真梦前置冒烟检查：一条命令查登录态/token/SDK 可达，红绿分明、红时一句话说清缺什么。先跑这个再跑下面的自证，省得在自证脚本中途才发现环境不通。
 - `node claude-dream/test/self-test.mjs` —— DoD·D1 一键自证（全链路/冷却/防递归/故障注入），需登录态（见「环境与坑」）。
 
 ## 历史与分支
@@ -23,6 +24,6 @@
 
 ## 环境与坑
 
-- 跑梦（`claude-dream/src/run-dream.mjs`）与 D1 自证（`claude-dream/test/self-test.mjs`）需 Claude Code 登录态（`~/.claude/.credentials.json`），缺失报 "Not logged in"——headless/CI 环境先确认登录态，别当代码 bug。
+- 跑梦（`claude-dream/src/run-dream.mjs`）与 D1 自证（`claude-dream/test/self-test.mjs`）需 Claude Code 登录态，缺失时 SDK 报 "Could not resolve authentication method"——headless/CI 环境先跑 `node claude-dream/test/smoke-check.mjs` 确认登录态，别当代码 bug。注意：认证不一定落在 `~/.claude/.credentials.json` 或裸环境变量上，托管/网关代理环境下这两者都可能查不到而调用照样成功（本机 2026-08-14 实测过这个反例）——凭据文件/环境变量只是冒烟检查里红灯时的辅助线索，唯一作数的判据是它真跑的那次最小 SDK 调用。
 - 验收考卷在 `sprint-01-acceptance` 分支 `scrum/sprint-01-skeleton/acceptance/`，卷面对开发方保密；开发方按 AC + `adapter.json` 自证（DoD·D1），不碰考卷。
 - 梦进程的 git 提交必须限定 pathspec：`git commit -- <目录>` 走 `--only`，空目录报 "pathspec did not match"，应先 `git diff --cached --name-only -- <pathspec>` 算具体文件再喂 commit。
