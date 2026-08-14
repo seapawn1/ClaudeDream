@@ -19,8 +19,9 @@ ClaudeDream 当前的工作区。设计冲刺已于 2026-08-02 结束并归档�
 | `README.md` | 本文件——Scrum 段导航 |
 | `ProductBacklog.md` | Product 总述与 Vision（兼任 Goal）、两份 DoD、Product Backlog、架构（角色表+全流程图+批注） |
 | `sprint-01-skeleton/` | Sprint-1（骨架回环）完整档案——入口 [README.md](sprint-01-skeleton/README.md)：SprintBacklog（含 Review/Retro 记录）+ 验收考卷考场 + AC0 spike |
+| `sprint-02-negatives/` | Sprint-2（底片层）完整档案——[SprintBacklog.md](sprint-02-negatives/SprintBacklog.md)（含 Review/Retro 记录）+ 验收考卷考场（`acceptance/`） |
 | `.IDEO/design-sprint/` | 已结束的设计冲刺全部档案（原仓库根 `.IDEO/`，2026-08-07 归档于此）——总入口 [DesignReview.md](.IDEO/design-sprint/DesignReview.md) |
 
 ## 当前状态
 
-**2026-08-13：Sprint-1（骨架回环）已收口，增量收下（验收 16 判据 15 过 1 遗留 H-A8 → PBI-05）。** 下一步 Sprint-2 Planning（PBI-01 vs PBI-02 排序开场定）。详见 [sprint-01-skeleton/README.md](sprint-01-skeleton/README.md)。
+**2026-08-14：Sprint-2（底片层）已收口**（三轮验收 16 过/5 不过/6 待办，PO 裁定不追绿先收口；两大发现——自建规则表覆盖缺口→PBI-06、考卷接口脱靶→验收流程约定）。**2026-08-15：refinement 完成**（DoD 归位 D1–D5 + 新立「验收流程约定」小节、backlog 行序刷新——PBI-06 拟主菜、PBI-05 拟搭车、PBI-02 接棒下轮）。Sprint-3 Planning 进行中。详见 [ProductBacklog.md](ProductBacklog.md)、[sprint-02-negatives/SprintBacklog.md](sprint-02-negatives/SprintBacklog.md)。

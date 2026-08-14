@@ -6,7 +6,7 @@
 
 新会话先读 [README.md](README.md)（项目地图与当前状态）。要理解**方案是什么、为什么这么设计**，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)——设计冲刺的总结算与全部档案入口；要看 Scrum 段产品目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
-**当前阶段**：Sprint-1（骨架回环）已收口；当前 Sprint-2（底片层），Goal「白天留底，夜里读得到」，施工与出卷并行推进中。详见 [README.md](README.md) 当前状态与 [scrum/sprint-02-negatives/SprintBacklog.md](scrum/sprint-02-negatives/SprintBacklog.md)。
+**当前阶段**：Sprint-1（骨架回环）已收口；Sprint-2（底片层）已收口（2026-08-14）；当前 Sprint-3 筹备中，refinement 已完成（DoD 归位、backlog 行序刷新），方向 PBI-06（底片压缩复用重做）主菜 + PBI-05（梦提示行）搭车。详见 [README.md](README.md) 当前状态与 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
 ## 常用命令
 
@@ -25,5 +25,7 @@
 ## 环境与坑
 
 - 跑梦（`claude-dream/src/run-dream.mjs`）与 D1 自证（`claude-dream/test/self-test.mjs`）需 Claude Code 登录态，缺失时 SDK 报 "Could not resolve authentication method"——headless/CI 环境先跑 `node claude-dream/test/smoke-check.mjs` 确认登录态，别当代码 bug。注意：认证不一定落在 `~/.claude/.credentials.json` 或裸环境变量上，托管/网关代理环境下这两者都可能查不到而调用照样成功（本机 2026-08-14 实测过这个反例）——凭据文件/环境变量只是冒烟检查里红灯时的辅助线索，唯一作数的判据是它真跑的那次最小 SDK 调用。
-- 验收考卷在 `sprint-01-acceptance` 分支 `scrum/sprint-01-skeleton/acceptance/`，卷面对开发方保密；开发方按 AC + `adapter.json` 自证（DoD·D1），不碰考卷。
+- 验收考卷（各 Sprint 的 `acceptance/` 目录，如 `scrum/sprint-01-skeleton/acceptance/`、`scrum/sprint-02-negatives/acceptance/`）收口后已并入 `main` 工作树，不必切分支查看——卷面对开发方是**约定保密**（不是分支隔离）：开发方按 AC + `adapter.json` 自证（DoD·D1），主动不读、不引用考卷内容。
 - 梦进程的 git 提交必须限定 pathspec：`git commit -- <目录>` 走 `--only`，空目录报 "pathspec did not match"，应先 `git diff --cached --name-only -- <pathspec>` 算具体文件再喂 commit。
+- Git Bash 对未加引号的反斜杠路径会静默吞掉反斜杠（`d:\ClaudeDream` → `d:ClaudeDream`），`git -C <path>` 这类命令因此报 "cannot change to" 假错——工作目录已在项目根时直接省略 `-C`，不要拼反斜杠路径。
+- 当前重启后（2026-07-29 起）的 Sprint 施工/出卷分支（如 `sprint-02-negatives`、`sprint-02-acceptance`）收口合并后即删除，`git branch -a` 只剩 `main`——查某轮 Sprint 细节走 `git log --oneline` 找对应 `merge:` 提交，分支不在不代表工作不存在。
