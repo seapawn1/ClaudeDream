@@ -52,7 +52,7 @@ Sprint-1 原则沿用：凡属要求一律在此写明，只有怎么打分留�
 1. **触发面**：SessionEnd 每场一次，触发于正常退出、`/clear`、切换会话、登出等（枚举含 `prompt_input_exit`/`bypass_permissions_disabled`/`other`）；强杀/崩溃不触发→AC6 兜底；resume 同段对话可多次散会、同稿多页→去重口径进规则表；compact 不算散会（盘上逐字稿保全量历史，跨 compact 底片完整性亲验一次）；fork 是新会话各落各的；**冷却只管梦不管底片**；hook 配置**别加 matcher**（全 reason 都要接）
 2. **SessionEnd 硬预算**：全部 SessionEnd hook 共享默认 1.5 秒；settings 文件配的 timeout 可抬至 60 秒**但插件自带 hook 抬不动**（本产品用不上）；`CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` 可显式覆盖（验收考场可用）。结论不变：压缩重活不得在 hook 内做，沿用「hook 只记账、分离进程干活」。**现存 `claude-dream/hooks/hooks.json` 里 SessionEnd 的 `timeout: 10` 是不生效的死配置，待清理**
 3. **逐字稿格式是官方内部实现、随版本会变**（官方明示直接解析可能在任一次发版后失效）——这就是 AC3③「未知类型保守保留＋留痕」的由来；「格式漂移」列入 Sprint Review 已知风险
-4. **现成件先读再动手**：`reference/claude-code-log/` 与 README「原料层是否可行」节有 jsonl 格式与压缩率实测（约 1.8%）——自建还是复用（含引入 Python 依赖的代价）**提案交 PO 定**
+4. **现成件先读再动手**：`reference/claude-code-log/` 与 README「原料层是否可行」节有 jsonl 格式与压缩率实测（约 1.8%）——自建还是复用（含引入 Python 依赖的代价）**PO 已定（2026-08-14）：自建 Node 原生实现**；`claude-code-log` 只作只读参考（`models.py` 当 jsonl entry 类型字典用），1.8% 实测值继续当 AC4 体积锚。理由：目标形态不同（它是为人读设计的渲染器——emoji 标题、可折叠区块、DetailLevel 五档渐进展示；AC3 要的是机器可读、规则表可审计的底片）；本插件纯 Node/Agent SDK 栈，引入 Python+pip 依赖平添一层安装脆弱性；它 2500+ 行渲染逻辑大半覆盖 teammates/workflow/cron 等本项目用不上的功能面。安全网：AC3③「未知类型保守保留＋留痕」是自建路线兜底——解析拿不准的宁可多留、不静默丢
 5. **底片目录禁区（硬约束）**：不得位于 `.claude/dream/`（白名单可写→01.2·AC2 结构上不可能成立）、不得位于 `.claude/memory/`（破 D2）、必须在 canUseTool 白名单之外、**不入梦前快照 pathspec**；落点在 adapter.json 声明
 6. **git 策略在 01.1 动工前定版**：默认先忽略不入库（涉隐私）；若忽略，**精确忽略到文件、不要整目录 ignore**——Sprint-1 因整目录 ignore 让梦失败过一次（`5c04dd3`）
 7. **定序**：底片写入与梦启动同源于散会事件，必须显式定序（先压完再拉梦，或梦等就绪信号）
