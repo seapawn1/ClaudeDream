@@ -584,6 +584,154 @@ async function testMechanicalChecks() {
   sandboxes.push(smallRoot);
 }
 
+async function testDisposal() {
+  // PBI-02.3：机械处置层。同一沙箱跑两轮（状态延续，正好验「已隔离不复加标记」与
+  // report-only 无副作用）：第一轮 delete_policy=report-only（零删除，建议进报告），
+  // 第二轮默认 quarantine-first（确凿删除真正执行）。
+  console.log('\n=== PBI-02.3 机械处置层（L0 随手修 / 确凿删除 / L3 隔离 / feedback 保护 / 复检） ===');
+  const { runMechanicalChecks } = await import('../src/engine/check.mjs');
+  const { applyDisposal, applyQuarantineMarker, removeQuarantineMarker, demoteLinksInBody } = await import('../src/engine/act.mjs');
+  const { createEngineLog } = await import('../src/lib/exec-log.mjs');
+  const { resolveConfig } = await import('../src/engine/config.mjs');
+
+  // ---- 0) 标记可逆性纯函数单测：apply → remove 必须逐字节还原（AC4 可逆） ----
+  const sample = '---\nname: rev-target\ndescription: 可逆性单测\nmetadata:\n  type: project\n---\n\n正文。\n';
+  const marked = applyQuarantineMarker(sample, { reason: 'M3-dangling-source', since: '2026-08-15T00:00:00.000Z', runId: 'r1' });
+  check('隔离标记写入 frontmatter（status + quarantine 块 + 起始信息）', marked.includes('status: quarantined') && marked.includes('reason: M3-dangling-source') && marked.includes('runId: r1'));
+  check('L3 可逆：去标记后逐字节还原原状', removeQuarantineMarker(marked) === sample);
+  check('L0 修断链：只摘失效标记、健康链接与文字保留', demoteLinksInBody('前文 [[dead]] 后文 [[alive]] 完。', ['dead']) === '前文 dead 后文 [[alive]] 完。');
+  check('L0 修断链：多处出现全部摘除', demoteLinksInBody('[[dead]] 和 [[dead]]。', ['dead']) === 'dead 和 dead。');
+
+  // ---- 1) 种植沙箱 ----
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-disposal-'));
+  git(root, ['init', '-q']);
+  git(root, ['config', 'user.email', 'test@example.com']);
+  git(root, ['config', 'user.name', 'claude-dream self-test']);
+  mkdirSync(path.join(root, 'src'), { recursive: true });
+  // 复活判据：实体重新命中——REVIVED-ENTITY-TOKEN 真实存在于项目文件里
+  writeFileSync(path.join(root, 'src', 'alive.mjs'), '// src/alive.mjs contains REVIVED-ENTITY-TOKEN\nexport const alive = true;\n', 'utf8');
+  writeFileSync(path.join(root, 'doomed-2.txt'), 'doomed content\n', 'utf8');
+  writeFileSync(path.join(root, 'CLAUDE.md'), '# Disposal Sandbox\n', 'utf8');
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'plant project files']);
+  rmSync(path.join(root, 'doomed-2.txt'));
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'remove doomed-2.txt (讣告)']);
+
+  const memoryDir = path.join(root, '.claude', 'memory');
+  mkdirSync(memoryDir, { recursive: true });
+
+  plantMemory(memoryDir, 'hub', { body: '链接中枢，被多方引用。' });
+  plantMemory(memoryDir, 'victim-confirmed', { body: '参见 doomed-2.txt。链接 [[hub]]。' });
+  // 带 [[hub]] 出链：本组测的是「M3+M4 两笔发现都不碰它」，不掺 M2 孤儿的第三笔干扰
+  plantMemory(memoryDir, 'feedback-protected', { type: 'feedback', sources: ['missing/feed.jsonl'], body: '用户亲口纠正过的记忆：参见 doomed-2.txt。链接 [[hub]]。' });
+  plantMemory(memoryDir, 'candidate-quarantine', { body: '该功能见 never-existed-2.txt。链接 [[hub]]。' });
+  plantMemory(memoryDir, 'orphan-quarantine', { body: '一条孤立记忆，无链接。' });
+  plantMemory(memoryDir, 'link-fix-target', { body: '[[ghost-link-a]] 与 [[ghost-link-b]] 都不存在，[[hub]] 存在。' });
+  plantMemory(memoryDir, 'unindexed-target', { body: '漏索引的记忆。链接 [[hub]]。' });
+  // 手工预置两条已隔离记忆（模拟上一场梦的产物）：
+  plantMemory(memoryDir, 'revive-candidate', { body: '曾引用已消失实体，现在实体复活了。链接 [[hub]]。' });
+  plantMemory(memoryDir, 'stays-quarantined', { sources: ['still-missing.jsonl'], body: '溯源仍然悬空。链接 [[hub]]。' });
+  const reviveMarked = applyQuarantineMarker(readFileSync(path.join(memoryDir, 'revive-candidate.md'), 'utf8'), {
+    reason: 'M4-zero-hits-candidate', since: '2026-08-14T00:00:00.000Z', runId: 'prev-dream', entity: 'REVIVED-ENTITY-TOKEN',
+  });
+  writeFileSync(path.join(memoryDir, 'revive-candidate.md'), reviveMarked, 'utf8');
+  const staysMarked = applyQuarantineMarker(readFileSync(path.join(memoryDir, 'stays-quarantined.md'), 'utf8'), {
+    reason: 'M3-dangling-source', since: '2026-08-14T00:00:00.000Z', runId: 'prev-dream',
+  });
+  writeFileSync(path.join(memoryDir, 'stays-quarantined.md'), staysMarked, 'utf8');
+  const fillerSlugs = [];
+  for (let i = 1; i <= 8; i++) {
+    const slug = `filler-${String(i).padStart(2, '0')}`;
+    fillerSlugs.push(slug);
+    plantMemory(memoryDir, slug, { body: '填充记忆，链接 [[hub]]。' });
+  }
+  const indexed = ['hub', 'victim-confirmed', 'feedback-protected', 'candidate-quarantine', 'orphan-quarantine',
+    'link-fix-target', 'revive-candidate', 'stays-quarantined', ...fillerSlugs];
+  plantIndex(memoryDir, indexed.map((s) => ({ slug: s, label: s })));
+  writeFileSync(path.join(memoryDir, 'MEMORY.md'), readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8') + '- [幽灵](ghost-index-2.md) — 盘上不存在\n', 'utf8');
+
+  const paths = dreamPaths(root);
+  const exec = createEngineLog({ logFile: path.join(paths.dreamDir, 'disposal-engine.log') });
+  const feedbackContentBefore = readFileSync(path.join(memoryDir, 'feedback-protected.md'), 'utf8');
+  const deleteCalls = [];
+
+  // ---- 2) 第一轮：report-only 档位 ----
+  const configRO = resolveConfig(root);
+  configRO.values.delete_policy = 'report-only';
+  const checkRO = runMechanicalChecks({ root, paths, exec });
+  const ro = applyDisposal({
+    root, paths, config: configRO, mems: checkRO.mems, findings: checkRO.findings,
+    runId: 'run-ro', exec, preSha: 'PRE-SHA-PLACEHOLDER', onDelete: (n) => deleteCalls.push(n),
+  });
+
+  check('report-only：确凿票不执行删除（victim-confirmed 仍存在）', existsSync(path.join(memoryDir, 'victim-confirmed.md')));
+  check('report-only：netDeleted=0', ro.netDeleted === 0, JSON.stringify(ro.netDeleted));
+  check('report-only：删除建议进 journal（delete-suggestion，注明被档位压制）', ro.journal.some((a) => a.action === 'delete-suggestion' && a.object === 'victim-confirmed.md'), JSON.stringify(ro.journal.map((a) => `${a.action}:${a.object}`)));
+  check('report-only：删除建议进待裁决清单', ro.pendingRulings.some((p) => p.type === 'delete-suggestion' && p.object === 'victim-confirmed.md'), JSON.stringify(ro.pendingRulings.map((p) => p.type)));
+  check('report-only 不压制 L0/隔离：候选条目照常进隔离', ro.journal.some((a) => a.action === 'quarantine' && a.object === 'candidate-quarantine.md'));
+
+  // L0 修断链
+  const fixedBody = readFileSync(path.join(memoryDir, 'link-fix-target.md'), 'utf8');
+  check('L0 修断链：[[ghost-link-a]]/[[ghost-link-b]] 摘除标记降为正文', fixedBody.includes('ghost-link-a 与 ghost-link-b 都不存在') && !fixedBody.includes('[[ghost-link'));
+  check('L0 修断链：健康链接 [[hub]] 原样保留', fixedBody.includes('[[hub]]'));
+  check('L0 修断链：journal 记入（四要素齐）', ro.journal.some((a) => a.action === 'fix-link' && a.object === 'link-fix-target.md' && a.criterionId === 'M1' && a.evidence && a.rollback.hint));
+
+  // L3 隔离标记 + 起始信息（AC6）
+  const quarantinedBody = readFileSync(path.join(memoryDir, 'candidate-quarantine.md'), 'utf8');
+  check('L3 隔离：candidate-quarantine 标 status: quarantined', quarantinedBody.includes('status: quarantined'));
+  check('L3 隔离：quarantine 块携带跨梦起始信息（reason/since/runId/entity）', quarantinedBody.includes('reason: M4-zero-hits-candidate') && quarantinedBody.includes('runId: run-ro') && quarantinedBody.includes('entity: never-existed-2.txt'));
+  const orphanBody = readFileSync(path.join(memoryDir, 'orphan-quarantine.md'), 'utf8');
+  check('L3 隔离：M2 孤儿也进隔离（reason 对应判据）', orphanBody.includes('reason: M2-orphan'));
+
+  // feedback 保护（AC5）
+  const feedbackAfter = readFileSync(path.join(memoryDir, 'feedback-protected.md'), 'utf8');
+  check('AC5 feedback 保护：文件逐字节毫发无损（无删除、无隔离、无改写）', feedbackAfter === feedbackContentBefore, feedbackAfter.slice(0, 80));
+  check('AC5 feedback 保护：两笔发现（M3+M4确凿）都进待裁决清单', ro.pendingRulings.filter((p) => p.object === 'feedback-protected.md').length === 2, JSON.stringify(ro.pendingRulings.map((p) => `${p.object}:${p.type}`)));
+
+  // 隔离复检（AC6）
+  const revivedBody = readFileSync(path.join(memoryDir, 'revive-candidate.md'), 'utf8');
+  check('AC6 复检复活：实体重新命中 → 解除隔离（标记移除）', !revivedBody.includes('status: quarantined') && revivedBody.includes('实体复活了'));
+  check('AC6 复检复活：unquarantine 动作入 journal', ro.journal.some((a) => a.action === 'unquarantine' && a.object === 'revive-candidate.md'));
+  const staysBody = readFileSync(path.join(memoryDir, 'stays-quarantined.md'), 'utf8');
+  check('AC6 复检不复活：溯源仍悬空 → 保持隔离（标记仍在）', staysBody.includes('status: quarantined') && staysBody.includes('reason: M3-dangling-source'));
+  check('AC6 复检不复活：未产生 unquarantine 动作', !ro.journal.some((a) => a.action === 'unquarantine' && a.object === 'stays-quarantined.md'));
+  check('已隔离文件的新发现不复加标记（journal 无第二次 quarantine 动作）', ro.journal.filter((a) => a.action === 'quarantine' && a.object === 'stays-quarantined.md').length === 0);
+
+  // M5 索引双向修复
+  const idxAfterRO = readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8');
+  check('M5 修复：幽灵索引行已移除', !idxAfterRO.includes('ghost-index-2'));
+  check('M5 修复：漏索引文件已补指针行', idxAfterRO.includes('unindexed-target.md'));
+  check('M5 修复：补的指针行含 frontmatter 名与描述', idxAfterRO.includes('[unindexed-target](unindexed-target.md) — unindexed-target 种植记忆'), idxAfterRO.split('\n').filter((l) => l.includes('unindexed')).join('|'));
+
+  // 回滚提示（02.5-AC1 数据层）：新建类 vs 恢复类区分 + 多笔连坐标注
+  const quarantineAction = ro.journal.find((a) => a.action === 'quarantine' && a.object === 'candidate-quarantine.md');
+  check('回滚提示：新建类（隔离标记）给「去除标记」式回滚，不是恢复梦前版本', quarantineAction?.rollback.kind === 'undo-new-marker' && quarantineAction.rollback.hint.includes('去除'), JSON.stringify(quarantineAction?.rollback));
+  const addLineAction = ro.journal.find((a) => a.action === 'fix-index-add-line');
+  check('回滚提示：新建类（索引行）给「删除该行」式回滚', addLineAction?.rollback.kind === 'undo-new-line' && addLineAction.rollback.hint.includes('删除 MEMORY.md 中新增行'));
+  check('回滚提示：多笔触及同一文件时显式标注连坐（MEMORY.md 被多笔动过）', ro.journal.filter((a) => a.rollback.file === 'MEMORY.md').length >= 2 && ro.journal.some((a) => a.rollback.file === 'MEMORY.md' && a.rollback.affectsOthers >= 1), JSON.stringify(ro.journal.filter((a) => a.rollback.file === 'MEMORY.md').map((a) => a.rollback.affectsOthers)));
+
+  // ---- 3) 第二轮：默认 quarantine-first（同一沙箱，状态延续） ----
+  const configQF = resolveConfig(root);
+  const checkQF = runMechanicalChecks({ root, paths, exec });
+  const qf = applyDisposal({
+    root, paths, config: configQF, mems: checkQF.mems, findings: checkQF.findings,
+    runId: 'run-qf', exec, preSha: 'PRE-SHA-PLACEHOLDER', onDelete: (n) => deleteCalls.push(n),
+  });
+
+  check('quarantine-first：确凿票真正执行删除（victim-confirmed 已消失）', !existsSync(path.join(memoryDir, 'victim-confirmed.md')));
+  check('quarantine-first：netDeleted=1', qf.netDeleted === 1);
+  check('quarantine-first：onDelete 回调被调（熔断计数接入点）', deleteCalls.length === 1 && deleteCalls[0] === 1, JSON.stringify(deleteCalls));
+  const deleteAction = qf.journal.find((a) => a.action === 'delete' && a.object === 'victim-confirmed.md');
+  check('删除动作携带死者遗言（被删正文全文，报告内联用）', typeof deleteAction?.contentBefore === 'string' && deleteAction.contentBefore.includes('doomed-2.txt'));
+  check('删除动作四要素齐（动作|判据|证据|回滚提示）', deleteAction && deleteAction.criterionId === 'M4' && Array.isArray(deleteAction.evidence) && deleteAction.evidence.length >= 1 && deleteAction.rollback.hint.includes('git checkout'));
+  check('删除连带索引行清理（MEMORY.md 不再指向 victim-confirmed）', !readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8').includes('victim-confirmed'));
+  check('第二轮：第一轮已隔离的文件不复加标记（journal 无第二次 quarantine）', qf.journal.filter((a) => a.action === 'quarantine').length === 0, JSON.stringify(qf.journal.map((a) => `${a.action}:${a.object}`)));
+  check('第二轮：feedback 保护依然成立（第二轮仍无删除/隔离）', existsSync(path.join(memoryDir, 'feedback-protected.md')) && readFileSync(path.join(memoryDir, 'feedback-protected.md'), 'utf8') === feedbackContentBefore);
+
+  sandboxes.push(root);
+}
+
 async function testFullChainAndRevertAndCooldownAndRecursion() {
   const sandbox = makeSandbox('chain');
   const paths = dreamPaths(sandbox);
@@ -1220,6 +1368,7 @@ try {
   await testNegativesLargeTranscriptStress();
   await testNotebookEditFieldName();
   await testMechanicalChecks();
+  await testDisposal();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());

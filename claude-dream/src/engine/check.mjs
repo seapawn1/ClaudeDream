@@ -89,17 +89,18 @@ export function parseMemoryFile(filePath) {
       if (!m) continue;
       const key = m[2].trim();
       const value = m[3].trim();
-      if (indent > 0 && currentKey === 'metadata') {
-        frontmatter.metadata = frontmatter.metadata || {};
-        frontmatter.metadata[key] = parseScalar(value);
+      // 允许缩进子键的嵌套块：metadata 与 quarantine（L3 隔离标记，见 act.mjs）
+      if (indent > 0 && (currentKey === 'metadata' || currentKey === 'quarantine')) {
+        frontmatter[currentKey] = frontmatter[currentKey] || {};
+        frontmatter[currentKey][key] = parseScalar(value);
         continue;
       }
       inSourcesBlock = key === 'sources' && !value;
       currentKey = key;
       if (key === 'sources') {
         frontmatter.sources = inSourcesBlock ? [] : parseSourcesInline(value);
-      } else if (key === 'metadata') {
-        frontmatter.metadata = frontmatter.metadata || {};
+      } else if (key === 'metadata' || key === 'quarantine') {
+        frontmatter[key] = frontmatter[key] || {};
       } else {
         frontmatter[key] = parseScalar(value);
       }
@@ -114,6 +115,8 @@ export function parseMemoryFile(filePath) {
     type: frontmatter.metadata?.type ?? null,
     modified: frontmatter.modified ?? null,
     sources: Array.isArray(frontmatter.sources) ? frontmatter.sources : [],
+    status: frontmatter.status ?? null,
+    quarantine: frontmatter.quarantine && typeof frontmatter.quarantine === 'object' ? frontmatter.quarantine : null,
     body,
     hasFrontmatter,
   };
@@ -176,7 +179,25 @@ function checkM1({ mems, memoryDir, root, exec }) {
  * 链接图口径：节点 = 记忆文件（slug）；出链 = 该文件正文里的一切 [[链接]]（不论是否解析成功——
  * 有出链意图即不算孤立，断链归 M1 管）；入链 = 其他文件里指向本 slug 的链接。
  * 链接目标带路径字符的（项目路径引用）不算记忆图边；[[foo.md]] 形式容忍并归一到 slug foo。
+ * 导出供 act.mjs 的隔离复检复用（同一口径单一来源，不复刻一份）。
  */
+export function buildLinkGraph(mems) {
+  const slugs = new Set(mems.map((m) => m.slug));
+  const inDegree = new Map(mems.map((m) => [m.slug, new Set()]));
+  const outLinks = new Map();
+  for (const mem of mems) {
+    const links = extractLinks(mem.body);
+    outLinks.set(mem.slug, links);
+    for (const link of links) {
+      const target = link.includes('.md') ? link.replace(/\.md$/, '') : link;
+      if (!/[/\\]/.test(target) && slugs.has(target)) {
+        inDegree.get(target).add(mem.slug);
+      }
+    }
+  }
+  return { inDegree, outLinks };
+}
+
 function checkM2({ mems, memoryCount, exec }) {
   if (memoryCount < M2_COLD_START_MIN) {
     exec.record({
@@ -185,26 +206,17 @@ function checkM2({ mems, memoryCount, exec }) {
     });
     return { disabled: true, reason: `库存 ${memoryCount} 条 < ${M2_COLD_START_MIN}，冷启动保护（R3）整条禁用`, findings: [] };
   }
-  const slugs = new Set(mems.map((m) => m.slug));
-  const inDegree = new Map(mems.map((m) => [m.slug, new Set()]));
-  for (const mem of mems) {
-    for (const link of extractLinks(mem.body)) {
-      const target = link.includes('.md') ? link.replace(/\.md$/, '') : link;
-      if (!/[/\\]/.test(target) && slugs.has(target)) {
-        inDegree.get(target).add(mem.slug);
-      }
-    }
-  }
+  const { inDegree, outLinks } = buildLinkGraph(mems);
   const findings = [];
   for (const mem of mems) {
-    const outLinks = extractLinks(mem.body);
+    const links = outLinks.get(mem.slug) ?? [];
     const inCount = inDegree.get(mem.slug)?.size ?? 0;
     const evidence = exec.record({
       criterion: 'M2', object: mem.slug,
-      inputs: { outLinkCount: outLinks.length, inLinkCount: inCount },
-      result: outLinks.length === 0 && inCount === 0 ? 'orphan' : 'connected',
+      inputs: { outLinkCount: links.length, inLinkCount: inCount },
+      result: links.length === 0 && inCount === 0 ? 'orphan' : 'connected',
     });
-    if (outLinks.length === 0 && inCount === 0) {
+    if (links.length === 0 && inCount === 0) {
       findings.push({ id: 'M2', object: mem.slug, detail: { outLinkCount: 0, inLinkCount: 0 }, evidence });
     }
   }
