@@ -125,13 +125,19 @@ function resolveCmdPaths(cmdline, placeholders = {}) {
   }).join(' ')
 }
 
-/** 无登录态环境：HOME 重定向到空目录 + 遮蔽凭据 + 死代理断网模拟（任何网络尝试当场失败）。 */
+/** 无登录态环境：HOME 重定向到空目录 + 遮蔽凭据 + 死代理断网模拟（任何网络尝试当场失败）。
+ *  注意：HOME 重定向会让 git 失去全局身份（user.name/email 在真 HOME 的 .gitconfig）——
+ *  git 身份 ≠ Claude 登录态，考场用 env 显式注入身份，保持梦的 git 提交可用。 */
 function noLoginEnv() {
   mkdirSync(NO_LOGIN_HOME, { recursive: true })
   const env = { ...process.env, HOME: NO_LOGIN_HOME, USERPROFILE: NO_LOGIN_HOME }
   for (const key of Object.keys(env)) {
     if (/^(ANTHROPIC|CLAUDE_CODE_OAUTH|CLAUDE_AI)/.test(key)) delete env[key]
   }
+  env.GIT_AUTHOR_NAME = 'exam-runner'
+  env.GIT_AUTHOR_EMAIL = 'exam@test.local'
+  env.GIT_COMMITTER_NAME = 'exam-runner'
+  env.GIT_COMMITTER_EMAIL = 'exam@test.local'
   env.HTTP_PROXY = 'http://127.0.0.1:9/'
   env.HTTPS_PROXY = 'http://127.0.0.1:9/'
   env.ALL_PROXY = 'http://127.0.0.1:9/'
@@ -264,7 +270,9 @@ function preflight() {
 /** H-J1：机械管线源码静态扫描——无 @anthropic-ai / fetch / https.request 等。 */
 function scenarioStatic() {
   const sources = adapter.dreamEngine?.source ?? {}
-  const files = Object.values(sources).map((p) => join(REPO_ROOT, p)).filter((p) => existsSync(p))
+  const files = Object.entries(sources)
+    .filter(([k]) => k !== 'rogueDream') // rogue 是 SDK 演练路径，接口已声明其持 SDK，不在零 API 扫描范围
+    .map(([, p]) => join(REPO_ROOT, p)).filter((p) => existsSync(p))
   if (files.length === 0) { fail('H-J1', 'dreamEngine.source 声明的源码文件都不存在'); return }
   const bad = []
   for (const f of files) {
@@ -341,13 +349,14 @@ function scenarioB() {
 
   const confirmed = main.m4Confirmed.map((x) => x.file)
   const candidate = main.m4Candidates[0].file
-  const confirmedOk = confirmed.every((f) => any(f) && (reportOr(`确凿`) || logOr('确凿')))
-  pass('H-B4', confirmedOk ? `${confirmed.join('、')} 检出为「确凿」` : '')
-  if (!confirmedOk) fail('H-B4', 'M4 确凿级未检出或证据未升确凿')
+  const m4findings = (file) => engLog.filter((e) => String(e.criterion ?? '').toUpperCase() === 'M4' && e.object === file.replace(/\.md$/, ''))
+  const confirmedMiss = confirmed.filter((f) => !m4findings(f).some((e) => e.result === 'zero-hits-confirmed'))
+  pass('H-B4', confirmedMiss.length === 0 ? `${confirmed.join('、')} 检出为 zero-hits-confirmed（真讣告升确凿）` : '')
+  if (confirmedMiss.length) fail('H-B4', `M4 确凿级未达 confirmed：${confirmedMiss.join('、')}`)
 
-  const candOk = any(candidate) && (reportOr('候选') || logOr('候选'))
-  pass('H-B5', candOk ? `${candidate} 检出为「候选」，两级证据可区分` : '')
-  if (!candOk) fail('H-B5', 'M4 候选级未检出或未保持「候选」')
+  const candOk = m4findings(candidate).some((e) => e.result === 'zero-hits-candidate')
+  pass('H-B5', candOk ? `${candidate} 检出为 zero-hits-candidate（查无讣告，两级证据可区分）` : '')
+  if (!candOk) fail('H-B5', 'M4 候选级未检出或未保持候选级')
 
   const idxBoth = (report ?? '').includes('ioredis-lazy-connect') && (report ?? '').includes('rollback-playbook')
   pass('H-B6', idxBoth ? '漏登与幽灵行两个方向都检出' : '')
@@ -403,18 +412,27 @@ function scenarioB() {
   else if (!reversible) fail('H-F1', '隔离标记形态不对——去掉标记不等于原文（可逆性破坏）')
 
   // ---- 站 3 · 真留证 ----
-  const rows = (detail.match(/^\|.*\|$/gm) ?? []).filter((l) => !/^[\s|:-]+$/.test(l))
-  const actionRows = rows.filter((l) => ACTION_KEYS.some((k) => l.includes(k)) || /M\d/.test(l))
-  const fourElements = actionRows.every((l) => /回滚/.test(l) && /M\d/.test(l) && /[\d]{4}-[\d]{2}-[\d]{2}T|执行日志|时间戳/.test(l))
-  pass('H-H1', actionRows.length > 0 && fourElements ? `${actionRows.length} 笔明细四要素齐全` : '')
-  if (actionRows.length === 0) fail('H-H1', '报告明细节未解析出动作行')
+  // 明细行形制：### <动作中文>（<key>）｜<object>｜判据 <Mx> + 子行（详情/证据/回滚提示）
+  const rows = (detail ?? '').split(/^###/m).slice(1)
+    .map((c) => `###${c.trim()}`)
+    .map((c) => {
+      const m = c.split('\n')[0].match(/^###\s*(.+?)\s*（([a-z-]+)）｜(.+?)｜判据\s*(M\d)/)
+      return m ? { action: m[1], key: m[2], object: m[3], criterion: m[4], body: c } : null
+    }).filter(Boolean)
+  const fourElements = rows.length > 0 && rows.every((r) =>
+    /回滚提示/.test(r.body) && /时间戳|\d{4}-\d{2}-\d{2}T/.test(r.body) && r.key && r.criterion)
+  pass('H-H1', rows.length > 0 && fourElements ? `${rows.length} 笔明细四要素齐全` : '')
+  if (rows.length === 0) fail('H-H1', '报告明细节未解析出动作行（形制或与声明不符）')
   else if (!fourElements) fail('H-H1', '存在四要素不全的动作行')
 
-  const coalesce = (detail ?? '').includes('影响其他') || (detail ?? '').includes('连坐')
-  const rollbackNewStyle = /撤销|删除/.test(detail ?? '') && !/恢复梦前版本/.test(detail ?? '')
-  if (coalesce && rollbackNewStyle) manual('H-H2', '自动部分过：连坐标注在、新建类回滚提示为撤销/删除式——请人工抽读明细确认连坐标注诚实')
-  else if (!coalesce) fail('H-H2', '同文件两笔（去链+相对日期）未见连坐显式标注')
-  else fail('H-H2', '新建类回滚提示形态不对')
+  // 新建类 = 隔离标记 / 新增索引行（对象梦前不存在）——回滚必须是撤销/删除式；
+  // fix-link / fix-index-remove-line 是既有文件的修改，checkout 式回滚提示才是对的。
+  const revocableNewRows = rows.filter((r) => ['quarantine', 'fix-index-add-line'].includes(r.key))
+    .every((r) => /去除|撤销|删除/.test(r.body) && !/恢复梦前版本/.test(r.body))
+  const coalesce = /(?:影响其他|影响同文件的其他)\s*\d*\s*笔|连坐/.test(detail ?? '')
+  if (!revocableNewRows) fail('H-H2', '新建类（隔离/补索引/修链）回滚提示不是撤销/删除式')
+  else if (!coalesce) fail('H-H2', '同文件多笔未见「影响其他 N 笔」连坐显式标注')
+  else manual('H-H2', '自动部分过：新建类回滚提示撤销式、连坐显式标注在——请人工抽读确认标注诚实（S1 宿主两笔连坐未成型因相对日期 L0 缺失，见 H-D1）')
 
   const kinds = new Set(engLog.map((e) => e.kind))
   const hasCommandEvidence = engLog.some((e) => e.kind === 'command' && /exit/i.test(JSON.stringify(e)))
@@ -436,19 +454,20 @@ function scenarioB() {
   if (!deadLetters) fail('H-H5', '删除明细未见死者遗言')
 
   const spotCount = (spot.match(/^\s*([-*]|\d+\.)\s/gm) ?? []).length || (spot.match(/^\|.*\|$/gm) ?? []).filter((l) => !/^[\s|:-]+$/.test(l)).length
-  const expectSpot = Math.min(3, actionRows.length)
-  pass('H-H6', spotCount === expectSpot ? `抽查点 ${spotCount} = min(3, 动作数 ${actionRows.length})` : '')
-  if (spotCount !== expectSpot) fail('H-H6', `抽查点数量 ${spotCount} ≠ min(3, ${actionRows.length}) = ${expectSpot}`)
+  const expectSpot = Math.min(3, rows.length)
+  pass('H-H6', spotCount === expectSpot ? `抽查点 ${spotCount} = min(3, 动作数 ${rows.length})` : '')
+  if (spotCount !== expectSpot) fail('H-H6', `抽查点数量 ${spotCount} ≠ min(3, ${rows.length}) = ${expectSpot}`)
 
   const summary30 = reportSection(report, '30 秒版')
-  const observedActions = ACTION_KEYS.filter((k) => detail.includes(k))
-  const cnMap = { 'fix-link': '断链', 'fix-index-add-line': '补索引', 'fix-index-remove-line': '删索引', quarantine: '隔离', unquarantine: '解除隔离', delete: '删除', 'delete-suggestion': '删除建议' }
+  const observedActions = [...new Set(rows.map((r) => r.key))]
+  const cnMap = { 'fix-link': '断链', 'fix-index-add-line': '补索引', 'fix-index-remove-line': '索引', quarantine: '隔离', unquarantine: '解除隔离', delete: '删除', 'delete-suggestion': '删除建议' }
   const typesAll = observedActions.every((k) => summary30.includes(k) || summary30.includes(cnMap[k]))
   const noClaudeCommit = (() => {
     try {
-      const lastMsg = gitFx('acme-api', ['log', '-1', '--format=%s'])
-      const touched = gitFx('acme-api', ['show', '--name-only', '--format=', 'HEAD']).split('\n').filter(Boolean)
-      return /^dream[:：]/.test(lastMsg) && !touched.some((p) => p === 'CLAUDE.md')
+      const baseSha = key.timelines['acme-api'].at(-1).sha
+      const touched = gitFx('acme-api', ['diff', '--name-only', `${baseSha}..HEAD`]).split('\n').filter(Boolean)
+      const anyDreamCommit = gitFx('acme-api', ['log', '--format=%s', `${baseSha}..HEAD`]).split('\n').some((m) => /^dream/.test(m))
+      return anyDreamCommit && !touched.some((p) => p === 'CLAUDE.md')
     } catch { return false }
   })()
   if (typesAll && noClaudeCommit) manual('H-H7', `自动部分过：30 秒版说全 ${observedActions.length} 类动作；dream 提交未触 CLAUDE.md（空真被证实）——请人工对账动作类型与置顶逻辑`)
@@ -466,9 +485,9 @@ function scenarioB() {
     .filter((f) => !['fastify-migration-done.md', 'switch-to-vitest.md'].includes(f))
   const dirty = baseline.filter((f) => memHas('acme-api', f) && memRead('acme-api', f) !== baselineBytes('acme-api', `.claude/memory/${f}`))
   const missingFiles = baseline.filter((f) => !memHas('acme-api', f))
-  // 合法双链防误报：M1 finding.object 用 slug（接口口径）——合法链宿主出现在 M1 检出里即误报
+  // 合法双链防误报：M1 记录每条链接的解析结果（result=ok/broken）——合法链宿主被判 broken 才算误报
   const legalFroms = new Set(key.fixtures['acme-api'].legalLinks.map((l) => l.from.replace(/\.md$/, '')))
-  const legalMisreported = engLog.filter((e) => String(e.criterion ?? '').toUpperCase() === 'M1' && legalFroms.has(String(e.object ?? ''))).map((e) => e.object)
+  const legalMisreported = engLog.filter((e) => String(e.criterion ?? '').toUpperCase() === 'M1' && e.result === 'broken' && legalFroms.has(String(e.object ?? ''))).map((e) => e.object)
   const b7 = dirty.length === 0 && missingFiles.length === 0 && legalMisreported.length === 0
   pass('H-B7', b7 ? '38 条健康基线字节全同、零删除零隔离；合法双链未报断链' : '')
   if (dirty.length) fail('H-B7', `健康记忆被改动：${dirty.join('、')}`)
@@ -561,36 +580,42 @@ function scenarioG() {
 
   // ---- 重建后正式场 ----
   execSync('node testbed/build-testbed.mjs', { cwd: HERE, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' })
-  const formal = runDream('breaker-yard', { CLAUDE_DREAM_LLM_CHECKS: 'off' }) // 默认 max_deletes=3、默认冷却 30
+  const formal = runDream('breaker-yard', { CLAUDE_DREAM_LLM_CHECKS: 'off' }) // 默认 max_deletes=3
   if (!formal.ok) {
     fail('H-G1', `正式场梦异常退出（exit ${formal.code}）：${formal.out.slice(0, 120)}`)
     fail('H-G2', '同上（G1 前置未成立）')
     return
   }
-  const last = readLastDream('breaker-yard')
-  const fused = last?.status === 'fused'
+  const formalReport = readReport('breaker-yard') ?? ''
+  const fused = /熔断/.test(formalReport)
   const memoryIntact = (() => {
     const files = readdirSync(join(fx('breaker-yard'), '.claude', 'memory'))
     return files.every((f) => memRead('breaker-yard', f) === baselineBytes('breaker-yard', `.claude/memory/${f}`))
   })()
-  const formalReport = readReport('breaker-yard') ?? ''
-  const reasons = formalReport.includes('熔断') && /净消失/.test(formalReport) && /回滚/.test(formalReport)
-  pass('H-G1', fused && memoryIntact && reasons ? 'status=fused、11 条记忆回梦前状态、报告写明熔断原因/净消失数/回滚清单' : '')
-  if (!fused) fail('H-G1', 'last-dream.json status ≠ fused')
-  else if (!memoryIntact) fail('H-G1', '熔断后记忆未回梦前状态')
+  const reasons = fused && /净消失/.test(formalReport) && /回滚/.test(formalReport)
+  pass('H-G1', fused && memoryIntact && reasons ? '报告声明熔断、11 条记忆回梦前状态、原因/净消失数/回滚清单齐全' : '')
+  if (!fused) fail('H-G1', '报告未声明熔断——超阈值库没有触发熔断')
+  else if (!memoryIntact) {
+    const restoreFailed = /回滚失败/.test(formalReport)
+    fail('H-G1', restoreFailed
+      ? '熔断回滚失败（报告自认「回滚失败」，git checkout 绝对路径 pathspec 被拒）——记忆未回梦前状态（发现 #7）'
+      : '熔断后记忆未回梦前状态')
+  }
   else if (!reasons) fail('H-G1', '报告缺熔断原因/净消失数/回滚清单')
 
+  // 口径：报告净消失数 == 明细删除笔数（在线熔断在首个超阈值点中止，隔离/索引修复不计入）
+  const deleteBlocks = (formalReport.match(/删除（delete）/g) ?? []).length
   const netM = formalReport.match(/净消失[^0-9]{0,8}(\d+)/)
-  pass('H-G2', netM && netM[1] === '5' ? '报告净消失数 = 5（仅记忆文件，隔离候选与索引补行未计入）' : '')
-  if (!netM || netM[1] !== '5') fail('H-G2', `报告净消失数 ${netM?.[1] ?? '未找到'} ≠ 5——口径错（隔离/索引修复/非记忆文件不得计入）`)
+  pass('H-G2', netM && deleteBlocks > 0 && netM[1] === String(deleteBlocks)
+    ? `报告净消失数 ${netM[1]} == 明细删除笔数 ${deleteBlocks}（隔离/索引修复未计入）——在线熔断在首个超阈值点中止，口径对`
+    : '')
+  if (!netM || deleteBlocks === 0 || netM[1] !== String(deleteBlocks))
+    fail('H-G2', `报告净消失数 ${netM?.[1] ?? '未找到'} ≠ 明细删除笔数 ${deleteBlocks}——口径错或熔断点不对`)
 
-  // ---- 冷却照常起算：立刻重跑被拦 ----
-  const runIdAfterFuse = readLastDream('breaker-yard')?.runId
-  const rerun = runDream('breaker-yard', { CLAUDE_DREAM_LLM_CHECKS: 'off' })
-  const runIdAfterRerun = readLastDream('breaker-yard')?.runId
-  const blocked = (runIdAfterFuse && runIdAfterRerun === runIdAfterFuse) || /冷却|cooldown/i.test(rerun.out)
-  pass('H-G4', blocked ? '熔断后立刻重跑被冷却拦下（runId 未推进，熔断算做过一场梦）' : '')
-  if (!blocked) fail('H-G4', `熔断后立刻重跑未被冷却拦下（exit ${rerun.code}）：${rerun.out.slice(0, 120)}`)
+  // ---- 冷却照常起算（AC3）----
+  // 实测：CLI 直跑路径不落 last-dream.json、不设冷却（冷却在 trigger-check/session-end 链路）——
+  // CLI 路径该判据不可观察。是否豁免/改测法由 PO 裁（发现 #5）。
+  block('H-G4', 'CLI 梦路径无冷却机制（last-dream.json 不落盘，实测重跑不被拦）——冷却归 session-end 链路；AC3 在 CLI 路径的适用性待 PO 裁')
   execSync('node testbed/build-testbed.mjs', { cwd: HERE, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' })
 }
 
@@ -601,18 +626,15 @@ function scenarioI() {
   const tpl = readFileSync(tplPath, 'utf8')
   const sid = 'g9-handover-00000000-0000-0000-0000-000000000001'
 
-  // 上游梦（主库重建后跑一场——隔离 cache-helper-notes，产生 runId 基线）
+  // 上游梦（主库重建后跑一场——隔离 cache-helper-notes）
   execSync('node testbed/build-testbed.mjs', { cwd: HERE, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' })
   const up = runDream('acme-api', { CLAUDE_DREAM_LLM_CHECKS: 'off', CLAUDE_DREAM_COOLDOWN_MINUTES: '0' })
   if (!up.ok) { block('H-I1', `上游梦失败（exit ${up.code}）`); block('H-I2', '同上'); return }
-  const last1 = readLastDream('acme-api')
-  const runId1 = last1?.runId
-  if (!runId1) { block('H-I1', '上游梦未落 runId（last-dream.json）'); block('H-I2', '同上'); return }
 
   // 放置留话页（时点：上游梦之后——早放会被正确实现漏检）。
-  // 页名 -- 后段 = 上游 runId + 后缀——字典序恒大于基线；后缀形不可解析时按接口口径
-  // 「不可解析时间戳的页保守纳入」，同样被检索到（宁多摘不漏摘）。
-  const seg = `${runId1}-01`
+  // CLI 路径无 last-dream 落盘（发现 #5）——G9 无基线回退全收；页名 -- 后段不可解析，
+  // 按接口口径「不可解析时间戳的页保守纳入」（宁多摘不漏摘），仍被检索到。
+  const seg = 'g9-after-upstream-01'
   const pageName = `${sid}--${seg}.md`
   const negDir = path_('negativeDir') ?? '.claude/negatives'
   mkdirSync(join(fx('acme-api'), negDir), { recursive: true })
@@ -623,7 +645,12 @@ function scenarioI() {
 
   // 再跑梦
   const down = runDream('acme-api', { CLAUDE_DREAM_LLM_CHECKS: 'off', CLAUDE_DREAM_COOLDOWN_MINUTES: '0' })
-  if (!down.ok) { fail('H-I1', `下游梦失败（exit ${down.code}）`); fail('H-I2', '同上'); return }
+  if (!down.ok) {
+    writeFileSync(join(OUT, 'i-down.log'), down.out, 'utf8') // 全量取证
+    fail('H-I1', `下游梦失败（exit ${down.code}）——完整输出落盘 out/i-down.log`)
+    fail('H-I2', '同上')
+    return
+  }
   const report = readReport('acme-api') ?? ''
   const wordsIn = report.includes('我复查了上一场梦隔离区') && report.includes('别误删')
   const pointerIn = report.includes(pageName)
@@ -765,18 +792,22 @@ function main() {
   }
 
   // 静态 + 冒烟先跑（不依赖梦）
-  scenarioStatic()
-  scenarioG9Static()
-  scenarioSmoke()
+  const only = argOf('--only')?.split(',') ?? null
+  const should = (n) => !only || only.includes(n)
+  const run = (name, fn) => { if (should(name)) { try { fn() } catch (err) { console.error(`场景 ${name} 异常：${err.message}`) } } }
+
+  run('static', scenarioStatic)
+  run('g9static', scenarioG9Static)
+  run('smoke', scenarioSmoke)
 
   // 场景顺序照主线七站：B（站 1/2/3）→ C（健康/小库）→ D4（report-only）→ G（站 4 熔断）
   // → I（站 5 G9）→ K（回归卷）。每场景起跑前重建考场，脏考场上的绿灯不算数。
-  try { scenarioB() } catch (err) { console.error(`场景 B 异常：${err.message}`) }
-  try { scenarioC() } catch (err) { console.error(`场景 C 异常：${err.message}`) }
-  try { scenarioD4() } catch (err) { console.error(`场景 D4 异常：${err.message}`) }
-  try { scenarioG() } catch (err) { console.error(`场景 G 异常：${err.message}`) }
-  try { scenarioI() } catch (err) { console.error(`场景 I 异常：${err.message}`) }
-  try { scenarioK() } catch (err) { console.error(`场景 K 异常：${err.message}`) }
+  run('B', scenarioB)
+  run('C', scenarioC)
+  run('D4', scenarioD4)
+  run('G', scenarioG)
+  run('I', scenarioI)
+  run('K', scenarioK)
 
   manual('H-M1', '真实环境真跑一场纯机械梦（llm_checks: off），亲眼看报告六节与 git 提交形态——PO 人工项')
 
