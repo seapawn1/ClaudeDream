@@ -99,10 +99,11 @@ function collectIdentifiers({ root, paths, baselineRunId }) {
  * @param {object} opts.paths dreamPaths(root)
  * @param {object} opts.exec createEngineLog 的返回
  * @param {string|null} [opts.baselineRunId] 「上次梦 runId」——生产链上必须由调用方传入
- *   （trigger-check 在覆写 last-dream.json 之前读出旧值；D3 review F1）。**undefined 与 null
- *   语义不同**：undefined（未传）= 回退自行读 last-dream.json（仅 CLI 直跑路径，无覆写顺序
- *   问题）；null（显式传入）= 首梦无基线，直接用 null、不许回退——链上此刻文件里已经是
- *   本梦 running 态，回退读它会让基线自指、翻底片恒空（F1 的根因）。
+ *   （trigger-check 与 CLI 闸门都在覆写 last-dream.json 之前读出旧值；D3 review F1）。
+ *   **undefined 与 null 语义不同**：undefined（未传）= 回退自行读 last-dream.json（直接调用方，
+ *   如测试/历史调用——CLI 直跑自 e2e-fix-brief 修复项 3 起由 cliMain 显式传基线）；null
+ *   （显式传入）= 首梦无基线，直接用 null、不许回退——链上此刻文件里已经是本梦 running 态，
+ *   回退读它会让基线自指、翻底片恒空（F1 的根因）。
  * @returns {{
  *   quotes: {page: string, sessionId: string, text: string, matchedIdentifier: string}[],
  *   baselineRunId: string|null,
