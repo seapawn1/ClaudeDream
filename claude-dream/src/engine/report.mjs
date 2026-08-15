@@ -94,7 +94,12 @@ function render30Second({ journal, pendingRulings, fuseDetail, dreamSha, engineL
   }
 
   if (journal.length === 0) {
-    lines.push('本轮体检零发现，无处置动作。');
+    // D3 review L1：零自动处置 ≠ 零发现——feedback 保护/report-only 建议会落在待裁决里
+    if (pendingRulings.length > 0) {
+      lines.push(`本轮无自动处置，${pendingRulings.length} 条待你裁决（见隔离观察区）。`);
+    } else {
+      lines.push('本轮体检零发现，无处置动作。');
+    }
   } else {
     lines.push('动作类型全览（说全类型，不止数字）：');
     for (const [action, list] of groups) {
@@ -109,7 +114,13 @@ function render30Second({ journal, pendingRulings, fuseDetail, dreamSha, engineL
   }
 
   if (fuseDetail) {
-    lines.push(`⚠️ 本梦已熔断：${fuseDetail.reason}——记忆状态已回滚到梦前，见「熔断」节`);
+    lines.push(`⚠️ 本梦已熔断：${fuseDetail.reason}`);
+    if (fuseDetail.restoreFailed) {
+      // D3 review F3：回滚失败是最坏情况，报告与提示行都不得谎称已回滚
+      lines.push(`⚠️⚠️ 回滚失败：${fuseDetail.restoreFailed}——记忆可能未回到梦前状态，请立即人工核对`);
+    } else {
+      lines.push('记忆状态已回滚到梦前，见「熔断」节');
+    }
   }
 
   lines.push(`执行日志：\`${engineLogRel}\`（全部命令/判据证据的原始记录）`);
@@ -224,16 +235,18 @@ function renderSpotChecks({ journal, preSha }) {
   const lines = [
     `> 以下抽查点一律以**梦前状态**（${shortSha}）为基准起手核对；每一条都设计为「能失败」——若本梦动作不实，它必然翻红。`,
   ];
+  const escapePattern = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   let n = 0;
   for (const a of picked) {
     n += 1;
-    const file = (a.object ?? '').replaceAll('\\', '/');
-    const fileNoMd = file.replace(/\.md$/, '');
+    // D3 review F2：抽查点命令必须可执行——git 路径加 .claude/memory/ 前缀（object 是裸文件名）
+    const file = `.claude/memory/${String(a.object ?? '').replaceAll('\\', '/')}`;
     const show = preSha ? `git show ${preSha}:${file}` : '';
     if (a.action === 'fix-link') {
       const link = a.detail?.links?.[0] ?? '';
       lines.push(`${n}. （修断链｜${file}）梦前正文确含失效链接标记：`);
-      lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "\\[\\[${link}\\]\\]"\`（应有匹配；梦后正文已无该标记）`);
+      lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "\\[\\[${escapePattern(link)}\\]\\]"\`（应有匹配；梦后正文已无该标记）`);
     } else if (a.action === 'quarantine') {
       lines.push(`${n}. （隔离｜${file}）梦前状态确无隔离标记：`);
       lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "status: quarantined"\`（应无匹配——若梦前已有标记则本笔隔离是假动作）`);
@@ -246,11 +259,15 @@ function renderSpotChecks({ journal, preSha }) {
       lines.push(`   \`git show ${preSha}:${file}\`（应能读出被删正文，报告明细已内联全文供对照）`);
       lines.push(`   \`git log --diff-filter=D --format=%H -1 -- ${entity}\`（应有讣告提交——无讣告则本笔删除违反铁律）`);
     } else if (a.action === 'fix-index-add-line') {
+      // D3 review F4：模式必须用该笔实际补的索引行对象（detail.forFile），不是 object（恒为
+      // 'MEMORY.md'——Select-String 大小写不敏感会命中标题行，恒真恒假都违反 C3）
+      const target = a.detail?.forFile ?? '';
       lines.push(`${n}. （补索引行｜MEMORY.md）梦前索引确无该行：`);
-      lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "${fileNoMd}"\`（应无匹配——若梦前已有该行则本笔补行是假动作）`);
+      lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "${escapePattern(target)}"\`（应无匹配——若梦前已有该行则本笔补行是假动作）`);
     } else if (a.action === 'fix-index-remove-line') {
+      const target = a.detail?.removedLine ?? '';
       lines.push(`${n}. （删陈旧索引行｜MEMORY.md）梦前索引确有该行：`);
-      lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "${fileNoMd}"\`（应有匹配——若梦前无该行则本笔删除是假动作）`);
+      lines.push(`   \`git show ${preSha}:${file} | Select-String -Pattern "${escapePattern(target)}"\`（应有匹配——若梦前无该行则本笔删除是假动作）`);
     } else {
       lines.push(`${n}. （${a.action}｜${file}）见明细证据与执行日志 \`${a.evidence?.ts ?? ''}\``);
     }
@@ -279,11 +296,19 @@ function renderValveStatus({ config, negativeFeed, fuseDetail }) {
     // AC3：如实标注，不假装 on 档位有语义
     lines.push('- ⚠️ LLM 层待 PBI-07，本档位（llm_checks=on）暂不生效——本场为纯机械梦（零 API）');
   }
+  if (config.provenance.claude_md_edits !== 'default') {
+    // D3 review F5：用户显式配置了 claude_md_edits 时必须说明它的真实作用范围——
+    // 机械层本轮不碰 CLAUDE.md（L2 阀门管辖归 PBI-07），SDK 围栏路径仍读环境变量。
+    lines.push(`- 注：claude_md_edits 由${config.provenance.claude_md_edits === 'file' ? '配置文件' : '环境变量'}设置（${config.values.claude_md_edits}），但机械梦内无行为对象——L2 阀门管辖归 PBI-07，机械层不碰 CLAUDE.md；SDK 围栏路径（rogue）仍读环境变量 DREAM_CLAUDE_MD_EDITS`);
+  }
   for (const note of config.notes) {
     lines.push(`- 配置注记：${note}`);
   }
   if (fuseDetail) {
     lines.push(`- ⚠️ 熔断：${fuseDetail.reason}；触发时真实净消失 ${fuseDetail.netDisappeared}，已回滚动作 ${fuseDetail.rolledBackActions.length} 笔`);
+    if (fuseDetail.restoreFailed) {
+      lines.push(`- ⚠️⚠️ 回滚失败：${fuseDetail.restoreFailed}——记忆可能未回到梦前状态，请立即人工核对（不得依赖自动回滚）`);
+    }
   }
   if (negativeFeed) {
     const line = negativeFeed.triggeringSessionId

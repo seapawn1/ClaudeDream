@@ -98,6 +98,11 @@ function collectIdentifiers({ root, paths, baselineRunId }) {
  * @param {string} opts.root
  * @param {object} opts.paths dreamPaths(root)
  * @param {object} opts.exec createEngineLog 的返回
+ * @param {string|null} [opts.baselineRunId] 「上次梦 runId」——生产链上必须由调用方传入
+ *   （trigger-check 在覆写 last-dream.json 之前读出旧值；D3 review F1）。**undefined 与 null
+ *   语义不同**：undefined（未传）= 回退自行读 last-dream.json（仅 CLI 直跑路径，无覆写顺序
+ *   问题）；null（显式传入）= 首梦无基线，直接用 null、不许回退——链上此刻文件里已经是
+ *   本梦 running 态，回退读它会让基线自指、翻底片恒空（F1 的根因）。
  * @returns {{
  *   quotes: {page: string, sessionId: string, text: string, matchedIdentifier: string}[],
  *   baselineRunId: string|null,
@@ -105,16 +110,21 @@ function collectIdentifiers({ root, paths, baselineRunId }) {
  *   identifiers: string[],
  * }}
  */
-export function retrieveUserMessages({ root, paths, exec }) {
-  // 基线：上次梦 runId（last-dream.json 三种终态都带 runId，02.1 起）。无 = 首次梦，全部页在范围内。
-  let baselineRunId = null;
-  try {
-    if (existsSync(paths.lastDreamState)) {
-      const state = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
-      baselineRunId = typeof state?.runId === 'string' && state.runId ? state.runId : null;
-    }
-  } catch {
+export function retrieveUserMessages({ root, paths, exec, baselineRunId: providedBaseline }) {
+  let baselineRunId;
+  if (providedBaseline === undefined) {
+    // 未传：CLI 直跑路径——last-dream.json 仍是上一场梦的终态（三种终态都带 runId，02.1 起）
     baselineRunId = null;
+    try {
+      if (existsSync(paths.lastDreamState)) {
+        const state = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+        baselineRunId = typeof state?.runId === 'string' && state.runId ? state.runId : null;
+      }
+    } catch {
+      baselineRunId = null;
+    }
+  } else {
+    baselineRunId = providedBaseline;
   }
 
   // 台账（契约①：按 sessionId 分组，页记录 file 为文件名）

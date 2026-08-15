@@ -38,9 +38,11 @@ export function demoteLinksInBody(body, links) {
 
 /**
  * 在 frontmatter 里插入/更新 quarantine 标记（可逆：removeQuarantineMarker 还原）。
- * 无 frontmatter 的文件（本身已违反 D2 契约的腐烂形态）补一个最小 frontmatter 承载标记。
+ * 无 frontmatter 的文件（本身已违反 D2 契约的腐烂形态）补一个最小 frontmatter 壳承载标记——
+ * 壳里只有隔离标记；remove 时若壳因此变空，连壳一并拆掉（F6：逐字节还原）。
  */
 export function applyQuarantineMarker(content, { reason, since, runId, entity }) {
+  const eol = content.includes('\r\n') ? '\r\n' : '\n'; // 换行风格随原文——可逆性的前提
   const lines = content.split(/\r?\n/);
   const fmEnd = lines[0]?.trim() === '---' ? lines.slice(1).findIndex((l) => l.trim() === '---') : -2;
   const markerLines = [
@@ -54,10 +56,11 @@ export function applyQuarantineMarker(content, { reason, since, runId, entity })
   if (fmEnd >= 0) {
     const closeIdx = fmEnd + 1; // lines 里收尾 --- 的绝对下标
     const out = [...lines.slice(0, closeIdx), ...markerLines, ...lines.slice(closeIdx)];
-    return out.join('\n');
+    return out.join(eol);
   }
-  // 无 frontmatter：补一个最小块（name 用文件名 stem 占位——本文件形态已违规，标记优先）
-  return ['---', ...markerLines, '---', '', content.trimStart()].join('\n');
+  // 无 frontmatter：补一个最小壳（本文件形态已违规，标记优先；壳只承载标记，不补 name 等
+  // 身份字段——身份缺失是原文件自己的问题，处置层不替它发明）
+  return ['---', ...markerLines, '---', '', content.trimStart()].join(eol);
 }
 
 /** 去掉 quarantine 标记与 status: quarantined 行——还原到隔离前状态（可逆性的另一半）。 */
@@ -75,7 +78,15 @@ export function removeQuarantineMarker(content) {
     if (trimmed === 'status: quarantined') continue;
     out.push(line);
   }
-  return out.join('\n');
+  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  let result = out.join(eol);
+  // F6：无 frontmatter 文件补壳后的拆壳——标记移除后若 frontmatter 变成空壳，连壳拆掉，
+  // 还原到「本来就没有 frontmatter」的形态。壳的形态是固定的（apply 补的）：两个 --- 行
+  // 之间只剩被拆掉的标记、后面跟一个 apply 自己插入的空行——整体一次拆掉。
+  if (/^---\r?\n---/.test(result)) {
+    result = result.replace(/^---\r?\n---\r?\n\r?\n/, '');
+  }
+  return result;
 }
 
 // ---------- 处置编排 ----------
@@ -112,12 +123,19 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
     touch(entry.rollback.file);
   }
 
+  // D3 review F2：回滚提示的命令必须**可执行**——file 是记忆文件名（或 'MEMORY.md'），
+  // 实际路径在 .claude/memory/ 下，裸文件名拼 git pathspec 在项目根必报 did not match。
+  function relPath(file) {
+    const rel = path.relative(root, path.join(memoryDir, file)).replaceAll('\\', '/');
+    return rel;
+  }
+
   function rollbackFor(file) {
     return {
       file,
       kind: 'restore-pre-dream',
       hint: preSha
-        ? `git checkout ${preSha} -- ${file.replaceAll('\\', '/')}`
+        ? `git checkout ${preSha} -- ${relPath(file)}`
         : '（梦前快照不可得，整梦回滚兜底走 git log 手动核对）',
     };
   }
@@ -261,7 +279,7 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
           detail: { entities, evidenceLevel: 'confirmed', indexLinesRemoved: true },
           evidence: confirmed.map((f) => f.evidence),
           contentBefore, // 死者遗言：报告内联被删正文
-          rollback: { ...rollbackFor(filename), hint: preSha ? `git checkout ${preSha} -- ${filename.replaceAll('\\', '/')} ${path.relative(root, indexPath).replaceAll('\\', '/')}` : rollbackFor(filename).hint },
+          rollback: { ...rollbackFor(filename), hint: preSha ? `git checkout ${preSha} -- ${relPath(filename)} ${relPath('MEMORY.md')}` : rollbackFor(filename).hint },
         });
         if (onDelete && onDelete(netDeleted)) {
           // 熔断（02.4）：onDelete 返回真值 = 熔断线已破，中止整梦——跳过剩余全部处置，
@@ -359,7 +377,13 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
   // 本轮只诚实标注连坐面，不假装能按笔精确回滚）。
   function finalize() {
     for (const entry of journal) {
-      entry.rollback.affectsOthers = Math.max(0, (byObj.get(entry.rollback.file) ?? 0) - 1);
+      let count = byObj.get(entry.rollback.file) ?? 0;
+      // D3 review L3：delete 笔的回滚命令连带 MEMORY.md（删索引行）——若同梦其他笔也动了
+      // 索引，撤销本笔会连坐它们，affectsOthers 必须取两者较大值才不低报。
+      if (entry.action === 'delete') {
+        count = Math.max(count, byObj.get('MEMORY.md') ?? 0);
+      }
+      entry.rollback.affectsOthers = Math.max(0, count - 1);
     }
     return { journal, pendingRulings, netDeleted, fused };
   }

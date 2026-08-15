@@ -109,11 +109,15 @@ async function main() {
   // runDream 接受可选 runId 参数，CLI 直跑不传时内部自行生成（行为不变）。
   const runId = runIdNow();
   const nowIso = () => new Date().toISOString();
+  // D3 review F1：G9 基线必须在**覆写 last-dream.json 之前**读出来——写 running 态会把
+  // runId 顶成本梦 runId，G9 再读它当基线会把所有既有底片页滤光（定向翻底片恒空）。
+  // 旧终态的 runId 才是「上次梦」；首梦无旧态则基线为 null（全部页在范围内）。
+  const baselineRunId = typeof lastState?.runId === 'string' && lastState.runId ? lastState.runId : null;
   try {
     writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status: 'running' }, null, 2), 'utf8');
     // PBI-01.2·AC1：把触发本次梦的 sessionId 带给 runDream，报告里的进料对账行才有据可查——
     // 底片写入（本函数顶部第①步）与这里显式定序，不是两个互不相关的动作凑巧都发生了。
-    const summary = await runDream({ root, runId, triggeringSessionId: sessionId });
+    const summary = await runDream({ root, runId, baselineRunId, triggeringSessionId: sessionId });
     // 熔断也是终态之一（02.4-AC3）：如实记 'fused' 而不是笼统 completed——冷却照常起算
     // （lastDreamAt 无条件写），rogue/机械正常场记 'completed'。
     const status = summary?.engine?.fused ? 'fused' : 'completed';

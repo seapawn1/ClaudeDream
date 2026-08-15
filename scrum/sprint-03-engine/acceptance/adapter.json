@@ -17,7 +17,7 @@
       "llm_checks": { "default": "on", "envVar": "CLAUDE_DREAM_LLM_CHECKS", "values": ["on", "off"], "honestNote": "本轮 on/off 行为一致（LLM 层待 PBI-07）；报告阀门状态节在 on 时须含「LLM 层待 PBI-07，本档位暂不生效」字样" },
       "delete_policy": { "default": "quarantine-first", "envVar": "CLAUDE_DREAM_DELETE_POLICY", "values": ["quarantine-first", "report-only"] },
       "max_deletes": { "default": 3, "envVar": "CLAUDE_DREAM_MAX_DELETES", "values": "非负整数" },
-      "claude_md_edits": { "default": true, "envVar": "DREAM_CLAUDE_MD_EDITS", "values": ["true", "false"] },
+      "claude_md_edits": { "default": true, "envVar": "DREAM_CLAUDE_MD_EDITS", "values": ["true", "false"], "honestNote": "机械梦内无行为对象（L2 阀门管辖归 PBI-07，机械层不碰 CLAUDE.md；SDK 围栏路径 scope-guard 仍读环境变量）；用户显式配置时报告阀门状态节含作用范围说明" },
       "cooldown_minutes": { "default": 30, "envVar": "CLAUDE_DREAM_COOLDOWN_MINUTES", "values": "非负整数（0=每次会话结束都触发）" }
     },
     "precedence": "配置文件 > 环境变量 > 默认值（逐键：文件有键即按文件结算，环境变量只填补文件缺的键）",
@@ -50,7 +50,7 @@
     "location": "被隔离记忆文件 frontmatter 内",
     "shape": "status: quarantined 一行 + quarantine: 块（reason/since/runId，M4 隔离另带 entity）",
     "reasonValues": ["M2-orphan", "M3-dangling-source", "M4-zero-hits-candidate"],
-    "reversibility": "去掉 status 行与 quarantine 块即还原原状（无其他改动）",
+    "reversibility": "去掉 status 行与 quarantine 块即还原原状；无 frontmatter 的文件（本身违反 D2 契约）由处置层补最小壳承载标记，去标记时若壳因此变空连壳一并拆掉——两类形态都逐字节还原（自证覆盖）",
     "recheck": "已隔离条目每梦按 reason 复检：M2 重查链接图 / M3 重查 sources 存在性 / M4 重查 entity 命中（git grep），复活即解除隔离并记录（journal action=unquarantine）"
   },
   "fuse": {

@@ -47,7 +47,7 @@ function negativeFeedReconciliation(paths, triggeringSessionId) {
   };
 }
 
-export async function runDream({ root, rogue = false, rogueTarget, triggeringSessionId, runId: providedRunId }) {
+export async function runDream({ root, rogue = false, rogueTarget, triggeringSessionId, runId: providedRunId, baselineRunId }) {
   const rogueTargetPath = rogueTarget || ROGUE_TARGET_NAME;
   const runId = providedRunId || runIdNow();
   const paths = dreamPaths(root);
@@ -72,8 +72,11 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
   // ===== 机械管线（零 SDK / 零网络）=====
   const beforeCount = countMemoryFiles(paths.memoryDir);
 
-  // D3 定向：梦开工前先翻底片找用户留话（02.6·AC1「梦定向阶段先读底片」）
-  const g9 = retrieveUserMessages({ root, paths, exec });
+  // D3 定向：梦开工前先翻底片找用户留话（02.6·AC1「梦定向阶段先读底片」）。
+  // baselineRunId 由 trigger-check 在覆写 last-dream.json 之前读出并传入（D3 review F1：
+  // 此处再读 last-dream.json 拿到的是本梦 running 态的 runId，基线会自指导致翻底片恒空）。
+  // CLI 直跑不传时 g9 内部自行回退读 last-dream.json（该路径下无覆写顺序问题）。
+  const g9 = retrieveUserMessages({ root, paths, exec, baselineRunId });
 
   // S6 体检（02.2）
   const { findings, mems, meta } = runMechanicalChecks({ root, paths, exec });
@@ -113,12 +116,18 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
   });
   writeFileSync(path.join(paths.dreamDir, `${runId}-report.md`), report, 'utf8');
 
-  // 提示行载体（SessionStart 消费；30 秒版的一句话形态）
+  // 提示行载体（SessionStart 消费；30 秒版的一句话形态）。
+  // D3 review F3：回滚失败不得谎称已回滚；L1：零处置但有待裁决时不谎称「零发现」。
+  const pendingCount = disposal.pendingRulings.length;
   const summaryLine = disposal.fused
-    ? `昨夜做了一场机械梦（${runId}）：触发了熔断，记忆已回滚到梦前状态`
+    ? fuseDetail?.restoreFailed
+      ? `昨夜做了一场机械梦（${runId}）：触发了熔断，回滚失败——请立即人工核对，详见 .claude/dream/${runId}-report.md`
+      : `昨夜做了一场机械梦（${runId}）：触发了熔断，记忆已回滚到梦前状态，详见 .claude/dream/${runId}-report.md`
     : disposal.journal.length > 0
-      ? `昨夜做了一场机械梦（${runId}）：处置 ${disposal.journal.length} 笔（删除 ${disposal.netDeleted}），详见 .claude/dream/${runId}-report.md`
-      : `昨夜做了一场机械梦（${runId}）：体检零发现，无处置，详见 .claude/dream/${runId}-report.md`;
+      ? `昨夜做了一场机械梦（${runId}）：处置 ${disposal.journal.length} 笔（删除 ${disposal.netDeleted}）${pendingCount > 0 ? `，另有 ${pendingCount} 条待你裁决` : ''}，详见 .claude/dream/${runId}-report.md`
+      : pendingCount > 0
+        ? `昨夜做了一场机械梦（${runId}）：无自动处置，${pendingCount} 条待你裁决，详见 .claude/dream/${runId}-report.md`
+        : `昨夜做了一场机械梦（${runId}）：体检零发现，无处置，详见 .claude/dream/${runId}-report.md`;
   writeFileSync(paths.promptCarrier, summaryLine, 'utf8');
 
   // 证据提交（报告 + 执行日志；刨去运行态文件）——C7：不随 dream: revert 销毁

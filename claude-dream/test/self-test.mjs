@@ -606,6 +606,11 @@ async function testDisposal() {
   const marked = applyQuarantineMarker(sample, { reason: 'M3-dangling-source', since: '2026-08-15T00:00:00.000Z', runId: 'r1' });
   check('隔离标记写入 frontmatter（status + quarantine 块 + 起始信息）', marked.includes('status: quarantined') && marked.includes('reason: M3-dangling-source') && marked.includes('runId: r1'));
   check('L3 可逆：去标记后逐字节还原原状', removeQuarantineMarker(marked) === sample);
+  // D3 review F6 回归：无 frontmatter 的腐烂形态——补壳承载标记，去标记时连壳拆、逐字节还原
+  const bare = '正文没有 frontmatter。\n';
+  const bareMarked = applyQuarantineMarker(bare, { reason: 'M2-orphan', since: '2026-08-15T00:00:00.000Z', runId: 'r2' });
+  check('F6 回归：无 frontmatter 文件补最小壳承载标记', bareMarked.startsWith('---\nstatus: quarantined\nquarantine:'));
+  check('F6 回归：无 frontmatter 文件去标记连壳拆、逐字节还原', removeQuarantineMarker(bareMarked) === bare);
   check('L0 修断链：只摘失效标记、健康链接与文字保留', demoteLinksInBody('前文 [[dead]] 后文 [[alive]] 完。', ['dead']) === '前文 dead 后文 [[alive]] 完。');
   check('L0 修断链：多处出现全部摘除', demoteLinksInBody('[[dead]] 和 [[dead]]。', ['dead']) === 'dead 和 dead。');
 
@@ -732,6 +737,8 @@ async function testDisposal() {
   const deleteAction = qf.journal.find((a) => a.action === 'delete' && a.object === 'victim-confirmed.md');
   check('删除动作携带死者遗言（被删正文全文，报告内联用）', typeof deleteAction?.contentBefore === 'string' && deleteAction.contentBefore.includes('doomed-2.txt'));
   check('删除动作四要素齐（动作|判据|证据|回滚提示）', deleteAction && deleteAction.criterionId === 'M4' && Array.isArray(deleteAction.evidence) && deleteAction.evidence.length >= 1 && deleteAction.rollback.hint.includes('git checkout'));
+  // D3 review F2 回归：回滚提示的命令必须可执行——路径带 .claude/memory/ 前缀
+  check('F2 回归：删除回滚提示路径带 .claude/memory/ 前缀（可执行）', deleteAction?.rollback.hint.includes('.claude/memory/victim-confirmed.md') && deleteAction?.rollback.hint.includes('.claude/memory/MEMORY.md'), JSON.stringify(deleteAction?.rollback));
   check('删除连带索引行清理（MEMORY.md 不再指向 victim-confirmed）', !readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8').includes('victim-confirmed'));
   check('第二轮：第一轮已隔离的文件不复加标记（journal 无第二次 quarantine）', qf.journal.filter((a) => a.action === 'quarantine').length === 0, JSON.stringify(qf.journal.map((a) => `${a.action}:${a.object}`)));
   check('第二轮：feedback 保护依然成立（第二轮仍无删除/隔离）', existsSync(path.join(memoryDir, 'feedback-protected.md')) && readFileSync(path.join(memoryDir, 'feedback-protected.md'), 'utf8') === feedbackContentBefore);
@@ -907,6 +914,7 @@ async function testReport() {
   }
   check('明细每笔带判据编号', report.includes('判据 M1') && report.includes('判据 M4'));
   check('明细每笔带回滚提示（含 git checkout 命令形态）', report.includes('回滚提示：') && report.includes('git checkout'));
+  check('F2 回归：报告回滚提示路径带 .claude/memory/ 前缀（可执行，不是裸文件名）', report.includes('git checkout PRE-SHA-FOR-REPORT -- .claude/memory/'), report.split('回滚提示：')[1]?.slice(0, 200));
   check('C1 诚实声明：回滚局限注记随报告落盘（单笔精撤后置的显式标注）', report.includes('单笔精确回滚') && report.includes('连坐'));
 
   // C2 证据两种记法
@@ -926,6 +934,8 @@ async function testReport() {
 
   // 抽查点（C3/AC3/AC5）
   check('C3 抽查点以梦前状态为基准（git show preSha 起手）', report.includes(`git show ${preSha}:`));
+  check('F2 回归：抽查点 git 路径带 .claude/memory/ 前缀（可执行）', report.includes(`git show ${preSha}:.claude/memory/`), report.split('## 抽查点')[1]?.slice(0, 250));
+  check('F4 回归：fix-index 抽查点模式用实际索引对象（ghost-r），不是恒真恒假的 "MEMORY"', report.includes('ghost-r') && !report.includes('-Pattern "MEMORY"'), report.split('## 抽查点')[1]?.slice(0, 400));
   check('C3 抽查点必须能失败（隔离点断言梦前无标记——动作不实必翻红）', report.includes('应无匹配'));
   check('AC5 自动挑最弱 3 笔（修断链证明力最弱，排第一）', /1\. （修断链/.test(report) && /2\. （/.test(report) && /3\. （/.test(report) && !/4\. （/.test(report), report.split('## 抽查点')[1]?.slice(0, 300));
 
@@ -946,6 +956,17 @@ async function testReport() {
   });
   check('熔断场报告：30 秒版与阀门状态都写明熔断原因', fuseReport.includes('本梦已熔断') && fuseReport.includes('净消失 2'));
   check('熔断场报告：无 dream: 提交时撤销指引不虚构 revert 命令', !fuseReport.includes('git revert'));
+  check('熔断场报告：回滚成功时如实写「已回滚到梦前」', fuseReport.includes('已回滚到梦前'));
+  // D3 review F3 回归：回滚失败时必须写明失败，不得谎称已回滚
+  const fuseFailedReport = buildReport({
+    runId: 'run-report-fused-fail', paths, config, checkMeta: meta, disposal: { journal: [], pendingRulings: [], netDeleted: 0 },
+    fuseDetail: { reason: '净消失 2 > 1', threshold: 1, maxDeletes: 1, tenPercent: 1, netDisappeared: 2, rolledBackActions: [], restoreFailed: 'git checkout 失败：pathspec 不匹配' },
+    preSha, dreamSha: null,
+    negativeFeed: { triggeringSessionId: null, found: false, pageCount: 0, latestPage: null },
+    g9Quotes: [], engineLogRel: '.claude/dream/report-engine.log',
+  });
+  check('F3 回归：回滚失败的报告写明失败与人工核对要求（30 秒版）', fuseFailedReport.includes('回滚失败') && fuseFailedReport.includes('请立即人工核对'));
+  check('F3 回归：回滚失败的报告不再谎称「已回滚到梦前」（30 秒版）', !/本梦已熔断[\s\S]{0,120}记忆状态已回滚到梦前/.test(fuseFailedReport.split('## 明细')[0]));
 
   sandboxes.push(root);
 }
@@ -1041,6 +1062,62 @@ async function testG9() {
   check('首梦（无基线）：全部页在范围内，基线之前的留话也摘到', firstDream.baselineRunId === null && firstDream.quotes.some((q) => q.page === oldPage), JSON.stringify(firstDream.pagesAfterBaseline));
 
   sandboxes.push(root);
+}
+
+async function testG9Chain() {
+  // D3 review F1 回归钉子：G9 基线在**生产链**（session-end → trigger-check → runDream）上
+  // 必须指向上一场梦——trigger-check 覆写 last-dream.json 之前读出的旧 runId。此前的函数级
+  // 测试手工种 last-dream.json 绕过了覆写顺序，恒空缺陷在链级无人抓。这里真跑两场梦：
+  // 第一场（首梦，无基线）应摘到用户留话；第二场基线=第一场 runId，无匹配留话应零摘。
+  console.log('\n=== D3-F1 回归：G9 基线生产链两场梦验证 ===');
+  const sandbox = makeSandbox('g9-chain');
+  const paths = dreamPaths(sandbox);
+  // 预置一条隔离记忆（标识来源①）+ 冷却 0（每次触发都做梦）
+  const { applyQuarantineMarker } = await import('../src/engine/act.mjs');
+  const qItem = applyQuarantineMarker(
+    '---\nname: q-item\ndescription: 隔离对象\ntype: project\n---\n\n正文。\n',
+    { reason: 'M3-dangling-source', since: '2026-08-14T00:00:00.000Z', runId: 'prev-dream' }
+  );
+  writeFileSync(path.join(paths.memoryDir, 'q-item.md'), qItem, 'utf8');
+  writeFileSync(paths.memoryIndex, readFileSync(paths.memoryIndex, 'utf8') + '- [隔离对象](q-item.md) — 种植\n', 'utf8');
+  writeFileSync(path.join(sandbox, '.claude', 'claude-dream.local.md'), '---\ncooldown_minutes: 0\n---\n', 'utf8');
+
+  // 第一场：逐字稿里的用户留话提及 q-item
+  writeFileSync(sandboxTranscriptPath(sandbox), fakeTranscriptLines(sandboxSessionId('g9-chain'), 'q-item 这条隔离得对，别动它'), 'utf8');
+  const t1 = Date.now();
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'g9-chain') });
+  const dream1 = await waitFor(() => {
+    if (!existsSync(paths.lastDreamState)) return false;
+    const s = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+    return s.status === 'completed' && new Date(s.lastDreamAt).getTime() >= t1;
+  });
+  check('F1 回归：第一场梦跑完', dream1);
+  const state1 = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+  const runId1 = state1.runId;
+  check('F1 回归：首梦（无基线）摘到用户留话（quotes ≥1）', state1.summary?.engine?.g9?.quotes >= 1, JSON.stringify(state1.summary?.engine?.g9));
+  const report1 = readFileSync(path.join(paths.dreamDir, `${runId1}-report.md`), 'utf8');
+  check('F1 回归：报告含「梦前用户留话」节且原文引用', report1.includes('梦前用户留话') && report1.includes('别动它'));
+
+  // 第二场：新的逐字稿不含 q-item（写入第二场专属文件，session id 也换掉）
+  const secondTranscript = path.join(sandbox, 'fake-transcript-2.jsonl');
+  writeFileSync(secondTranscript, fakeTranscriptLines('g9-chain-second-session-id', '这场没有提到隔离对象'), 'utf8');
+  const t2 = Date.now();
+  runNode(path.join(SRC, 'session-end.mjs'), [], {
+    cwd: sandbox,
+    stdinJson: { cwd: sandbox, session_id: 'g9-chain-second-session-id', transcript_path: secondTranscript },
+  });
+  const dream2 = await waitFor(() => {
+    if (!existsSync(paths.lastDreamState)) return false;
+    const s = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+    return s.status === 'completed' && new Date(s.lastDreamAt).getTime() >= t2;
+  });
+  check('F1 回归：第二场梦跑完', dream2);
+  const state2 = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+  check('F1 回归：第二场基线 = 第一场 runId（覆写前读出的旧值）', state2.summary?.engine?.g9?.baselineRunId === runId1, JSON.stringify(state2.summary?.engine?.g9));
+  check('F1 回归：第二场新底片页在检索范围内（pagesAfterBaseline ≥1）', state2.summary?.engine?.g9?.pagesAfterBaseline >= 1, JSON.stringify(state2.summary?.engine?.g9));
+  check('F1 回归：第二场无匹配留话零摘（基线过滤而非全摘）', state2.summary?.engine?.g9?.quotes === 0, JSON.stringify(state2.summary?.engine?.g9));
+
+  return sandbox;
 }
 
 async function testFusedDreamChain() {
@@ -1766,6 +1843,7 @@ try {
   await testReport();
   await testG9();
   await testStaleLockDetection();
+  sandboxes.push(await testG9Chain());
   sandboxes.push(await testFusedDreamChain());
   await testMechanicalDreamZeroLogin();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());

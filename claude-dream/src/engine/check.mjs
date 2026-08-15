@@ -326,7 +326,10 @@ function checkM4({ mems, root, exec }) {
       if (kind === 'path') {
         const gitPath = toGitPath(entity, root);
         if (gitPath) {
-          const log = exec.run('git', ['log', '--diff-filter=D', '--format=%H', '-1', '--', gitPath], { cwd: root });
+          // -M（--find-renames）显式开启 rename 检测：改名在 git 历史里呈现为 R 而非 D+A——
+          // 防止仓库配置 diff.renames=false 时把改名误报成「删除+新增」制造假讣告（D3 review L2，
+          // 「防改名误判」从配置依赖变成结构性保证）。
+          const log = exec.run('git', ['log', '-M', '--diff-filter=D', '--format=%H', '-1', '--', gitPath], { cwd: root });
           const deleted = log.ok && log.stdout.trim().length > 0;
           obituary = { path: gitPath, deleted, evidence: log.entry };
           if (deleted) evidenceLevel = 'confirmed';
