@@ -253,7 +253,7 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
       continue;
     }
 
-    // 确凿删除（铁律：只有 M4 确凿级开票；report-only 档位零删除动作）
+    // 修复项 1：确凿删除优先——M4 确凿级必须先检查，不被 M2 等低证据力判据抢先隔离
     const confirmed = fs.filter((f) => f.id === 'M4' && f.evidenceLevel === 'confirmed');
     if (confirmed.length > 0) {
       const contentBefore = readFile(filename);
@@ -297,7 +297,16 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
     }
 
     // L3 隔离（判据不足；已在隔离中的不复加标记——保留首次隔离的起始信息，AC6）
-    const quarantineWorthy = fs.filter((f) => QUARANTINE_REASONS.has(f.id));
+    // 修复项 1：M2 reportOnly 标记的 findings 不自动隔离，只进待裁决
+    const quarantineWorthy = fs.filter((f) => QUARANTINE_REASONS.has(f.id) && !f.reportOnly);
+    const reportOnlyFindings = fs.filter((f) => f.reportOnly);
+    for (const f of reportOnlyFindings) {
+      pendingRulings.push({
+        object: filename, type: 'report-only-finding',
+        finding: f,
+        note: `${f.id} 检出但证据不足自动隔离——无链接但有内容或溯源，待你裁决`,
+      });
+    }
     if (quarantineWorthy.length > 0 && mem?.status !== 'quarantined') {
       const content = readFile(filename);
       if (content !== null) {

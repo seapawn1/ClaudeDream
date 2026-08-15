@@ -694,7 +694,8 @@ async function testDisposal() {
   check('L3 隔离：candidate-quarantine 标 status: quarantined', quarantinedBody.includes('status: quarantined'));
   check('L3 隔离：quarantine 块携带跨梦起始信息（reason/since/runId/entity）', quarantinedBody.includes('reason: M4-zero-hits-candidate') && quarantinedBody.includes('runId: run-ro') && quarantinedBody.includes('entity: never-existed-2.txt'));
   const orphanBody = readFileSync(path.join(memoryDir, 'orphan-quarantine.md'), 'utf8');
-  check('L3 隔离：M2 孤儿也进隔离（reason 对应判据）', orphanBody.includes('reason: M2-orphan'));
+  // 修复项 1：M2 降为报告级——orphan 不再自动隔离（reportOnly:true，只进待裁决）
+  check('修复项 1 回归：M2 孤儿不再自动进隔离标记（报告级，不写 status: quarantined）', !orphanBody.includes('status: quarantined'));
 
   // feedback 保护（AC5）
   const feedbackAfter = readFileSync(path.join(memoryDir, 'feedback-protected.md'), 'utf8');
@@ -1720,6 +1721,185 @@ async function testCommitPathspecDoesNotSwallowHumanStaged() {
   return sandbox;
 }
 
+async function testE2EFixes() {
+  // 端到端验收修复验证：修复项 1（M2 误杀）+ 修复项 2（熔断回滚失败）+ 修复项 3（CLI 冷却与 last-dream）
+  console.log('\n=== 端到端修复验证（修复项 1/2/3） ===');
+  const { runMechanicalChecks } = await import('../src/engine/check.mjs');
+  const { applyDisposal } = await import('../src/engine/act.mjs');
+  const { createEngineLog } = await import('../src/lib/exec-log.mjs');
+  const { resolveConfig } = await import('../src/engine/config.mjs');
+  const { fuseThreshold, shouldFuse, restoreToPreDream, buildFuseDetail } = await import('../src/engine/fuse.mjs');
+  const { runDream } = await import('../src/run-dream.mjs');
+
+  // ---- 修复项 1：M2 孤儿判据不误杀健康记忆 ----
+  console.log('\n--- 修复项 1：M2 孤儿判据收窄（健康零误报） ---');
+  const m2Root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-fix1-m2-'));
+  git(m2Root, ['init', '-q']);
+  git(m2Root, ['config', 'user.email', 'test@example.com']);
+  git(m2Root, ['config', 'user.name', 'fix-1-test']);
+  const m2MemDir = path.join(m2Root, '.claude', 'memory');
+  mkdirSync(m2MemDir, { recursive: true });
+
+  // 种植：15+ 条记忆，其中多条是独立记忆（无链但有内容）—— 健康记忆的常态
+  for (let i = 1; i <= 20; i++) {
+    plantMemory(m2MemDir, `independent-${i}`, { body: `独立记忆 ${i}，无链接但有实际内容。` });
+  }
+  plantMemory(m2MemDir, 'hub', { body: '链接中枢。' });
+  plantMemory(m2MemDir, 'connected-1', { body: '有出链：[[hub]]。' });
+  plantMemory(m2MemDir, 'connected-2', { body: '被 [[connected-1]] 引用，有入链。' });
+  plantIndex(m2MemDir, [
+    ...Array.from({ length: 20 }, (_, i) => ({ slug: `independent-${i + 1}`, label: `independent-${i + 1}` })),
+    { slug: 'hub', label: 'hub' },
+    { slug: 'connected-1', label: 'connected-1' },
+    { slug: 'connected-2', label: 'connected-2' },
+  ]);
+
+  writeFileSync(path.join(m2Root, 'CLAUDE.md'), '# Fix-1 Test\n', 'utf8');
+  git(m2Root, ['add', '-A']);
+  git(m2Root, ['commit', '-q', '-m', 'init']);
+
+  const m2Paths = dreamPaths(m2Root);
+  const m2Exec = createEngineLog({ logFile: path.join(m2Paths.dreamDir, 'fix1.log') });
+  const m2Result = runMechanicalChecks({ root: m2Root, paths: m2Paths, exec: m2Exec });
+
+  check('修复项 1：库存 ≥15，M2 不被冷启动禁用', m2Result.meta.memoryCount >= 15 && m2Result.meta.m2Disabled === false);
+  const m2Findings = m2Result.findings.filter((f) => f.id === 'M2');
+  // 修复项 1：M2 降为报告级（reportOnly:true）——独立记忆可进 findings 但不得自动隔离
+  check('修复项 1：M2 findings 全部标 reportOnly（不自动隔离）', m2Findings.every((f) => f.reportOnly === true), JSON.stringify(m2Findings.map((f) => ({ o: f.object, ro: f.reportOnly }))));
+
+  // 处置层验证：即便有 M2 finding，也不自动隔离（reportOnly）
+  const m2Config = resolveConfig(m2Root);
+  const m2Disposal = applyDisposal({
+    root: m2Root,
+    paths: m2Paths,
+    config: m2Config,
+    mems: m2Result.mems,
+    findings: m2Result.findings,
+    runId: 'fix1-test',
+    exec: m2Exec,
+    preSha: null,
+  });
+  const quarantined = m2Disposal.journal.filter((j) => j.action === 'quarantine');
+  check('修复项 1：M2 reportOnly 不自动隔离', quarantined.filter((j) => j.criterionId === 'M2').length === 0, JSON.stringify(quarantined));
+
+  // ---- 修复项 2：熔断回滚失败修复（相对路径 + 剔除 untracked） ----
+  console.log('\n--- 修复项 2：熔断回滚在 Windows 不失败（相对路径 + untracked 剔除） ---');
+  const fuseRoot = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-fix2-fuse-'));
+  git(fuseRoot, ['init', '-q']);
+  git(fuseRoot, ['config', 'user.email', 'test@example.com']);
+  git(fuseRoot, ['config', 'user.name', 'fix-2-test']);
+  const fuseMemDir = path.join(fuseRoot, '.claude', 'memory');
+  mkdirSync(fuseMemDir, { recursive: true });
+
+  // 种植 5 条记忆，触发熔断删除 4 条（> max(3, 0)）
+  for (let i = 1; i <= 5; i++) {
+    plantMemory(fuseMemDir, `victim-${i}`, { body: `参见 doomed-${i}.txt，链接 [[hub]]。` });
+  }
+  plantMemory(fuseMemDir, 'hub', { body: '链接中枢。' });
+  plantIndex(fuseMemDir, [...Array.from({ length: 5 }, (_, i) => ({ slug: `victim-${i + 1}`, label: `victim-${i + 1}` })), { slug: 'hub', label: 'hub' }]);
+
+  // 种植并删除实体，制造讣告
+  for (let i = 1; i <= 5; i++) {
+    writeFileSync(path.join(fuseRoot, `doomed-${i}.txt`), `doomed ${i}\n`, 'utf8');
+  }
+  writeFileSync(path.join(fuseRoot, 'CLAUDE.md'), '# Fix-2 Test\n', 'utf8');
+  git(fuseRoot, ['add', '-A']);
+  git(fuseRoot, ['commit', '-q', '-m', 'plant']);
+  for (let i = 1; i <= 5; i++) {
+    rmSync(path.join(fuseRoot, `doomed-${i}.txt`));
+  }
+  git(fuseRoot, ['add', '-A']);
+  git(fuseRoot, ['commit', '-q', '-m', 'remove doomed files']);
+
+  // 创建 untracked CLAUDE.md 的变体：修改但不提交
+  writeFileSync(path.join(fuseRoot, 'CLAUDE.md'), '# Fix-2 Test Modified\n', 'utf8');
+  const isTracked = git(fuseRoot, ['ls-files', 'CLAUDE.md']).trim().length > 0;
+  check('修复项 2：CLAUDE.md 在 git 跟踪中', isTracked);
+
+  const fusePaths = dreamPaths(fuseRoot);
+  const fuseExec = createEngineLog({ logFile: path.join(fusePaths.dreamDir, 'fix2.log') });
+  const fusePre = git(fuseRoot, ['rev-parse', 'HEAD']);
+  const fuseChecks = runMechanicalChecks({ root: fuseRoot, paths: fusePaths, exec: fuseExec });
+  const fuseConfig = resolveConfig(fuseRoot);
+  const threshold = fuseThreshold({ maxDeletes: fuseConfig.values.max_deletes, memoryCount: fuseChecks.meta.memoryCount });
+
+  let fusedFlag = false;
+  const fuseDisposal = applyDisposal({
+    root: fuseRoot,
+    paths: fusePaths,
+    config: fuseConfig,
+    mems: fuseChecks.mems,
+    findings: fuseChecks.findings,
+    runId: 'fix2-test',
+    exec: fuseExec,
+    preSha: fusePre,
+    onDelete: (net) => {
+      if (shouldFuse({ netDisappeared: net, threshold: threshold.threshold })) {
+        fusedFlag = true;
+        return true;
+      }
+      return false;
+    },
+  });
+
+  check('修复项 2：熔断触发（净删除 > 阈值）', fuseDisposal.fused === true, `netDeleted=${fuseDisposal.netDeleted}, threshold=${threshold.threshold}`);
+
+  if (fuseDisposal.fused) {
+    const restoreResult = restoreToPreDream({ root: fuseRoot, paths: fusePaths, preSha: fusePre, exec: fuseExec });
+    check('修复项 2：熔断回滚成功（不报 pathspec did not match）', restoreResult.ok === true, restoreResult.entry?.error ?? 'ok');
+
+    // 验证工作树回到梦前状态
+    const statusAfter = git(fuseRoot, ['status', '--short']).trim();
+    // 修复项 2：回滚后记忆文件恢复即可；.claude/dream/ 是新产生的证据目录（untracked），不在回滚范围
+    const nonDreamStatus = statusAfter.split('\n').filter((l) => !l.includes('.claude/dream')).join('\n').trim();
+    check('修复项 2：回滚后记忆状态干净（排除 .claude/dream untracked）', nonDreamStatus.length === 0, `non-dream status: ${nonDreamStatus}`);
+    const memCountAfter = readdirSync(fuseMemDir).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md').length;
+    check('修复项 2：记忆文件数回到梦前', memCountAfter === fuseChecks.meta.memoryCount, `before=${fuseChecks.meta.memoryCount}, after=${memCountAfter}`);
+  }
+
+  // ---- 修复项 3：CLI 直跑冷却与 last-dream ----
+  console.log('\n--- 修复项 3：CLI 直跑受冷却约束 + 落 last-dream.json ---');
+  const cliRoot = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-fix3-cli-'));
+  git(cliRoot, ['init', '-q']);
+  git(cliRoot, ['config', 'user.email', 'test@example.com']);
+  git(cliRoot, ['config', 'user.name', 'fix-3-test']);
+  const cliMemDir = path.join(cliRoot, '.claude', 'memory');
+  mkdirSync(cliMemDir, { recursive: true });
+  plantMemory(cliMemDir, 'test-mem', { body: '测试记忆，链接 [[link-broken]]。' });
+  plantIndex(cliMemDir, [{ slug: 'test-mem', label: 'test-mem' }]);
+  writeFileSync(path.join(cliRoot, 'CLAUDE.md'), '# Fix-3 Test\n', 'utf8');
+  git(cliRoot, ['add', '-A']);
+  git(cliRoot, ['commit', '-q', '-m', 'init']);
+
+  const cliPaths = dreamPaths(cliRoot);
+
+  // 第一次 CLI 跑梦
+  const run1 = await runDream({ root: cliRoot });
+  check('修复项 3：CLI 第一次梦成功', run1.runId !== null && !run1.coolingDown);
+  check('修复项 3：CLI 第一次梦落 last-dream.json', existsSync(cliPaths.lastDreamState));
+
+  const lastState1 = existsSync(cliPaths.lastDreamState) ? JSON.parse(readFileSync(cliPaths.lastDreamState, 'utf8')) : null;
+  check('修复项 3：last-dream.json 含 runId', lastState1?.runId === run1.runId);
+  check('修复项 3：last-dream.json 含 status（completed/fused）', ['completed', 'fused'].includes(lastState1?.status));
+  check('修复项 3：last-dream.json 含 lastDreamAt', !!lastState1?.lastDreamAt);
+
+  // 立刻重跑，应被冷却拦下（默认 30 分钟）
+  const run2 = await runDream({ root: cliRoot });
+  check('修复项 3：CLI 立刻重跑被冷却拦下', run2.coolingDown === true, JSON.stringify({ coolingDown: run2.coolingDown, error: run2.sdkError }));
+  check('修复项 3：冷却期内返回剩余分钟数', run2.remainingMinutes > 0, `remainingMinutes=${run2.remainingMinutes}`);
+
+  // 设置 cooldown_minutes=0，冷却应放行
+  process.env.CLAUDE_DREAM_COOLDOWN_MINUTES = '0';
+  const run3 = await runDream({ root: cliRoot });
+  delete process.env.CLAUDE_DREAM_COOLDOWN_MINUTES;
+  check('修复项 3：cooldown_minutes=0 时冷却放行', run3.runId !== null && !run3.coolingDown, JSON.stringify({ runId: run3.runId, coolingDown: run3.coolingDown }));
+
+  const lastState3 = existsSync(cliPaths.lastDreamState) ? JSON.parse(readFileSync(cliPaths.lastDreamState, 'utf8')) : null;
+  check('修复项 3：第二次梦的 runId 不同于第一次（递增）', lastState3?.runId !== lastState1?.runId);
+
+  return [m2Root, fuseRoot, cliRoot];
+}
+
 function testPluginManifestShape() {
   // D3 review 抓到的坑：hooks.json 曾经缺顶层 "hooks" 包裹键（{"SessionEnd":[...]} 而不是
   // {"hooks":{"SessionEnd":[...]}}）——那是 .claude/settings.json 的格式，不是插件 hooks.json 的格式，
@@ -1853,6 +2033,8 @@ try {
   sandboxes.push(await testRogue());
   sandboxes.push(await testRogueTargetsNegativesDir());
   sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());
+  // 端到端修复验证（修复项 1/2/3）
+  sandboxes.push(await testE2EFixes());
 } catch (err) {
   // 测试组抛出的未捕获异常此前会被 finally 里的 process.exit(0) 静默吞掉——异常挂起时
   // failed 还是空的，exit(0) 直接把一次中途夭折的测试跑伪装成"全绿"。这是「从没红过的绿灯」

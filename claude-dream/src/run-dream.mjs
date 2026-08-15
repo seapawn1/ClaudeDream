@@ -54,6 +54,40 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
   mkdirSync(paths.memoryDir, { recursive: true });
   mkdirSync(paths.dreamDir, { recursive: true });
 
+  const nowIso = () => new Date().toISOString();
+
+  // 修复项 3：CLI 直跑也落 last-dream.json + 受冷却约束。
+  // 判断依据：providedRunId 为 null/undefined 表示 CLI 直跑（trigger-check 总是传 runId）。
+  // trigger-check 内部已做冷却判断与 running 态写入，不应在此重复；CLI 直跑由本函数负责。
+  const isCliDirect = !providedRunId;
+  if (isCliDirect) {
+    let lastState = null;
+    if (existsSync(paths.lastDreamState)) {
+      try {
+        lastState = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+      } catch {
+        lastState = null;
+      }
+    }
+    const config0 = resolveConfig(root);
+    const cooldownMs = config0.values.cooldown_minutes * 60 * 1000;
+    if (lastState?.lastDreamAt && cooldownMs > 0) {
+      const elapsed = Date.now() - new Date(lastState.lastDreamAt).getTime();
+      if (elapsed < cooldownMs) {
+        const remainingMinutes = Math.ceil((cooldownMs - elapsed) / 60000);
+        const error = `冷却期内（剩余 ${remainingMinutes} 分钟）——上次梦于 ${lastState.lastDreamAt}，冷却 ${config0.values.cooldown_minutes} 分钟`;
+        console.error(error);
+        return {
+          runId: null, sdkError: error, coolingDown: true, remainingMinutes,
+          beforeCount: 0, afterCount: 0, preSha: null, commits: {}, reportPath: null,
+          placeholderLanded: null, rogueBlocked: null, negativeFeed: null, engine: null,
+        };
+      }
+    }
+    // CLI 直跑写入 running 状态
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status: 'running' }, null, 2), 'utf8');
+  }
+
   // 阀门配置（02.1）：机械管线的全部档位都从这里解析
   const config = resolveConfig(root);
   const engineLogFile = path.join(paths.dreamDir, `${runId}-engine.log`);
@@ -66,7 +100,11 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
     // 故障演练路径（SDK 占位引擎 + canUseTool 围栏回归，需要登录态）——动态 import，
     // 机械路径永远不会加载 SDK 模块。
     const { runRogueDream } = await import('./run-dream-rogue.mjs');
-    return runRogueDream({ root, runId, rogueTargetPath, paths, preSha, negativeFeed });
+    const rogueSummary = await runRogueDream({ root, runId, rogueTargetPath, paths, preSha, negativeFeed });
+    // 修复项 3：rogue 路径也写入 last-dream.json 终态
+    const rogueStatus = rogueSummary.sdkError ? 'failed' : 'completed';
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status: rogueStatus, summary: rogueSummary }, null, 2), 'utf8');
+    return rogueSummary;
   }
 
   // ===== 机械管线（零 SDK / 零网络）=====
@@ -133,7 +171,9 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
   // 证据提交（报告 + 执行日志；刨去运行态文件）——C7：不随 dream: revert 销毁
   Object.assign(commits, commitEvidenceResults(root, paths, runId));
 
-  return {
+  // 修复项 3：CLI 直跑写入终态 last-dream.json（completed/fused），供下次梦冷却判定与 G9 基线使用
+  const status = disposal.fused ? 'fused' : 'completed';
+  const summary = {
     runId,
     sdkError: null,
     beforeCount,
@@ -158,6 +198,9 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
       g9: { quotes: g9.quotes.length, baselineRunId: g9.baselineRunId, pagesAfterBaseline: g9.pagesAfterBaseline },
     },
   };
+  writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status, summary }, null, 2), 'utf8');
+
+  return summary;
 }
 
 // CLI 入口：node run-dream.mjs [--rogue] [--target=<相对项目根的路径>] [--session=<触发会话的 session_id>] [root]

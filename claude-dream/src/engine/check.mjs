@@ -216,8 +216,20 @@ function checkM2({ mems, memoryCount, exec }) {
       inputs: { outLinkCount: links.length, inLinkCount: inCount },
       result: links.length === 0 && inCount === 0 ? 'orphan' : 'connected',
     });
+    // 修复项 1：M2 孤儿判定收窄——无链且无其他存在性证据（sources/body 非空检查）。
+    // 独立记忆（无链但有内容）是健康记忆常态，不是腐烂。只有「无链且空内容/无溯源」才算
+    // 真孤儿——但即便如此也只标记，不自动隔离（降为报告级，隔离票由其他判据开出）。
     if (links.length === 0 && inCount === 0) {
-      findings.push({ id: 'M2', object: mem.slug, detail: { outLinkCount: 0, inLinkCount: 0 }, evidence });
+      const hasContent = mem.body?.trim().length > 0;
+      const hasSources = mem.sources && mem.sources.length > 0;
+      // 修复项 1：无链 + 无内容 + 无溯源 = 真孤儿，但不自动隔离（reportOnly: true）
+      findings.push({
+        id: 'M2',
+        object: mem.slug,
+        detail: { outLinkCount: 0, inLinkCount: 0, hasContent, hasSources },
+        evidence,
+        reportOnly: true, // 修复项 1：M2 降为报告级，不自动隔离
+      });
     }
   }
   return { disabled: false, reason: null, findings };

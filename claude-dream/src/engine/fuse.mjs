@@ -38,7 +38,16 @@ export function shouldFuse({ netDisappeared, threshold }) {
 export function restoreToPreDream({ root, paths, preSha, exec }) {
   // pathspec 显式限死三处中与记忆相关的两处（.claude/dream 是证据目录，不在回滚范围——
   // 报告与执行日志必须存活，不能随记忆一起回滚，否则熔断现场无记录可查）。
-  return exec.run('git', ['checkout', preSha, '--', paths.memoryDir, paths.claudeMd], { cwd: root });
+  // 修复项 2：pathspec 必须用仓库内相对路径（绝对路径在 Windows 被 git 拒绝）；
+  // CLAUDE.md 未入库时不进 pathspec（untracked 文件导致 did not match 整条命令失败）。
+  const pathspecs = ['.claude/memory'];
+  const claudeMdRel = 'CLAUDE.md';
+  // 检查 CLAUDE.md 是否在 git 跟踪中：git ls-files <path> 输出非空 = 已跟踪
+  const tracked = exec.run('git', ['ls-files', claudeMdRel], { cwd: root });
+  if (tracked.ok && tracked.stdout.trim().length > 0) {
+    pathspecs.push(claudeMdRel);
+  }
+  return exec.run('git', ['checkout', preSha, '--', ...pathspecs], { cwd: root });
 }
 
 /**
