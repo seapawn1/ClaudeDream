@@ -64,12 +64,19 @@ function makeSandbox(label) {
   mkdirSync(path.join(dir, '.claude', 'memory'), { recursive: true });
   writeFileSync(
     path.join(dir, '.claude', 'memory', 'existing-fact.md'),
-    '---\nname: existing-fact\ndescription: 沙箱预置的一条既有记忆\nmetadata:\n  type: project\n---\n\n沙箱预置内容，供测试对照，不应被占位引擎动到。\n',
+    '---\nname: existing-fact\ndescription: 沙箱预置的一条既有记忆\nmetadata:\n  type: project\n---\n\n沙箱预置内容，供测试对照，不应被机械梦动到。\n',
+    'utf8'
+  );
+  // Sprint-3 起：沙箱再预置一条带断链的记忆——机械梦对它执行真实的 L0 修复，
+  // 每场梦都有一笔真实改动可供断言（dream: 提交/revert/并发防重等）。
+  writeFileSync(
+    path.join(dir, '.claude', 'memory', 'link-broken.md'),
+    '---\nname: link-broken\ndescription: 沙箱预置的带断链记忆\nmetadata:\n  type: project\n---\n\n这条记忆带一条断链 [[ghost-target]]，供机械梦的 L0 修复。\n',
     'utf8'
   );
   writeFileSync(
     path.join(dir, '.claude', 'memory', 'MEMORY.md'),
-    '# Memory Index\n\n- [既有事实](existing-fact.md) — 沙箱预置\n',
+    '# Memory Index\n\n- [既有事实](existing-fact.md) — 沙箱预置\n- [断链记忆](link-broken.md) — 沙箱预置\n',
     'utf8'
   );
   writeFileSync(path.join(dir, 'CLAUDE.md'), '# Sandbox Project\n\n自测沙箱，不是真实项目。\n', 'utf8');
@@ -1036,6 +1043,83 @@ async function testG9() {
   sandboxes.push(root);
 }
 
+async function testFusedDreamChain() {
+  // 02.4-AC3 全链路：熔断算「做过一场梦」——冷却照常起算（不写死这一点会出现
+  // 「熔断→未进冷却→立刻重跑→再熔断」死循环）、锁正常释放、现场干净、三态 runId 留档。
+  console.log('\n=== 02.4-AC3 熔断场全链路（冷却照常/锁释放/现场干净） ===');
+  const sandbox = makeSandbox('fuse-chain');
+  const paths = dreamPaths(sandbox);
+  // 两个带真实讣告的确凿票 + max_deletes=1 配置
+  writeFileSync(path.join(sandbox, 'doomed-f1.txt'), 'f1\n', 'utf8');
+  writeFileSync(path.join(sandbox, 'doomed-f2.txt'), 'f2\n', 'utf8');
+  git(sandbox, ['add', '-A']);
+  git(sandbox, ['commit', '-q', '-m', 'plant fuse victims']);
+  rmSync(path.join(sandbox, 'doomed-f1.txt'));
+  rmSync(path.join(sandbox, 'doomed-f2.txt'));
+  git(sandbox, ['add', '-A']);
+  git(sandbox, ['commit', '-q', '-m', 'remove fuse victims (讣告×2)']);
+  mkdirSync(path.join(sandbox, '.claude'), { recursive: true });
+  writeFileSync(path.join(sandbox, '.claude', 'claude-dream.local.md'), '---\nmax_deletes: 1\n---\n', 'utf8');
+  plantMemory(path.join(sandbox, '.claude', 'memory'), 'fuse-victim-a', { body: '参见 doomed-f1.txt。链接 [[existing-fact]]。' });
+  plantMemory(path.join(sandbox, '.claude', 'memory'), 'fuse-victim-b', { body: '参见 doomed-f2.txt。链接 [[existing-fact]]。' });
+  const idx = readFileSync(paths.memoryIndex, 'utf8');
+  writeFileSync(paths.memoryIndex, idx + '- [熔断受害者A](fuse-victim-a.md) — 种植\n- [熔断受害者B](fuse-victim-b.md) — 种植\n', 'utf8');
+
+  const before = Date.now();
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'fuse-chain') });
+
+  const fusedState = await waitFor(() => {
+    if (!existsSync(paths.lastDreamState)) return false;
+    const state = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+    return state.status === 'fused' && new Date(state.lastDreamAt).getTime() >= before;
+  });
+  check('熔断场终态 status=fused（不是 completed/failed）', fusedState);
+  const state = existsSync(paths.lastDreamState) ? JSON.parse(readFileSync(paths.lastDreamState, 'utf8')) : null;
+  check('熔断场 runId 留档（G9 检索基准在任何终态都有据）', typeof state?.runId === 'string' && state.runId.length > 0);
+  check('熔断场现场干净：两个受害者已回滚复活', existsSync(path.join(sandbox, '.claude', 'memory', 'fuse-victim-a.md')) && existsSync(path.join(sandbox, '.claude', 'memory', 'fuse-victim-b.md')));
+  check('熔断场现场干净：锁已释放', !existsSync(paths.lockFile));
+  check('熔断场报告写明熔断原因与真实净消失数', (() => {
+    const reportPath = state?.runId ? path.join(paths.dreamDir, `${state.runId}-report.md`) : null;
+    return reportPath && existsSync(reportPath) && readFileSync(reportPath, 'utf8').includes('本梦已熔断') && readFileSync(reportPath, 'utf8').includes('净消失 2');
+  })());
+  check('熔断场无 dream: 提交（记忆已回滚，无改动可提交）', !git(sandbox, ['log', '--oneline']).includes('dream: '));
+  check('熔断场报告与日志照常入 evidence 提交（审计轨迹不因熔断消失）', git(sandbox, ['log', '--oneline']).includes('dream-evidence:'));
+
+  // AC3 死循环防线：冷却照常起算——立即再触发，冷却期内不得重跑第二场梦
+  const stateBeforeRetrigger = readFileSync(paths.lastDreamState, 'utf8');
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'fuse-chain') });
+  await new Promise((r) => setTimeout(r, 3000));
+  check('AC3 熔断后冷却照常起算（再触发不重跑，死循环在结构上不可能）', readFileSync(paths.lastDreamState, 'utf8') === stateBeforeRetrigger);
+
+  return sandbox;
+}
+
+async function testMechanicalDreamZeroLogin() {
+  // 02.2-AC6 运行期证明：机械梦在「无登录态」环境下全链跑通——HOME/USERPROFILE 指向空目录、
+  // API key 设为垃圾值。若机械路径偷发 SDK/网络调用，SDK 认证会失败、梦会报错——
+  // 本机托管/网关代理下认证不落这两个地方（CLAUDE.md 环境坑），所以这条是「必要不充分」的运行期
+  // 证据；充分性由零 API 静态检查（run-dream.mjs 不 import SDK 包名）兜底。两条合起来才是 AC6。
+  console.log('\n=== 02.2-AC6 机械梦无登录态全链运行证明（零 API） ===');
+  const sandbox = makeSandbox('zerologin');
+  const emptyHome = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-emptyhome-'));
+  const result = runNode(path.join(SRC, 'run-dream.mjs'), [sandbox], {
+    cwd: sandbox,
+    env: {
+      CLAUDE_CODE_API_KEY: 'bogus-key-should-never-be-used',
+      HOME: emptyHome,
+      USERPROFILE: emptyHome,
+      CLAUDE_CONFIG_DIR: path.join(emptyHome, '.claude'),
+    },
+  });
+  check('无登录态环境（空 HOME + 垃圾 key）机械梦跑完退出码 0', result.status === 0, result.stderr.slice(0, 300));
+  const reportPath = existsSync(path.join(sandbox, '.claude', 'dream')) ? readdirSync(path.join(sandbox, '.claude', 'dream')).filter((f) => f.endsWith('-report.md')) : [];
+  check('无登录态环境机械梦产出报告', reportPath.length >= 1, JSON.stringify(reportPath));
+  check('无登录态环境 L0 修复照常执行（断链被真实修复）', readFileSync(path.join(sandbox, '.claude', 'memory', 'link-broken.md'), 'utf8').includes('ghost-target') && !readFileSync(path.join(sandbox, '.claude', 'memory', 'link-broken.md'), 'utf8').includes('[[ghost-target]]'));
+
+  rmSync(emptyHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  sandboxes.push(sandbox);
+}
+
 async function testFullChainAndRevertAndCooldownAndRecursion() {
   const sandbox = makeSandbox('chain');
   const paths = dreamPaths(sandbox);
@@ -1082,29 +1166,26 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
 
   const lastState = existsSync(paths.lastDreamState) ? JSON.parse(readFileSync(paths.lastDreamState, 'utf8')) : null;
   check('梦跑完状态是 completed（不是 failed）', lastState?.status === 'completed', JSON.stringify(lastState?.summary?.sdkError ?? ''));
+  check('机械梦 summary.sdkError 恒为 null（零 SDK 路径）', lastState?.summary?.sdkError === null);
+  check('last-dream.json 三态带 runId（G9 检索基准）', typeof lastState?.runId === 'string' && lastState.runId.length > 0);
 
   const runId = lastState?.summary?.runId;
-  const placeholderPath = runId ? path.join(sandbox, '.claude', 'memory', `dream-placeholder-${runId}.md`) : null;
-  check('PBI-04.3·AC1 占位整合：新记忆文件确实落盘', runId && existsSync(placeholderPath));
 
+  // 机械梦真处置：L0 修断链——[[ghost-target]] 摘除标记降为正文
+  const fixedBody = readFileSync(path.join(sandbox, '.claude', 'memory', 'link-broken.md'), 'utf8');
+  check('PBI-02.3·L0 机械梦真处置：断链记忆被真实修复（[[ghost-target]] 降为正文）', fixedBody.includes('ghost-target') && !fixedBody.includes('[[ghost-target]]'), fixedBody.slice(0, 120));
   const memoryIndex = existsSync(paths.memoryIndex) ? readFileSync(paths.memoryIndex, 'utf8') : '';
-  check('MEMORY.md 索引行已回补指向新文件', runId && memoryIndex.includes(`dream-placeholder-${runId}`));
-  check('MEMORY.md 未被写入正文内容（仍保持纯指针索引，行数受控）', memoryIndex.split('\n').length < 20, `实际行数=${memoryIndex.split('\n').length}`);
+  check('MEMORY.md 未被机械梦改写（无索引漂移时不碰纯指针索引）', memoryIndex.includes('existing-fact') && memoryIndex.includes('link-broken'), memoryIndex);
 
-  // DoD·D2：不破坏官方 auto-memory 契约——一记一文件，且新记忆文件本身要有规范 frontmatter。
-  if (placeholderPath && existsSync(placeholderPath)) {
-    const placeholderContent = readFileSync(placeholderPath, 'utf8');
-    const hasFrontmatter = /^---\r?\nname: [\s\S]+?\r?\ndescription: [\s\S]+?metadata:\r?\n\s+type: \w+\r?\n---/.test(placeholderContent);
-    check('DoD·D2 新记忆文件带规范 frontmatter（name/description/metadata.type）', hasFrontmatter, placeholderContent.slice(0, 200));
-  }
-  check('DoD·D2 既有记忆文件未被占位引擎动过', existsSync(path.join(sandbox, '.claude', 'memory', 'existing-fact.md')));
+  // DoD·D2：不破坏官方 auto-memory 契约——健康记忆毫发无损
+  check('DoD·D2 健康记忆文件未被机械梦动过', existsSync(path.join(sandbox, '.claude', 'memory', 'existing-fact.md')));
   if (existsSync(path.join(sandbox, '.claude', 'memory', 'existing-fact.md'))) {
     const existingContent = readFileSync(path.join(sandbox, '.claude', 'memory', 'existing-fact.md'), 'utf8');
-    check('既有记忆内容原样未改', existingContent.includes('沙箱预置内容，供测试对照，不应被占位引擎动到。'));
+    check('健康记忆内容原样未改', existingContent.includes('沙箱预置内容，供测试对照，不应被机械梦动到。'));
   }
 
   const reportPath = runId ? path.join(sandbox, '.claude', 'dream', `${runId}-report.md`) : null;
-  check('PBI-04.3·AC2 梦报告已落盘', runId && existsSync(reportPath));
+  check('梦报告已落盘', runId && existsSync(reportPath));
   if (reportPath && existsSync(reportPath)) {
     const report = readFileSync(reportPath, 'utf8');
     const sixSections = ['图 delta 对账', '30 秒版', '明细', '隔离观察区', '抽查点', '阀门状态'];
@@ -1116,21 +1197,22 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     check('PBI-01.2·AC1 进料对账行出现在报告里', report.includes('进料对账'));
     check('PBI-01.2·AC1 进料对账含触发会话 session id', report.includes(sandboxSessionId('chain')));
     check('PBI-01.2·AC1 进料对账明确写着已读到底片', report.includes('已读到'));
+    // 机械梦报告特征：明细带修复动作 + 执行日志引用 + 阀门状态六键
+    check('报告明细含真实处置动作（fix-link）', report.includes('修断链（fix-link）'));
+    check('报告引用执行日志（C2 证据原始记录）', report.includes(`${runId}-engine.log`));
+    check('报告阀门状态节含配置键', report.includes('llm_checks =') && report.includes('delete_policy ='));
   }
 
+  // 机械梦零 SDK：canUseTool 日志本就不该产生（canUseTool 只存在于 SDK 路径）
   const logPath = runId ? path.join(sandbox, '.claude', 'dream', `${runId}-canUseTool.log`) : null;
-  check('PBI-04.2·AC2 canUseTool 裁决日志已落盘', runId && existsSync(logPath));
-  let invocations = [];
-  if (logPath && existsSync(logPath)) {
-    invocations = readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  }
-  check('canUseTool 确实被调用过（至少一次裁决记录）', invocations.length > 0, `count=${invocations.length}`);
-  check('至少一次 allow（占位记忆的 Write 落盘）', invocations.some((i) => i.decision === 'allow'));
+  check('机械梦不产生 canUseTool 日志（零 SDK 的现场证据）', runId && !existsSync(logPath));
+  const engineLogPath = runId ? path.join(sandbox, '.claude', 'dream', `${runId}-engine.log`) : null;
+  check('机械梦产生执行日志（全部判据/命令证据）', runId && existsSync(engineLogPath) && readFileSync(engineLogPath, 'utf8').length > 0);
 
   const log = git(sandbox, ['log', '--oneline']);
-  check('PBI-04.3·AC3 存在 dream: 前缀提交', /\bdream: /.test(log), log);
+  check('存在 dream: 前缀提交（L0 修复入账）', /\bdream: /.test(log), log);
   check('report/log 证据另笔提交（dream-evidence:），不与记忆改动混在一笔', /\bdream-evidence: /.test(log), log);
-  check('commitResults 没有报 dreamError/evidenceError（正常路径应该干净）', !lastState?.summary?.commits?.dreamError && !lastState?.summary?.commits?.evidenceError);
+  check('commit 没有报 dreamError/evidenceError（正常路径应该干净）', !lastState?.summary?.commits?.dreamError && !lastState?.summary?.commits?.evidenceError);
 
   // D3 review 抓到的坑修复验证：last-dream.json/session-end-marker.json 是纯运行态，
   // 不该出现在任何一笔提交的树里——否则 evidence 提交会永久记录一份"这场梦还在跑"的假状态。
@@ -1145,6 +1227,7 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     check('session-end-marker.json 没有被 dream-pre 快照收进去', showMarkerInPre.status !== 0);
   }
   check('AC4 下次会话提示行载体已落盘', existsSync(paths.promptCarrier));
+  check('机械梦 summary.engine 块带体检元数据（零 API 管线完成标志）', lastState?.summary?.engine?.meta?.memoryCount === 2 && lastState.summary.engine.findingCount === 1, JSON.stringify(lastState?.summary?.engine?.meta));
 
   // 3) revert 验证：dream: 提交应可单独撤销，且不影响 evidence 提交里的报告/日志。
   const dreamSha = git(sandbox, ['log', '--oneline', '--grep=^dream:', '-1', '--format=%H']);
@@ -1153,8 +1236,8 @@ async function testFullChainAndRevertAndCooldownAndRecursion() {
     const revertResult = spawnSync('git', ['revert', '--no-edit', dreamSha], { cwd: sandbox, encoding: 'utf8', windowsHide: true });
     revertOk = revertResult.status === 0;
   }
-  check('PBI-04.3·AC3 git revert 单独回滚 dream: 提交成功', revertOk);
-  check('revert 后占位记忆文件消失', runId && !existsSync(placeholderPath));
+  check('git revert 单独回滚 dream: 提交成功', revertOk);
+  check('revert 后断链记忆恢复梦前状态（[[ghost-target]] 复活）', runId && readFileSync(path.join(sandbox, '.claude', 'memory', 'link-broken.md'), 'utf8').includes('[[ghost-target]]'));
   check('revert 后报告文件依然在（证据没被一起销毁，对应 verdict C7）', runId && existsSync(reportPath));
 
   // 4) 冷却期验证：紧接着再触发一次 SessionEnd，默认 30 分钟冷却内不应该再跑一场梦。
@@ -1620,6 +1703,12 @@ function testNegativesZeroApiAndCompressUnit() {
       check(`AC2 零 API：${sub}/${file} 不引用 ${sdkPackageName}`, !content.includes(sdkPackageName));
     }
   }
+  // Sprint-3 机械梦：编排器与触发链也不得引用 SDK 包名——SDK 唯一合法落点是
+  // run-dream-rogue.mjs（rogue 故障演练路径，动态 import，机械路径不加载它）。
+  for (const file of ['run-dream.mjs', 'trigger-check.mjs', 'session-end.mjs', 'session-start.mjs']) {
+    const content = readFileSync(path.join(SRC, file), 'utf8');
+    check(`AC6 零 API：${file} 不引用 ${sdkPackageName}（SDK 只在 run-dream-rogue.mjs）`, !content.includes(sdkPackageName));
+  }
 
   return import(pathToFileURL(path.join(negativesDir, 'compress.mjs')).href).then(({ compressEntries }) => {
     const marker = 'UNIT-TEST-MARKER-abc123';
@@ -1677,6 +1766,8 @@ try {
   await testReport();
   await testG9();
   await testStaleLockDetection();
+  sandboxes.push(await testFusedDreamChain());
+  await testMechanicalDreamZeroLogin();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());
   await testBackfillNegatives();
