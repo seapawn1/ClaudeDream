@@ -113,9 +113,23 @@ Sprint-3 的 Sprint Backlog。Planning 定案 2026-08-15：主菜 PBI-02（引�
 
 **verdict 改造清单 C1–C7 归属记账**（逐条有归宿，不留掉地项）：C1 单笔精撤后置，本轮承诺「回滚提示诚实反映局限」（见 PBI-02.5-AC1）；C2/C3 本轮交付（PBI-02.5）；**C4 机器推论贴身份证——归 PBI-07**（原文明确针对 connection 的 confidence/origin 标记，connection 本身在 PBI-07 才产生；本轮机械处置的可追溯性已由 C2/C3 的「动作+判据+证据」四要素覆盖，不重复立项）；**C5 拆两半**——摘要说全动作类型、CLAUDE.md 改动置顶本轮交付（PBI-02.5-AC6），提示行同源生成随 PBI-05；C6 熔断额度写死+报告显示真实盘面数本轮交付（PBI-02.4-AC1）；C7 报告不进 dream commit——**代码里已实现**（`run-dream.mjs` 的 `dream:`/`dream-evidence:` 两笔独立提交，revert 前者不连坐后者），本轮只需保持不破坏，不新增交付物。
 
+### 2.4 交付接口约定（Sprint-3 版）
+
+*DoD·D5：增量的全部对外接口在此声明齐全，验收与后续消费者只依声明接线。机器可读版见 [acceptance/adapter.json](acceptance/adapter.json)（Sprint-3 增量版，未变键沿用 Sprint-2 版）。要点：*
+
+1. **阀门配置**：`.claude/claude-dream.local.md` 六键（enabled/llm_checks/delete_policy/max_deletes/claude_md_edits/cooldown_minutes）；解析顺序＝配置文件 > 环境变量 > 默认值（逐键）；环境变量覆盖生效时报告点名「本次由环境变量覆盖：<键名>」；值非法回退默认并记注记。新环境变量四个：`CLAUDE_DREAM_ENABLED`/`CLAUDE_DREAM_LLM_CHECKS`/`CLAUDE_DREAM_DELETE_POLICY`/`CLAUDE_DREAM_MAX_DELETES`（`DREAM_CLAUDE_MD_EDITS`/`CLAUDE_DREAM_COOLDOWN_MINUTES` 沿用）。`enabled` 只约束 SessionEnd 自动链路，CLI 直跑 run-dream 是显式人工调用、不受闸门。
+2. **机械梦**：run-dream.mjs 默认路径零 SDK/零网络（无登录态全链可跑）；SDK 唯一落点 run-dream-rogue.mjs（动态 import，rogue 故障演练路径保持 Sprint-1/2 行为）。执行日志 `.claude/dream/<runId>-engine.log`（命令类/代码类两种证据条目）；canUseTool 日志仅 rogue 路径产生。
+3. **last-dream.json**：新增顶层 `runId`（running/completed/failed/fused 四态都带）；`status` 扩出 `fused` 终态（熔断场）；`lastDreamAt` 语义与冷却不变。
+4. **隔离标记**：frontmatter `status: quarantined` + `quarantine:` 块（reason/since/runId，M4 另带 entity）；reason 枚举 M2-orphan/M3-dangling-source/M4-zero-hits-candidate；去标记即还原。每梦按 reason 复检，复活解除隔离（action=unquarantine）。
+5. **报告**：六节名不变；明细动作键枚举 fix-link/fix-index-add-line/fix-index-remove-line/quarantine/unquarantine/delete/delete-suggestion；每笔删除内联「死者遗言」全文；抽查点一律 `git show <preSha>:<file>` 基准、挑最弱 3 笔；新建类动作给撤销式回滚提示、多笔同文件显式标注连坐、附 C1 局限诚实声明。
+6. **底片消费契约**（PBI-02.6-AC2，公开接口、PBI-06 重做必须保住）：①台账 ledger.json 按 sessionId 分组、页记录 file 为文件名（消费方自行拼接目录）；②页正文保留用户原话；③用户发言段落标记 `### User`/`### User (meta)`/`### User (steering)`。G9 检索基线＝上次梦 runId（任意终态），页时间戳取页文件名 `--` 后段；不可解析的页保守纳入。
+7. **熔断口径**：净消失数＝本梦删除记忆文件数；阈值 max(max_deletes, floor(库存×10%))；严格大于触发；回滚 `git checkout <preSha> -- .claude/memory CLAUDE.md`；报告写明原因/真实净消失数/回滚动作清单；冷却照常起算。
+
 ## 第三节 · 施工计划（Product Developers 填写）
 
-*机械管线「不经 SDK/模型、由受信任代码直接执行」是 1.1 架构前提已定的约束，本节只填约束之内的组织方式。本节随施工演进随时改写——当前版本 2026-08-15 开工时落盘。*
+*机械管线「不经 SDK/模型、由受信任代码直接执行」是 1.1 架构前提已定的约束，本节只填约束之内的组织方式。本节随施工演进随时改写。*
+
+**施工结局（2026-08-15）**：六条拆条按 3.2 顺序全部交付，模块划分与 3.3 一致，另抽出两件计划外但必要的结构件——`src/lib/dream-git.mjs`（P0 快照/双提交拆分/运行态排除，机械与 rogue 两路径共用）与 `src/run-dream-rogue.mjs`（SDK 占位引擎整体搬迁，SDK 全仓唯一落点，机械路径动态 import 隔离）。3.4 关键口径全部照落：链接解析规则、修断链=摘标记降正文、M4 检索范围排除 `.claude/`、相对日期转绝对暂缓（真实数据未见对应形态，机制预留）、熔断 floor(10%)、三态 runId、G9 机械检索边界、user 类按 AC 字面不豁免。自证 319/319（含 D4 点烟三处：熔断压线触发、enabled 闸门、零登录态运行证明）。
 
 ### 3.1 Sizing（单 Developer 估算，可随施工重估）
 
