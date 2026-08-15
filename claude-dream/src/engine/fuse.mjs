@@ -6,8 +6,11 @@
 //   判定 = 净消失数 > max(max_deletes, floor(库存 × 10%))——严格大于，不含等于；
 //   10% 取 floor（向下取整 = 阈值更严 = 熔断更早，安全方向，见 SprintBacklog 3.4#5）。
 // 熔断动作 = 中止整梦、记忆状态回滚到梦前（git checkout preSha 限 pathspec）、报告写明
-//   熔断原因/真实净消失数/被回滚动作清单；锁与标记释放、冷却照常起算由 trigger-check 保证
-//   （AC3——熔断算「做过一场梦」，不写死这一点会出现「熔断→未进冷却→立刻重跑→再熔断」死循环）。
+//   熔断原因/真实净消失数/被回滚动作清单；锁与标记释放、冷却照常起算由 trigger-check / CLI
+//   闸门（run-dream.mjs）保证（AC3——熔断算「做过一场梦」，不写死这一点会出现「熔断→未进
+//   冷却→立刻重跑→再熔断」死循环）。
+
+import path from 'node:path';
 
 /**
  * 计算熔断阈值。
@@ -26,9 +29,16 @@ export function shouldFuse({ netDisappeared, threshold }) {
 }
 
 /**
- * 回滚到梦前状态：git checkout preSha 限 pathspec（.claude/memory + CLAUDE.md）。
+ * 回滚到梦前状态：git checkout preSha 限 pathspec（.claude/memory + CLAUDE.md，仓库内相对路径）。
  * 受信任代码 argv 数组调用，不经 shell。返回 exec.run 的结果（ok=false 时调用方须处理——
  * 回滚失败 = 最坏情况，报告必须如实写明）。
+ *
+ * 两个 Windows 上实测踩过的坑（e2e-fix-brief 修复项 2）：
+ *  1. pathspec 不得用仓库根绝对路径（Windows 反斜杠形式 git 拒绝）——一律 path.relative 转
+ *     仓库内相对路径（如 .claude/memory）；
+ *  2. 未入库（untracked/不存在）的 CLAUDE.md 不得进 pathspec——checkout 的 pathspec 必须
+ *     匹配树内文件，一条不匹配整条命令失败（记忆回滚连带全部落空）。
+ *
  * @param {object} opts
  * @param {string} opts.root
  * @param {object} opts.paths dreamPaths(root)
@@ -38,7 +48,14 @@ export function shouldFuse({ netDisappeared, threshold }) {
 export function restoreToPreDream({ root, paths, preSha, exec }) {
   // pathspec 显式限死三处中与记忆相关的两处（.claude/dream 是证据目录，不在回滚范围——
   // 报告与执行日志必须存活，不能随记忆一起回滚，否则熔断现场无记录可查）。
-  return exec.run('git', ['checkout', preSha, '--', paths.memoryDir, paths.claudeMd], { cwd: root });
+  const rel = (p) => path.relative(root, p).replaceAll('\\', '/');
+  const pathspec = [rel(paths.memoryDir)];
+  const claudeMdRel = rel(paths.claudeMd);
+  const listed = exec.run('git', ['ls-files', '--', claudeMdRel], { cwd: root });
+  if (listed.ok && listed.stdout.trim().length > 0) {
+    pathspec.push(claudeMdRel);
+  }
+  return exec.run('git', ['checkout', preSha, '--', ...pathspec], { cwd: root });
 }
 
 /**

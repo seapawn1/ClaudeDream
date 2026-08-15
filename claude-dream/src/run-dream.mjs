@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dreamPaths, runIdNow } from './lib/paths.mjs';
 import { createEngineLog } from './lib/exec-log.mjs';
+import { acquireLock, releaseLock } from './lib/proc-lock.mjs';
 import { resolveConfig } from './engine/config.mjs';
 import { runMechanicalChecks } from './engine/check.mjs';
 import { applyDisposal } from './engine/act.mjs';
@@ -73,9 +74,10 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
   const beforeCount = countMemoryFiles(paths.memoryDir);
 
   // D3 定向：梦开工前先翻底片找用户留话（02.6·AC1「梦定向阶段先读底片」）。
-  // baselineRunId 由 trigger-check 在覆写 last-dream.json 之前读出并传入（D3 review F1：
-  // 此处再读 last-dream.json 拿到的是本梦 running 态的 runId，基线会自指导致翻底片恒空）。
-  // CLI 直跑不传时 g9 内部自行回退读 last-dream.json（该路径下无覆写顺序问题）。
+  // baselineRunId 由调用方在覆写 last-dream.json 之前读出并传入——trigger-check 与 CLI 闸门
+  // （cliMain，PO 裁定 CLI 直跑也落 last-dream.json）都走同一套覆写顺序（D3 review F1：
+  // 覆写后再读拿到的是本梦 running 态的 runId，基线会自指导致翻底片恒空）。
+  // 未传 baselineRunId 的直接调用方（测试/历史调用）由 g9 内部回退读 last-dream.json。
   const g9 = retrieveUserMessages({ root, paths, exec, baselineRunId });
 
   // S6 体检（02.2）
@@ -160,6 +162,67 @@ export async function runDream({ root, rogue = false, rogueTarget, triggeringSes
   };
 }
 
+/**
+ * CLI 直跑闸门（PO 裁定，e2e-fix-brief 修复项 3）：CLI 直跑同样受冷却约束、同样落 last-dream.json——
+ * 与 trigger-check 自动链同构：冷却检查 → 拿锁 → 覆写 running 态（先读出旧 runId 作 G9 基线）→
+ * 跑梦 → 写终态（completed/fused/failed）。熔断算「做过一场梦」，冷却照常起算。
+ * enabled 闸门语义不变：CLI 是显式人工调用，不受 enabled=false 约束（那是自动链路的闸门）。
+ * 被冷却/锁拦下返回 null（不是梦失败）。
+ */
+async function cliMain({ root, rogue, rogueTarget, triggeringSessionId }) {
+  const paths = dreamPaths(root);
+  mkdirSync(paths.dreamDir, { recursive: true });
+  const config = resolveConfig(root);
+
+  // 冷却期从阀门配置解析（AC1：cooldown_minutes 键生效；AC4：配置文件 > 环境变量 > 默认值）。
+  // 「0=关掉冷却」是合法语义（连续运行/考试需要）；resolveConfig 已把非法/负数回退默认。
+  let lastState = null;
+  try {
+    if (existsSync(paths.lastDreamState)) {
+      lastState = JSON.parse(readFileSync(paths.lastDreamState, 'utf8'));
+    }
+  } catch {
+    lastState = null;
+  }
+  const cooldownMs = config.values.cooldown_minutes * 60 * 1000;
+  if (lastState?.lastDreamAt) {
+    const elapsed = Date.now() - new Date(lastState.lastDreamAt).getTime();
+    if (elapsed < cooldownMs) {
+      const remainMin = Math.ceil((cooldownMs - elapsed) / 60000);
+      console.error(
+        `冷却中：距上一场梦（${lastState.runId ?? '?'}，终态 ${lastState.status ?? '?'}）不足 ${config.values.cooldown_minutes} 分钟，` +
+        `剩余约 ${remainMin} 分钟——本次梦未执行（cooldown_minutes=0 的环境变量可跳过冷却）`
+      );
+      return null;
+    }
+  }
+
+  // 真正的互斥关卡：拿不到锁 = 另一场梦正在跑（活锁别抢）或崩溃残留（stale 自动清）。
+  if (!acquireLock(paths.lockFile)) {
+    console.error('另一场梦正在运行（dream.lock 被占用）——本次梦未执行');
+    return null;
+  }
+
+  // D3 review F1 同构：G9 基线必须在覆写 last-dream.json 之前读出——running 态会把 runId 顶成
+  // 本梦 runId，G9 再读它当基线会把所有既有底片页滤光。首梦无旧态则基线为 null（全部页在范围内）。
+  const baselineRunId = typeof lastState?.runId === 'string' && lastState.runId ? lastState.runId : null;
+  const runId = runIdNow();
+  try {
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), runId, status: 'running' }, null, 2), 'utf8');
+    const summary = await runDream({ root, rogue, rogueTarget, triggeringSessionId, runId, baselineRunId });
+    // 熔断也是终态之一（02.4-AC3）：如实记 'fused' 而不是笼统 completed——冷却照常起算
+    // （lastDreamAt 无条件写），rogue/机械正常场记 'completed'。
+    const status = summary?.engine?.fused ? 'fused' : 'completed';
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), runId, status, summary }, null, 2), 'utf8');
+    return summary;
+  } catch (err) {
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), runId, status: 'failed', error: String(err?.message ?? err) }, null, 2), 'utf8');
+    throw err;
+  } finally {
+    releaseLock(paths.lockFile);
+  }
+}
+
 // CLI 入口：node run-dream.mjs [--rogue] [--target=<相对项目根的路径>] [--session=<触发会话的 session_id>] [root]
 if (process.argv[1] === __filename) {
   const args = process.argv.slice(2);
@@ -169,8 +232,14 @@ if (process.argv[1] === __filename) {
   const sessionArg = args.find((a) => a.startsWith('--session='));
   const triggeringSessionId = sessionArg ? sessionArg.slice('--session='.length) : undefined;
   const root = args.find((a) => !a.startsWith('--')) || process.cwd();
-  runDream({ root, rogue, rogueTarget, triggeringSessionId }).then((summary) => {
-    console.log(JSON.stringify(summary, null, 2));
-    process.exit(summary.sdkError ? 1 : 0);
+  cliMain({ root, rogue, rogueTarget, triggeringSessionId }).then((summary) => {
+    if (summary) {
+      console.log(JSON.stringify(summary, null, 2));
+      process.exit(summary.sdkError ? 1 : 0);
+    }
+    process.exit(0); // 被冷却/锁拦下：正常退出（不是梦失败，stderr 已写明原因）
+  }).catch((err) => {
+    console.error(`梦进程异常退出：${String(err?.message ?? err)}`);
+    process.exit(1);
   });
 }
