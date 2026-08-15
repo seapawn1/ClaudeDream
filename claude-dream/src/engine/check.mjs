@@ -336,8 +336,8 @@ function checkM4({ mems, root, exec }) {
         criterion: 'M4', object: mem.slug,
         inputs: { entity, entityKind: kind, searchCommand: grep.entry.command },
         result: `zero-hits-${evidenceLevel}`,
-        grepEvidence: grep.entry,
-        obituaryEvidence: obituary?.evidence ?? null,
+        // 命令证据随判定记录一并携带（报告按 C2 命令记法渲染：命令原文+exit code+stdout 摘要+时间戳）
+        commands: [grep.entry, obituary?.evidence ?? null].filter(Boolean),
       });
       findings.push({
         id: 'M4', object: mem.slug,

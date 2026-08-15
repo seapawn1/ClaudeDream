@@ -821,6 +821,128 @@ async function testFuse() {
   sandboxes.push(root);
 }
 
+async function testReport() {
+  // PBI-02.5：C2/C3 梦报告证据改造。种植沙箱跑完整机械管线前半段（体检+处置），
+  // 再对 buildReport 的六节产物逐条验收：四要素/C2 两种证据记法/死者遗言/抽查点梦前基准
+  // 且能失败/30 秒版说全动作类型/阀门状态如实标注。
+  console.log('\n=== PBI-02.5 C2/C3 梦报告证据改造 ===');
+  const { runMechanicalChecks } = await import('../src/engine/check.mjs');
+  const { applyDisposal } = await import('../src/engine/act.mjs');
+  const { createEngineLog } = await import('../src/lib/exec-log.mjs');
+  const { resolveConfig } = await import('../src/engine/config.mjs');
+  const { buildReport } = await import('../src/engine/report.mjs');
+
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-report-'));
+  git(root, ['init', '-q']);
+  git(root, ['config', 'user.email', 'test@example.com']);
+  git(root, ['config', 'user.name', 'claude-dream self-test']);
+  mkdirSync(path.join(root, '.claude'), { recursive: true });
+  // 配置文件：llm_checks: on（测 AC3 如实标注）+ 不含 cooldown_minutes（测 env 覆盖标注）
+  writeFileSync(path.join(root, '.claude', 'claude-dream.local.md'), '---\nllm_checks: on\nmax_deletes: 2\n---\n', 'utf8');
+  writeFileSync(path.join(root, 'doomed-r.txt'), 'doomed\n', 'utf8');
+  writeFileSync(path.join(root, 'CLAUDE.md'), '# Report Sandbox\n', 'utf8');
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'plant project']);
+  rmSync(path.join(root, 'doomed-r.txt'));
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'remove doomed-r.txt (讣告)']);
+
+  const memoryDir = path.join(root, '.claude', 'memory');
+  mkdirSync(memoryDir, { recursive: true });
+  plantMemory(memoryDir, 'hub-r', { body: '链接中枢。' });
+  plantMemory(memoryDir, 'report-link-fix', { body: '[[ghost-report-link]] 断链。链接 [[hub-r]]。' });
+  plantMemory(memoryDir, 'report-victim', { body: '参见 doomed-r.txt。链接 [[hub-r]]。' });
+  plantMemory(memoryDir, 'report-candidate', { body: '见 never-existed-r.txt。链接 [[hub-r]]。' });
+  plantMemory(memoryDir, 'report-orphan', { body: '孤立记忆无链接。' });
+  for (let i = 1; i <= 10; i++) {
+    plantMemory(memoryDir, `rfiller-${String(i).padStart(2, '0')}`, { body: '填充记忆，链接 [[hub-r]]。' });
+  }
+  const slugs = ['hub-r', 'report-link-fix', 'report-victim', 'report-candidate', 'report-orphan',
+    ...Array.from({ length: 10 }, (_, i) => `rfiller-${String(i + 1).padStart(2, '0')}`)];
+  plantIndex(memoryDir, slugs.map((s) => ({ slug: s, label: s })));
+  writeFileSync(path.join(memoryDir, 'MEMORY.md'), readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8') + '- [幽灵](ghost-r.md) — 盘上不存在\n', 'utf8');
+
+  const paths = dreamPaths(root);
+  const exec = createEngineLog({ logFile: path.join(paths.dreamDir, 'report-engine.log') });
+
+  const prevCooldownEnv = process.env.CLAUDE_DREAM_COOLDOWN_MINUTES;
+  process.env.CLAUDE_DREAM_COOLDOWN_MINUTES = '7';
+  let config;
+  try {
+    config = resolveConfig(root);
+  } finally {
+    if (prevCooldownEnv === undefined) delete process.env.CLAUDE_DREAM_COOLDOWN_MINUTES;
+    else process.env.CLAUDE_DREAM_COOLDOWN_MINUTES = prevCooldownEnv;
+  }
+
+  const { findings, meta, mems } = runMechanicalChecks({ root, paths, exec });
+  const preSha = 'PRE-SHA-FOR-REPORT';
+  const disposal = applyDisposal({
+    root, paths, config, mems, findings, runId: 'run-report', exec, preSha,
+  });
+
+  const report = buildReport({
+    runId: 'run-report', paths, config, checkMeta: meta, disposal,
+    fuseDetail: null, preSha, dreamSha: 'DREAM-SHA-FOR-REPORT',
+    negativeFeed: { triggeringSessionId: 'report-session', found: true, pageCount: 1, latestPage: 'report-session--p1.md' },
+    g9Quotes: [],
+    engineLogRel: '.claude/dream/report-engine.log',
+  });
+
+  // 六节骨架（Sketches S8）
+  const sixSections = ['图 delta 对账', '30 秒版', '明细', '隔离观察区', '抽查点', '阀门状态'];
+  check('报告六节骨架齐全', sixSections.every((s) => report.includes(s)), sixSections.filter((s) => !report.includes(s)).join(','));
+
+  // 四要素（AC1）：每笔动作都有 动作|判据编号|证据|回滚提示
+  const detailActions = ['fix-link', 'delete', 'quarantine', 'fix-index-remove-line'];
+  for (const a of detailActions) {
+    check(`明细含 ${a} 动作（四要素渲染）`, report.includes(a) , a);
+  }
+  check('明细每笔带判据编号', report.includes('判据 M1') && report.includes('判据 M4'));
+  check('明细每笔带回滚提示（含 git checkout 命令形态）', report.includes('回滚提示：') && report.includes('git checkout'));
+  check('C1 诚实声明：回滚局限注记随报告落盘（单笔精撤后置的显式标注）', report.includes('单笔精确回滚') && report.includes('连坐'));
+
+  // C2 证据两种记法
+  check('C2 命令类证据：命令原文 + exit code + stdout 摘要 + 时间戳', report.includes('命令：') && report.includes('exit code：') && report.includes('时间戳：'));
+  check('C2 命令类证据：讣告取证命令可见（git log --diff-filter=D）', report.includes('--diff-filter=D'));
+  check('C2 纯代码判据证据：判据输入 + 判定结果', report.includes('判据输入：') && report.includes('判定结果：'));
+  check('C2 报告引用执行日志（证据的原始记录落点）', report.includes('.claude/dream/report-engine.log'));
+
+  // AC4 死者遗言：删除笔内联被删正文全文
+  check('AC4 死者遗言：删除明细内联被删正文全文', report.includes('死者遗言') && report.includes('参见 doomed-r.txt'));
+
+  // 30 秒版（AC6）：说全动作类型，不止数字
+  check('30 秒版说全动作类型（修断链/删除/隔离/索引修复均列名）', report.includes('修断链') && report.includes('删除') && report.includes('隔离') && report.includes('删陈旧索引行'));
+  check('30 秒版动作类型带对象名（不止数字）', report.includes('report-victim.md') && report.includes('report-link-fix.md'));
+  check('30 秒版整梦撤销命令一行（dreamSha 可得时）', report.includes('git revert DREAM-SHA-FOR-REPORT'));
+  check('30 秒版无 CLAUDE.md 动作时不虚构置顶（机械层本轮不碰 CLAUDE.md）', !report.includes('触及 CLAUDE.md 的动作'));
+
+  // 抽查点（C3/AC3/AC5）
+  check('C3 抽查点以梦前状态为基准（git show preSha 起手）', report.includes(`git show ${preSha}:`));
+  check('C3 抽查点必须能失败（隔离点断言梦前无标记——动作不实必翻红）', report.includes('应无匹配'));
+  check('AC5 自动挑最弱 3 笔（修断链证明力最弱，排第一）', /1\. （修断链/.test(report) && /2\. （/.test(report) && /3\. （/.test(report) && !/4\. （/.test(report), report.split('## 抽查点')[1]?.slice(0, 300));
+
+  // 阀门状态（02.1-AC3/AC4 的报告侧落点）
+  check('阀门状态六键齐（值+来源）', ['enabled', 'llm_checks', 'delete_policy', 'max_deletes', 'claude_md_edits', 'cooldown_minutes'].every((k) => report.includes(`${k} =`)));
+  check('AC3 如实标注：llm_checks=on 时写明 LLM 层待 PBI-07、本档位暂不生效', report.includes('LLM 层待 PBI-07'));
+  check('AC4 不静默覆盖：环境变量覆盖进报告点名', report.includes('本次由环境变量覆盖') && report.includes('cooldown_minutes'));
+  check('阀门状态如实显示 cooldown 被 env 覆盖后的值 7', report.includes('cooldown_minutes = 7'));
+  check('Sprint-2 契约保持：进料对账行仍在', report.includes('进料对账') && report.includes('report-session'));
+
+  // 熔断场报告（fuseDetail 非空时）
+  const fuseReport = buildReport({
+    runId: 'run-report-fused', paths, config, checkMeta: meta, disposal: { journal: [], pendingRulings: [], netDeleted: 0 },
+    fuseDetail: { reason: '净消失 2 > max(max_deletes=1, 库存10%=1) = 1', threshold: 1, maxDeletes: 1, tenPercent: 1, netDisappeared: 2, rolledBackActions: [] },
+    preSha, dreamSha: null,
+    negativeFeed: { triggeringSessionId: null, found: false, pageCount: 0, latestPage: null },
+    g9Quotes: [], engineLogRel: '.claude/dream/report-engine.log',
+  });
+  check('熔断场报告：30 秒版与阀门状态都写明熔断原因', fuseReport.includes('本梦已熔断') && fuseReport.includes('净消失 2'));
+  check('熔断场报告：无 dream: 提交时撤销指引不虚构 revert 命令', !fuseReport.includes('git revert'));
+
+  sandboxes.push(root);
+}
+
 async function testFullChainAndRevertAndCooldownAndRecursion() {
   const sandbox = makeSandbox('chain');
   const paths = dreamPaths(sandbox);
@@ -1459,6 +1581,7 @@ try {
   await testMechanicalChecks();
   await testDisposal();
   await testFuse();
+  await testReport();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());

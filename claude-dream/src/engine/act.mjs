@@ -172,6 +172,7 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
     const reason = mem.quarantine.reason ?? '';
     let revived = false;
     let recheckInputs = {};
+    let recheckCommands = [];
     if (reason === 'M2-orphan') {
       const out = (outLinks.get(mem.slug) ?? []).length;
       const inn = inDegree.get(mem.slug)?.size ?? 0;
@@ -186,6 +187,7 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
       if (entity) {
         const grep = exec.run('git', ['grep', '-I', '-F', '-e', entity, '--', ':!.claude'], { cwd: root });
         revived = grep.ok && grep.stdout.trim().length > 0;
+        recheckCommands = [grep.entry];
       }
     } else {
       exec.record({ criterion: 'M4-recheck', object: mem.slug, result: 'unknown-reason-skip', inputs: { reason } });
@@ -194,6 +196,7 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
     const evidence = exec.record({
       criterion: 'quarantine-recheck', object: mem.slug, inputs: { reason, ...recheckInputs },
       result: revived ? 'revived' : 'stays-quarantined',
+      commands: recheckCommands, // M4 复检的真实 grep 取证，报告按 C2 命令记法渲染
     });
     if (revived) {
       const content = readFile(`${mem.slug}.md`);
