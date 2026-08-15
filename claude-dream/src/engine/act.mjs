@@ -260,7 +260,12 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
           contentBefore, // 死者遗言：报告内联被删正文
           rollback: { ...rollbackFor(filename), hint: preSha ? `git checkout ${preSha} -- ${filename.replaceAll('\\', '/')} ${path.relative(root, indexPath).replaceAll('\\', '/')}` : rollbackFor(filename).hint },
         });
-        if (onDelete) onDelete(netDeleted);
+        if (onDelete && onDelete(netDeleted)) {
+          // 熔断（02.4）：onDelete 返回真值 = 熔断线已破，中止整梦——跳过剩余全部处置，
+          // 已执行的处置由调用方 restoreToPreDream 回滚（journal 即回滚动作清单）。
+          fused = true;
+          return finalize();
+        }
         // 该文件上的其他 findings 随删除一并消解，不再逐一处置
         const rest = fs.filter((f) => !confirmed.includes(f));
         if (rest.length > 0) {
@@ -349,9 +354,12 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
   // 连坐标注后置结算：journal 全部落定后才知道每个文件被几笔触及。
   // 「撤销本笔将同时影响其他 N 笔」——N = 同文件其余笔数（02.5-AC1 要求显式标注；C1 单笔精撤后置，
   // 本轮只诚实标注连坐面，不假装能按笔精确回滚）。
-  for (const entry of journal) {
-    entry.rollback.affectsOthers = Math.max(0, (byObj.get(entry.rollback.file) ?? 0) - 1);
+  function finalize() {
+    for (const entry of journal) {
+      entry.rollback.affectsOthers = Math.max(0, (byObj.get(entry.rollback.file) ?? 0) - 1);
+    }
+    return { journal, pendingRulings, netDeleted, fused };
   }
 
-  return { journal, pendingRulings, netDeleted, fused };
+  return finalize();
 }

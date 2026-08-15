@@ -732,6 +732,95 @@ async function testDisposal() {
   sandboxes.push(root);
 }
 
+async function testFuse() {
+  // PBI-02.4：熔断器。D4 点烟——不是读代码猜"应该会熔断"，是故意把熔断线压到 1、
+  // 种三个带真实 git 讣告的确凿票，亲眼看它红：第二笔删除破线 → 中止整梦 → 回滚。
+  console.log('\n=== PBI-02.4 熔断器（阈值口径单测 + D4 故障注入点烟） ===');
+  const { fuseThreshold, shouldFuse, restoreToPreDream, buildFuseDetail } = await import('../src/engine/fuse.mjs');
+  const { runMechanicalChecks } = await import('../src/engine/check.mjs');
+  const { applyDisposal } = await import('../src/engine/act.mjs');
+  const { createEngineLog } = await import('../src/lib/exec-log.mjs');
+  const { resolveConfig } = await import('../src/engine/config.mjs');
+
+  // ---- 0) 阈值口径单测（AC1 写死） ----
+  check('口径：max(3, floor(42×10%)=4) = 4', fuseThreshold({ maxDeletes: 3, memoryCount: 42 }).threshold === 4);
+  check('口径：max(3, floor(5×10%)=0) = 3', fuseThreshold({ maxDeletes: 3, memoryCount: 5 }).threshold === 3);
+  check('口径：max(1, floor(17×10%)=1) = 1（max_deletes 与 10% 相等取自身）', fuseThreshold({ maxDeletes: 1, memoryCount: 17 }).threshold === 1);
+  check('判定：严格大于——净消失 1 > 1 不熔断（等于不触发）', shouldFuse({ netDisappeared: 1, threshold: 1 }) === false);
+  check('判定：净消失 2 > 1 熔断', shouldFuse({ netDisappeared: 2, threshold: 1 }) === true);
+
+  // ---- 1) D4 点烟：熔断线压到 1，三个确凿票 ----
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-fuse-'));
+  git(root, ['init', '-q']);
+  git(root, ['config', 'user.email', 'test@example.com']);
+  git(root, ['config', 'user.name', 'claude-dream self-test']);
+  mkdirSync(path.join(root, '.claude'), { recursive: true });
+  writeFileSync(path.join(root, '.claude', 'claude-dream.local.md'), '---\nmax_deletes: 1\n---\n', 'utf8');
+  writeFileSync(path.join(root, 'doomed-a.txt'), 'a\n', 'utf8');
+  writeFileSync(path.join(root, 'doomed-b.txt'), 'b\n', 'utf8');
+  writeFileSync(path.join(root, 'doomed-c.txt'), 'c\n', 'utf8');
+  writeFileSync(path.join(root, 'CLAUDE.md'), '# Fuse Sandbox\n', 'utf8');
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'plant victims']);
+  for (const v of ['doomed-a.txt', 'doomed-b.txt', 'doomed-c.txt']) {
+    rmSync(path.join(root, v));
+  }
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'remove all three (三份讣告)']);
+
+  const memoryDir = path.join(root, '.claude', 'memory');
+  mkdirSync(memoryDir, { recursive: true });
+  // aaa- 前缀保证排序在最前：L0 修断链先于删除执行，回滚测试能验「内容级回滚」而不只是文件复活
+  plantMemory(memoryDir, 'aaa-link-fix', { body: '[[ghost-fuse-link]] 断链。链接 [[hub-fuse]]。' });
+  plantMemory(memoryDir, 'hub-fuse', { body: '链接中枢。' });
+  plantMemory(memoryDir, 'victim-a', { body: '参见 doomed-a.txt。链接 [[hub-fuse]]。' });
+  plantMemory(memoryDir, 'victim-b', { body: '参见 doomed-b.txt。链接 [[hub-fuse]]。' });
+  plantMemory(memoryDir, 'victim-c', { body: '参见 doomed-c.txt。链接 [[hub-fuse]]。' });
+  for (let i = 1; i <= 7; i++) {
+    plantMemory(memoryDir, `filler-${String(i).padStart(2, '0')}`, { body: '填充记忆，链接 [[hub-fuse]]。' });
+  }
+  // 12 个文件：floor(12×10%)=1，threshold = max(1,1)=1——第二笔删除必然破线
+  const allSlugs = ['aaa-link-fix', 'hub-fuse', 'victim-a', 'victim-b', 'victim-c',
+    ...Array.from({ length: 7 }, (_, i) => `filler-${String(i + 1).padStart(2, '0')}`)];
+  plantIndex(memoryDir, allSlugs.map((s) => ({ slug: s, label: s })));
+  // 梦前快照：记忆文件全部提交（回滚的 git 基础）
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'dream-pre snapshot (梦前快照)']);
+  const preSha = git(root, ['rev-parse', 'HEAD']);
+
+  const paths = dreamPaths(root);
+  const exec = createEngineLog({ logFile: path.join(paths.dreamDir, 'fuse-engine.log') });
+  const config = resolveConfig(root);
+  const { findings, meta, mems } = runMechanicalChecks({ root, paths, exec });
+  const threshold = fuseThreshold({ maxDeletes: config.values.max_deletes, memoryCount: meta.memoryCount });
+
+  const result = applyDisposal({
+    root, paths, config, mems, findings, runId: 'run-fuse', exec, preSha,
+    onDelete: (net) => shouldFuse({ netDisappeared: net, threshold: threshold.threshold }),
+  });
+
+  check('D4 点烟：熔断被真实触发（红过一次）', result.fused === true, JSON.stringify({ netDeleted: result.netDeleted, threshold }));
+  check('熔断时净消失数 = 2（第三笔未执行）', result.netDeleted === 2, `netDeleted=${result.netDeleted}`);
+  check('journal 只有两笔删除（victim-c 从未被处理）', result.journal.filter((a) => a.action === 'delete').length === 2 && !result.journal.some((a) => a.object === 'victim-c.md'), JSON.stringify(result.journal.map((a) => `${a.action}:${a.object}`)));
+  check('熔断前的 L0 修复也进了 journal（回滚动作清单的完整性）', result.journal.some((a) => a.action === 'fix-link' && a.object === 'aaa-link-fix.md'));
+  check('熔断瞬间文件系统上确有 2 个消失（真实盘面）', !existsSync(path.join(memoryDir, 'victim-a.md')) && !existsSync(path.join(memoryDir, 'victim-b.md')) && existsSync(path.join(memoryDir, 'victim-c.md')));
+
+  // 熔断详情（报告数据）
+  const detail = buildFuseDetail({ threshold, netDisappeared: result.netDeleted, journal: result.journal });
+  check('熔断详情：原因写明 max_deletes/10%/阈值', detail.reason.includes('max_deletes=1') && detail.reason.includes('10%') && detail.reason.includes('= 1'));
+  check('熔断详情：回滚动作清单含全部已执行动作', detail.rolledBackActions.length === result.journal.length);
+
+  // ---- 2) 回滚：记忆状态回到梦前 ----
+  const restore = restoreToPreDream({ root, paths, preSha, exec });
+  check('回滚执行成功（git checkout preSha 限 pathspec）', restore.ok, restore.entry.stderrSummary);
+  check('回滚后三个受害者全部复活（含未被处理的 victim-c）', ['victim-a.md', 'victim-b.md', 'victim-c.md'].every((f) => existsSync(path.join(memoryDir, f))));
+  check('回滚后 L0 修复被撤销（aaa-link-fix 恢复带 [[ghost-fuse-link]] 的梦前正文）', readFileSync(path.join(memoryDir, 'aaa-link-fix.md'), 'utf8').includes('[[ghost-fuse-link]]'));
+  check('回滚后索引行恢复（MEMORY.md 重新指向 victim-a）', readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8').includes('victim-a.md'));
+  check('回滚不影响证据目录（.claude/dream 的执行日志仍在）', existsSync(path.join(paths.dreamDir, 'fuse-engine.log')));
+
+  sandboxes.push(root);
+}
+
 async function testFullChainAndRevertAndCooldownAndRecursion() {
   const sandbox = makeSandbox('chain');
   const paths = dreamPaths(sandbox);
@@ -1369,6 +1458,7 @@ try {
   await testNotebookEditFieldName();
   await testMechanicalChecks();
   await testDisposal();
+  await testFuse();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());
