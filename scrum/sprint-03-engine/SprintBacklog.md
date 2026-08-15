@@ -131,6 +131,8 @@ Sprint-3 的 Sprint Backlog。Planning 定案 2026-08-15：主菜 PBI-02（引�
 
 **施工结局（2026-08-15）**：六条拆条按 3.2 顺序全部交付，模块划分与 3.3 一致，另抽出两件计划外但必要的结构件——`src/lib/dream-git.mjs`（P0 快照/双提交拆分/运行态排除，机械与 rogue 两路径共用）与 `src/run-dream-rogue.mjs`（SDK 占位引擎整体搬迁，SDK 全仓唯一落点，机械路径动态 import 隔离）。3.4 关键口径全部照落：链接解析规则、修断链=摘标记降正文、M4 检索范围排除 `.claude/`、相对日期转绝对暂缓（真实数据未见对应形态，机制预留）、熔断 floor(10%)、三态 runId、G9 机械检索边界、user 类按 AC 字面不豁免。自证 319/319（含 D4 点烟三处：熔断压线触发、enabled 闸门、零登录态运行证明）。
 
+**D3 独立 review（opus，2026-08-15）与修复**：审出 3 阻断 + 3 中 + 3 低，已全量修复并补回归钉子（自证 335/335）。阻断级：F1 G9 基线生产链失效（trigger-check 覆写 last-dream.json 前未读旧 runId，翻底片恒空）——修复＝覆写前读出旧值传参 + g9 的 undefined/null 双语义（链级两场梦验证钉子）；F2 回滚提示/抽查点 git 路径缺 `.claude/memory/` 前缀不可执行——修复＋路径断言钉子；F3 回滚失败时报告与提示行谎称已回滚——restoreFailed 三处渲染 + 提示行条件化 + 失败场报告断言钉子。中级：F4 fix-index 抽查点恒真恒假（模式误用 MEMORY）→ 改用 detail.forFile/removedLine；F5 claude_md_edits 声明未接线 → 报告诚实注记 + adapter honestNote（接线归 PBI-07）；F6 无 frontmatter 隔离标记不可逆 → 拆壳 + EOL 保留。低/存疑：L1 零处置≠零发现措辞；L2 讣告显式 `-M` 防 rename 假讣告；L3 delete 笔连坐计入 MEMORY.md。**PO 口径待裁**：claude_md_edits 惰性标注 vs 接线、user 类豁免维持字面、讣告 -M（已按建议加，可否决）。
+
 ### 3.1 Sizing（单 Developer 估算，可随施工重估）
 
 | 拆条 | size | 备注 |
