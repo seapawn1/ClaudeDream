@@ -113,8 +113,130 @@ Sprint-3 的 Sprint Backlog。Planning 定案 2026-08-15：主菜 PBI-02（引�
 
 **verdict 改造清单 C1–C7 归属记账**（逐条有归宿，不留掉地项）：C1 单笔精撤后置，本轮承诺「回滚提示诚实反映局限」（见 PBI-02.5-AC1）；C2/C3 本轮交付（PBI-02.5）；**C4 机器推论贴身份证——归 PBI-07**（原文明确针对 connection 的 confidence/origin 标记，connection 本身在 PBI-07 才产生；本轮机械处置的可追溯性已由 C2/C3 的「动作+判据+证据」四要素覆盖，不重复立项）；**C5 拆两半**——摘要说全动作类型、CLAUDE.md 改动置顶本轮交付（PBI-02.5-AC6），提示行同源生成随 PBI-05；C6 熔断额度写死+报告显示真实盘面数本轮交付（PBI-02.4-AC1）；C7 报告不进 dream commit——**代码里已实现**（`run-dream.mjs` 的 `dream:`/`dream-evidence:` 两笔独立提交，revert 前者不连坐后者），本轮只需保持不破坏，不新增交付物。
 
+### 2.4 交付接口约定（Sprint-3 版）
+
+*DoD·D5：增量的全部对外接口在此声明齐全，验收与后续消费者只依声明接线。机器可读版见 [acceptance/adapter.json](acceptance/adapter.json)（Sprint-3 增量版，未变键沿用 Sprint-2 版）。要点：*
+
+1. **阀门配置**：`.claude/claude-dream.local.md` 六键（enabled/llm_checks/delete_policy/max_deletes/claude_md_edits/cooldown_minutes）；解析顺序＝配置文件 > 环境变量 > 默认值（逐键）；环境变量覆盖生效时报告点名「本次由环境变量覆盖：<键名>」；值非法回退默认并记注记。新环境变量四个：`CLAUDE_DREAM_ENABLED`/`CLAUDE_DREAM_LLM_CHECKS`/`CLAUDE_DREAM_DELETE_POLICY`/`CLAUDE_DREAM_MAX_DELETES`（`DREAM_CLAUDE_MD_EDITS`/`CLAUDE_DREAM_COOLDOWN_MINUTES` 沿用）。`enabled` 只约束 SessionEnd 自动链路，CLI 直跑 run-dream 是显式人工调用、不受闸门。
+2. **机械梦**：run-dream.mjs 默认路径零 SDK/零网络（无登录态全链可跑）；SDK 唯一落点 run-dream-rogue.mjs（动态 import，rogue 故障演练路径保持 Sprint-1/2 行为）。执行日志 `.claude/dream/<runId>-engine.log`（命令类/代码类两种证据条目）；canUseTool 日志仅 rogue 路径产生。
+3. **last-dream.json**：新增顶层 `runId`（running/completed/failed/fused 四态都带）；`status` 扩出 `fused` 终态（熔断场）；`lastDreamAt` 语义与冷却不变。
+4. **隔离标记**：frontmatter `status: quarantined` + `quarantine:` 块（reason/since/runId，M4 另带 entity）；reason 枚举 M2-orphan/M3-dangling-source/M4-zero-hits-candidate；去标记即还原。每梦按 reason 复检，复活解除隔离（action=unquarantine）。
+5. **报告**：六节名不变；明细动作键枚举 fix-link/fix-index-add-line/fix-index-remove-line/quarantine/unquarantine/delete/delete-suggestion；每笔删除内联「死者遗言」全文；抽查点一律 `git show <preSha>:<file>` 基准、挑最弱 3 笔；新建类动作给撤销式回滚提示、多笔同文件显式标注连坐、附 C1 局限诚实声明。
+6. **底片消费契约**（PBI-02.6-AC2，公开接口、PBI-06 重做必须保住）：①台账 ledger.json 按 sessionId 分组、页记录 file 为文件名（消费方自行拼接目录）；②页正文保留用户原话；③用户发言段落标记 `### User`/`### User (meta)`/`### User (steering)`。G9 检索基线＝上次梦 runId（任意终态），页时间戳取页文件名 `--` 后段；不可解析的页保守纳入。
+7. **熔断口径**：净消失数＝本梦删除记忆文件数；阈值 max(max_deletes, floor(库存×10%))；严格大于触发；回滚 `git checkout <preSha> -- .claude/memory CLAUDE.md`；报告写明原因/真实净消失数/回滚动作清单；冷却照常起算。
+
 ## 第三节 · 施工计划（Product Developers 填写）
 
-*本节 Planning 落盘时留空，由 Product Developers 开工前填写：各条 sizing、施工顺序、技术方案细节（模块划分、错误处理、判据执行顺序等）。机械管线「不经 SDK/模型、由受信任代码直接执行」是 1.1 架构前提已定的约束，不是留给本节的 How 选择——第三节要填的是这个约束之内的组织方式。How 归 Developers，PO 与 Scrum Master 不越权。*
+*机械管线「不经 SDK/模型、由受信任代码直接执行」是 1.1 架构前提已定的约束，本节只填约束之内的组织方式。本节随施工演进随时改写。*
 
-（待填）
+**施工结局（2026-08-15）**：六条拆条按 3.2 顺序全部交付，模块划分与 3.3 一致，另抽出两件计划外但必要的结构件——`src/lib/dream-git.mjs`（P0 快照/双提交拆分/运行态排除，机械与 rogue 两路径共用）与 `src/run-dream-rogue.mjs`（SDK 占位引擎整体搬迁，SDK 全仓唯一落点，机械路径动态 import 隔离）。3.4 关键口径全部照落：链接解析规则、修断链=摘标记降正文、M4 检索范围排除 `.claude/`、相对日期转绝对暂缓（真实数据未见对应形态，机制预留）、熔断 floor(10%)、三态 runId、G9 机械检索边界、user 类按 AC 字面不豁免。自证 319/319（含 D4 点烟三处：熔断压线触发、enabled 闸门、零登录态运行证明）。
+
+**D3 独立 review（opus，2026-08-15）与修复**：审出 3 阻断 + 3 中 + 3 低，已全量修复并补回归钉子（自证 335/335）。阻断级：F1 G9 基线生产链失效（trigger-check 覆写 last-dream.json 前未读旧 runId，翻底片恒空）——修复＝覆写前读出旧值传参 + g9 的 undefined/null 双语义（链级两场梦验证钉子）；F2 回滚提示/抽查点 git 路径缺 `.claude/memory/` 前缀不可执行——修复＋路径断言钉子；F3 回滚失败时报告与提示行谎称已回滚——restoreFailed 三处渲染 + 提示行条件化 + 失败场报告断言钉子。中级：F4 fix-index 抽查点恒真恒假（模式误用 MEMORY）→ 改用 detail.forFile/removedLine；F5 claude_md_edits 声明未接线 → 报告诚实注记 + adapter honestNote（接线归 PBI-07）；F6 无 frontmatter 隔离标记不可逆 → 拆壳 + EOL 保留。低/存疑：L1 零处置≠零发现措辞；L2 讣告显式 `-M` 防 rename 假讣告；L3 delete 笔连坐计入 MEMORY.md。**PO 口径待裁**：claude_md_edits 惰性标注 vs 接线、user 类豁免维持字面、讣告 -M（已按建议加，可否决）。
+
+### 3.1 Sizing（单 Developer 估算，可随施工重估）
+
+| 拆条 | size | 备注 |
+|---|---|---|
+| 02.1 阀门配置 | S（0.5d） | 手写 YAML 六键解析（零依赖），触发链消费 |
+| 02.2 判据引擎 | M（1.5d） | M4 两级证据最重；M2 冷启动禁用 |
+| 02.3 处置层 | M（1d） | L0 四类修复 + 隔离标记 + 复检 |
+| 02.4 熔断器 | S（0.5d） | 计数口径 + 回滚 + D4 点烟 |
+| 02.5 报告改造 | M（1d） | 四要素/执行日志/抽查点基准/死者遗言 |
+| 02.6 G9 回程 | M（1d） | 机械检索 + 契约落盘 + 种植验证 |
+| 接口约定/收口/review | M（1d） | D5 adapter、D3 独立 review、收口材料 |
+
+合计约 6.5d。
+
+### 3.2 施工顺序
+
+按依赖方向：**02.1 → 02.2 → 02.3 → 02.4 → 02.5 → 02.6**，接口约定与自证随各条增量交付，收口材料最后。
+
+### 3.3 模块划分（新增 `src/engine/` 目录，机械管线全部住这里）
+
+| 文件 | 职责 |
+|---|---|
+| `engine/config.mjs` | `.claude/claude-dream.local.md` 六键解析（手写极简 YAML frontmatter 解析器，零依赖）、默认值、环境变量覆盖、来源溯源（供报告阀门状态节标注） |
+| `lib/exec-log.mjs` | 受信任代码执行 git 的唯一通道：execFileSync(argv 数组，不经 shell)+ 执行日志（命令原文/exit code/stdout 摘要/时间戳）——C2「真实执行的命令」证据形态的数据源 |
+| `engine/check.mjs` | M1–M5 判据引擎（纯函数式：输入记忆库+项目状态，输出 findings 列表，每条带判据编号/对象/证据/出处） |
+| `engine/act.mjs` | 处置层：L0 修复、确凿删除、L3 隔离、feedback 保护、隔离复检；每笔动作进 journal（四要素数据源） |
+| `engine/fuse.mjs` | 熔断计数（净消失口径）与超限回滚（git checkout preSha 限 pathspec） |
+| `engine/g9.mjs` | 定向翻底片：台账+页文件名时间戳过滤上次梦 runId 之后的页 → 摘 `### User` 段落 → 标识匹配 → 摘录输出 |
+| `engine/report.mjs` | 六节报告生成（图 delta/30 秒版/明细/隔离观察区/抽查点/阀门状态），C2/C3 形态 |
+| `run-dream.mjs` | 重写为机械管线编排：P0 快照 → G9 翻底片 → 体检 → 处置（熔断在线）→ 报告 → 提交拆分。SDK 改为**动态 import、仅 rogue 分支加载**——默认路径零 SDK 在结构上可证；C7 双提交拆分、防递归 env、dreamSessionIdsLog 登记等既有机制原样保留（rogue 路径仍产生真实 SDK 会话） |
+| `trigger-check.mjs` | 增消费 config：`enabled:false` 不拉梦（底片照常）；冷却期改从 config 解析（文件>环境变量>默认）；last-dream.json 增记 `runId` 字段（failed/熔断场也要有，供 G9 检索基准） |
+
+### 3.4 关键口径与设计决策（How 选择，PO 可否决）
+
+1. **链接解析规则（M1 的判据输入，报告内自述）**：`[[X]]` 中 X 不含 `/` 或 `.` → 按记忆 slug 解析，查 `.claude/memory/<X>.md`；含路径字符 → 按项目相对路径 stat。两者皆无 → M1 断链检出，附出处（哪个文件的哪条引用）。
+2. **L0「修断链」的具体形态**：摘除失效链接的 `[[ ]]` 标记降为普通正文（保留文字、不删信息）——机械层无从知道正确目标，不能乱改指向。每笔四要素入明细。
+3. **M4 实体抽取与检索范围**：正文中反引号包裹的 token + 路径形 token（含 `/` 或 `\` 或扩展名）+ `ident(` 函数形 token；检索范围＝git 跟踪文件（`git grep -I`），显式排除 `.claude/`（记忆库自引用不算项目现状）。**边界如实记录**：未跟踪文件不参与检索。路径形实体 0 命中后跑 `git log --diff-filter=D -- <path>` 查讣告升级「确凿」；函数/命令形 token 无机械讣告通道 → 永远停在「候选」（等价于无删除权，交 PBI-07 语义层）。
+4. **相对日期转绝对（L0）保守口径**：只转 `昨天/前天` 两种无歧义模式，基准取该文件 frontmatter `modified` 日期；无 modified 或非上述模式一律不转（宁可少修不可错修）。
+5. **熔断整数口径**：10% 取 `Math.floor`（向下取整＝阈值更严＝熔断更早，安全方向）；判定为净消失数 > max(max_deletes, floor(库存×10%))。
+6. **last-dream.json 增记 runId**：status running 时即写入本梦 runId（runId 生成上移到 trigger-check 可见处），completed/failed/熔断三种终态都保留 runId——G9 的「上次梦 runId 之后」检索基准在任何终态下都有据可查。
+7. **G9「工作输入」的机械语义**：本轮只做标识匹配检索（AC1 明示），摘录进 pipeline 工作输入结构并进报告（原文+出处页指针）；**听懂与照办归 PBI-07**，机械梦不因用户留话改变处置——如实记录这个边界，不假装已接通语义回程。
+8. **user 类记忆的删除豁免**：AC5 只豁免 feedback 类；user 类按 AC 字面不豁免（M4 确凿可删）。Sketches R5 的立场是「偏好/教训类无可核验实体、判据自然失明」而非显式豁免——按字面执行，若 PO 要显式豁免请指正。
+9. **既有机制保持**：`CLAUDE_INVOKED_BY` 防递归 env、`dreamSessionIdsLog` 登记、backfill 排除梦会话——默认机械路径无 SDK 子进程、三者「用不上」但不删除不破坏（rogue 路径仍走全量既有逻辑）；`--rogue` 故障注入测试原样保留。
+10. **搭车小活**：清理 hooks.json 里 SessionEnd 的 `timeout: 10` 死配置（Sprint-2 注意点2 记的「待清理」，官方不读该字段，删除纯清理无行为变化）。
+11. **自证承载**：全部增量的 D1 验证并入 `test/self-test.mjs`（保持一条命令全绿），Sprint-3 段落建独立测试组；熔断 D4 点烟在自证沙箱里造真实 git 讣告 + max_deletes=1 强触发。
+
+## 第四节 · 验收 Review（2026-08-16）
+
+### 4.1 验收路径
+
+AC 判分线收口作废（PO 2026-08-15 上午裁定，判分器止于 67e4b53 保留在档）→ **端到端主线七站亲验**（PO 在场手操，2026-08-15 晚）→ 三处硬伤 → 修复任务书 [`e2e-fix-brief.md`](acceptance/e2e-fix-brief.md) → **双盲对照**（developers 版 vs 出卷线 agent 版，同一考场同一流程独立实测）→ PO 裁定采用出卷线 agent 版 → 三处修复独立实测全绿。
+
+### 4.2 七站亲验结果（修复后实测）
+
+| 站 | 初验（修复前，PO 亲见） | 修复后（我方版独立实测） |
+|---|---|---|
+| 0 种腐烂 | ✔ 考场就位 | ✔（未动） |
+| 1 真体检 | ✖ 隔离 30 笔、约 26 条健康误杀 | ✔ 隔离 3 条全真腐烂、健康零误报 |
+| 2 真处置 | ✖ 有保留：确凿删除票 1/2 | ✔ 确凿票 2/2、可逆/档位/feedback 铁律全守 |
+| 3 真留证 | ✔ 全绿 | ✔（未动） |
+| 4 熔断器 | ✖ 有保留：中止真、回滚失败、CLI 无冷却 | ✔ 回滚干净、冷却拦截、fused 落盘 |
+| 5 G9 回程 | ✔（CLI 无基线，全收模式） | ✔（窗口语义恢复，只摘基线后新页） |
+| 6 回滚兜底 | ✔ 一条命令回梦前 | ✔（未动） |
+
+### 4.3 三处硬伤与双盲对照结论
+
+1. **M2 误杀**（判据口径错）：「无链=孤儿」隔离健康记忆、吞确凿删除票。
+2. **熔断回滚失败**（实现 bug）：绝对路径 pathspec 被 Windows git 拒绝。
+3. **CLI 无冷却/last-dream**（PO 裁定的设计变更）：CLI 直跑不落状态、无冷却、G9 无基线。
+
+双盲对照（developers 版 bee1ad8 vs 出卷线 agent 版 e2e-fix-wip）：
+
+- **我方版全面胜出**：M4 路径实体存在性改 `git ls-files`（developers 版 git grep 内容检索把正文提及当实体 → 9 条健康记忆误隔离、确凿票漏 1）；命令/函数形候选只留证不隔离；M2 判据收窄（零链 ∧ 未登索引）。
+- PO 裁定：**全面使用我方版**，developers 版作废（保留在 `sprint-03-engine` 分支存档）。
+
+### 4.4 验收结论（PO 定调）
+
+**验收通过。** 收口判据（任务书）＝PO 端到端复验通过——三处修复独立实测全绿、七站其余站已验证，判据满足。修复代码已合回 `sprint-03-acceptance`（fe88969）。
+
+### 4.5 待裁五项裁定（PO 2026-08-16 全认）
+
+1. `last-dream.json` 不入库（D3 铁律）：熔断后 git status 多一条 untracked 运行态文件属正常——认可，对答案卡同步注记。
+2. M2 链接密度阈值 0.5：先接受，判据内部参数，真实项目积累后可再调。
+3. M4 命令/函数形候选只留证不隔离：认可（finding 照留、不开隔离票）。
+4. 冷却拦截时 exit 0 + stderr 提示：认可（闸门正常工作，非梦失败）。
+5. L0 相对日期转绝对（「上周」类宽口径未实现，3.4 口径只承诺「昨天/前天」）：记入后续立项，不在本轮范围。
+
+### 4.6 后续动作（待 PO 拍板）
+
+- 推送远端：按 PO 口径「都通过了再推」——验收已过，待拍板。
+- main 合并时点：待 PO 拍板。
+- 通知施工线：developers 版（bee1ad8）作废，由 PO 转达。
+
+### 4.7 Retro 产出（2026-08-16，PO 在场）
+
+复盘四件事：
+
+1. **出卷线从建到废**：判分线发现了全部三处硬伤，但埋在判分报告里没让 PO 亲眼看——端到端七站才是让 PO 相信的形态。
+2. **双线盲改对照救场**：developers 版 vs agent 版独立施工、同一考场实测，实锤不靠空口。
+3. **施工线两个短板**：自证 335/335 全绿而第三方考场 7 处红（自证口径随实现走）；修复速度与质量双输。
+4. **sonnet agent 后台施工新模式验证成立**：任务书（行为级要求）+ 独立实测 + 后台跑。
+
+三条改进动作（已流程化写入 [ProductBacklog](../../ProductBacklog.md)「4. 验收流程约定」第 3–5 条，跨 Sprint 生效）：
+
+- a. 验收结论只由「PO 在场端到端主线 + 第三方种植考场实测」驱动，判分器退居幕后。
+- b. 施工自证全绿不构成验收，第三方考场实测是 DoD 完整的一部分。
+- c. 重要修复默认双线盲改 + 对照实测，PO 裁胜出版。

@@ -6,8 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/session-end.mjs\"",
-            "timeout": 10
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/session-end.mjs\""
           }
         ]
       }
@@ -18,8 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/session-start.mjs\"",
-            "timeout": 10
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/session-start.mjs\""
           }
         ]
       }

@@ -7,10 +7,11 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dreamPaths, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE, DEFAULT_COOLDOWN_MINUTES } from './lib/paths.mjs';
+import { dreamPaths, runIdNow, RECURSION_GUARD_ENV, RECURSION_GUARD_VALUE } from './lib/paths.mjs';
 import { isStaleLock, acquireLock, releaseLock } from './lib/proc-lock.mjs';
 import { processSessionTranscript } from './negatives/write-negative.mjs';
 import { backfillNegatives } from './negatives/backfill.mjs';
+import { resolveConfig } from './engine/config.mjs';
 import { runDream } from './run-dream.mjs';
 
 // 锁的 pid 存活判定逻辑（D3 三轮 review 磨出来的：check-then-write 非原子、非 EEXIST 失败要清残留、
@@ -67,11 +68,18 @@ async function main() {
     }
   }
 
-  // 「0=关掉冷却」是合法语义（冷却期可配置，0 分钟=每次会话结束都触发）。原写法 Number(env) || 默认
-  // 会把 0 当 falsy 吞成默认 30 分钟——JS 的 || 陷阱，不是设计。显式判：未设置/非法/负数回退默认，其余含 0 照用。
-  const parsedCooldown = Number(process.env.CLAUDE_DREAM_COOLDOWN_MINUTES);
-  const cooldownMinutes = Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : DEFAULT_COOLDOWN_MINUTES;
-  const cooldownMs = cooldownMinutes * 60 * 1000;
+  // PBI-02.1·AC2：enabled: false 时不拉梦——底片产线（上面两步）独立于梦开关，照常已跑完。
+  // 读配置在冷却判断之前：阀门配置是整个触发链的配置源，冷却期也消费它（见下）。
+  const config = resolveConfig(root);
+
+  if (config.values.enabled === false) {
+    return; // 梦被关掉：不判冷却、不拿锁、不跑梦。enabled 的判定只认布尔 false，其余一律按开。
+  }
+
+  // 冷却期从阀门配置解析（AC1：cooldown_minutes 键生效；AC4：配置文件 > 环境变量 > 默认值）。
+  // 「0=关掉冷却」是合法语义（每次会话结束都触发）。JS 的 || 陷阱不再适用——resolveConfig 已把
+  // 非法/负数回退默认，这里拿到的必然是 ≥0 的整数。
+  const cooldownMs = config.values.cooldown_minutes * 60 * 1000;
 
   let lastState = null;
   if (existsSync(paths.lastDreamState)) {
@@ -96,14 +104,26 @@ async function main() {
     return;
   }
 
+  // runId 在这里生成（而非 runDream 内部）——PBI-02.6·AC1 的 G9 检索基准是「上次梦 runId」，
+  // 需要它在三种终态（completed/failed/熔断）都留在 last-dream.json 里；熔断场也要有据可查。
+  // runDream 接受可选 runId 参数，CLI 直跑不传时内部自行生成（行为不变）。
+  const runId = runIdNow();
+  const nowIso = () => new Date().toISOString();
+  // D3 review F1：G9 基线必须在**覆写 last-dream.json 之前**读出来——写 running 态会把
+  // runId 顶成本梦 runId，G9 再读它当基线会把所有既有底片页滤光（定向翻底片恒空）。
+  // 旧终态的 runId 才是「上次梦」；首梦无旧态则基线为 null（全部页在范围内）。
+  const baselineRunId = typeof lastState?.runId === 'string' && lastState.runId ? lastState.runId : null;
   try {
-    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), status: 'running' }, null, 2), 'utf8');
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status: 'running' }, null, 2), 'utf8');
     // PBI-01.2·AC1：把触发本次梦的 sessionId 带给 runDream，报告里的进料对账行才有据可查——
     // 底片写入（本函数顶部第①步）与这里显式定序，不是两个互不相关的动作凑巧都发生了。
-    const summary = await runDream({ root, triggeringSessionId: sessionId });
-    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), status: 'completed', summary }, null, 2), 'utf8');
+    const summary = await runDream({ root, runId, baselineRunId, triggeringSessionId: sessionId });
+    // 熔断也是终态之一（02.4-AC3）：如实记 'fused' 而不是笼统 completed——冷却照常起算
+    // （lastDreamAt 无条件写），rogue/机械正常场记 'completed'。
+    const status = summary?.engine?.fused ? 'fused' : 'completed';
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status, summary }, null, 2), 'utf8');
   } catch (err) {
-    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: new Date().toISOString(), status: 'failed', error: String(err?.message ?? err) }, null, 2), 'utf8');
+    writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: nowIso(), runId, status: 'failed', error: String(err?.message ?? err) }, null, 2), 'utf8');
   } finally {
     releaseLock(paths.lockFile);
   }
