@@ -5,3 +5,4 @@
 - [headless 下 .claude/ 写保护实测结论](headless-claude-dir-protection.md) — 只有 bypass 可写、hook 嵌套不加载；梦产物必走 Agent SDK canUseTool
 - [review 结果先汇报再动手](review-report-before-fix.md) — 独立 review 出结果后先整理汇报给 PO，别自己直接开始改
 - [旧冲刺 Python 代码不搬用](python-sprint-code-no-reuse.md) — PO 澄清「安装税」≠语言禁令，是不要复用设计冲刺 Python 代码；testbed 方案层复用、builder Node 重写
+- [验收只走端到端七站](acceptance-e2e-only.md) — PO 裁定 AC 判分线收口作废（判分器止于 67e4b53），判分发现不作打回依据；验收线只做七站手操
