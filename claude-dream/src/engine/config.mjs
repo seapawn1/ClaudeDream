@@ -144,23 +144,26 @@ export function resolveConfig(root, env = process.env) {
   for (const key of Object.keys(VALVE_SPECS)) {
     const spec = VALVE_SPECS[key];
 
-    // 顺序一：配置文件
-    let raw;
+    // 顺序一：配置文件。文件里有键就按文件结算（含值非法回退默认），不再看环境变量。
     if (key in file.raw) {
-      raw = file.raw[key];
+      const raw = file.raw[key];
       const parsed = spec.parse(raw);
       if (parsed.ok) {
         values[key] = parsed.value;
         provenance[key] = 'file';
       } else {
         values[key] = spec.default;
-        provenance[key] = 'file'; // 出处是文件，只是值不合法——如实记录出处，另记 note
+        // provenance 记的是「生效值的实际来源」——非法回退时生效的是默认值，如实记 default，
+        // 非法经过记进 notes（报告可展示）。不得记 'file'：那会让报告把默认值冒充成文件配置。
+        provenance[key] = 'default';
         notes.push(`配置文件键 ${key} 的值不合法（"${raw}"），回退默认 ${spec.default}`);
       }
-      continue; // 文件里有键就按文件结算（含回退），不再看环境变量？——不，环境变量优先级更高，见下
+      continue;
     }
 
-    // 顺序二：环境变量（仅当文件无此键时——AC4 配置文件优先于环境变量）
+    // 顺序二：环境变量（仅当文件无此键时——AC4 配置文件优先于环境变量）。
+    // 覆盖生效的判据是「解析成功且确实采用」：值非法回退默认时，不得推入 envOverriddenKeys，
+    // 否则报告会标注「本次由环境变量覆盖」而实际值是默认——标注失真（D3 review F1）。
     const envRaw = env[spec.env];
     if (envRaw !== undefined && envRaw !== '') {
       const parsed = spec.parse(envRaw);
@@ -170,8 +173,7 @@ export function resolveConfig(root, env = process.env) {
         envOverriddenKeys.push(key);
       } else {
         values[key] = spec.default;
-        provenance[key] = 'env';
-        envOverriddenKeys.push(key);
+        provenance[key] = 'default';
         notes.push(`环境变量 ${spec.env} 的值不合法（"${envRaw}"），回退默认 ${spec.default}`);
       }
       continue;

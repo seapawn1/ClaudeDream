@@ -322,6 +322,23 @@ async function testValveConfig() {
       JSON.stringify(invalid.values)
     );
     check('非法值记入 notes', invalid.notes.length >= 3, JSON.stringify(invalid.notes));
+    check(
+      'F1 回归：文件侧非法值的 provenance 如实记 default（生效来源是默认值，不冒充文件配置）',
+      invalid.provenance.max_deletes === 'default' && invalid.provenance.delete_policy === 'default' && invalid.provenance.enabled === 'default',
+      JSON.stringify(invalid.provenance)
+    );
+
+    // 6b) F1 回归钉子（D3 review 抓到的坑）：环境变量值非法 → 回退默认，且不得谎报「覆盖生效」。
+    // 环境变量分支只在文件缺键时才会走到——上一组 writeCfg 里有 max_deletes: abc（非法），
+    // 文件有键就直接按文件结算，永远轮不到 env。先换成不含 max_deletes 的配置再设非法 env。
+    writeCfg('---\nenabled: true\n---\n');
+    process.env.CLAUDE_DREAM_MAX_DELETES = 'banana';
+    const badEnv = resolveConfig(tmpDir);
+    check('F1 回归：非法环境变量回退默认', badEnv.values.max_deletes === 3, `实际 ${badEnv.values.max_deletes}`);
+    check('F1 回归：非法环境变量不进 envOverriddenKeys（不谎报覆盖生效）', !badEnv.envOverriddenKeys.includes('max_deletes'), JSON.stringify(badEnv.envOverriddenKeys));
+    check('F1 回归：非法环境变量的 provenance 如实记 default', badEnv.provenance.max_deletes === 'default');
+    check('F1 回归：非法环境变量记入 notes（透明可查）', badEnv.notes.some((n) => n.includes('CLAUDE_DREAM_MAX_DELETES')), JSON.stringify(badEnv.notes));
+    delete process.env.CLAUDE_DREAM_MAX_DELETES;
 
     // 7) frontmatter 不完整：只有开头没有收尾 / 根本没有 frontmatter——整体视为无效配置源，回默认
     writeCfg('---\nenabled: false\n');
@@ -992,7 +1009,8 @@ const sandboxes = [];
 try {
   testScopeGuardUnit();
   testPluginManifestShape();
-  await testValveConfig();
+  // F2 修复（D3 review）：返回值（enabled:false 闸门沙箱）必须进清理名单，不留临时目录垃圾。
+  sandboxes.push(await testValveConfig());
   await testNegativesZeroApiAndCompressUnit();
   await testNegativesLargeTranscriptStress();
   await testNotebookEditFieldName();
