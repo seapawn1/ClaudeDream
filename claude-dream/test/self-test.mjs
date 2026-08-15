@@ -943,6 +943,99 @@ async function testReport() {
   sandboxes.push(root);
 }
 
+async function testG9() {
+  // PBI-02.6：G9 定向翻底片——梦定向阶段先翻底片找用户留话（AC1 机械检索 + AC4 种植验证 +
+  // AC3 底片目录只读边界）。
+  console.log('\n=== PBI-02.6 G9 定向翻底片（机械检索/三种 User 标记/只读边界） ===');
+  const { retrieveUserMessages, extractUserSections, pageRunId, matchesIdentifier } = await import('../src/engine/g9.mjs');
+  const { createEngineLog } = await import('../src/lib/exec-log.mjs');
+  const { applyQuarantineMarker } = await import('../src/engine/act.mjs');
+
+  // ---- 0) 纯函数单测 ----
+  check('pageRunId：<sessionId>--<runId>.md 提取 runId', pageRunId('sess-x--2026-08-16T00-00-00-000Z.md') === '2026-08-16T00-00-00-000Z');
+  check('pageRunId：无 -- 分隔的旧形态返回空串（保守纳入）', pageRunId('legacy-page.md') === '');
+  check('标识匹配：整词边界命中 slug 与 slug.md', matchesIdentifier('关于 q-item 的裁决。', 'q-item') && matchesIdentifier('见 q-item.md。', 'q-item'));
+  check('标识匹配：不误中长词（hub 不中 chubby）', !matchesIdentifier('a chubby file', 'hub'));
+  const secs = extractUserSections('### User\n\n第一段。\n\n### User (meta)\n\n第二段。\n\n### Assistant\n\n回复。\n\n### User (steering)\n\n第三段。\n');
+  check('三种 User 标记（User/meta/steering）都提取，Assistant 不提取', secs.length === 3 && secs[0].text === '第一段。' && secs[1].text === '第二段。' && secs[2].text === '第三段。', JSON.stringify(secs.map((s) => s.text)));
+
+  // ---- 1) 种植验证（AC4）：预置含隔离对象 slug 的用户留话底片页 ----
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-g9-'));
+  const paths = dreamPaths(root);
+  mkdirSync(paths.dreamDir, { recursive: true });
+  mkdirSync(paths.memoryDir, { recursive: true });
+  mkdirSync(paths.negativesDir, { recursive: true });
+
+  // 上次梦状态：基线 runId
+  const baselineRunId = '2026-08-15T00-00-00-000Z';
+  writeFileSync(paths.lastDreamState, JSON.stringify({ lastDreamAt: '2026-08-15T00:01:00.000Z', runId: baselineRunId, status: 'completed' }), 'utf8');
+  // 上次梦报告：隔离观察区提过 from-report-identifier.md（标识来源②），抽查点在隔离区之后（验证区域切片不越界）
+  writeFileSync(
+    path.join(paths.dreamDir, `${baselineRunId}-report.md`),
+    '# 报告\n\n## 隔离观察区\n\n- from-report-identifier.md（M3 悬空溯源）\n\n## 抽查点\n\n- 无\n',
+    'utf8'
+  );
+
+  // 当前已隔离文件（标识来源①）
+  const qItemContent = applyQuarantineMarker(
+    '---\nname: q-item\ndescription: 隔离对象\nmetadata:\n  type: project\n---\n\n正文。\n',
+    { reason: 'M3-dangling-source', since: '2026-08-14T00:00:00.000Z', runId: 'prev' }
+  );
+  writeFileSync(path.join(paths.memoryDir, 'q-item.md'), qItemContent, 'utf8');
+  writeFileSync(path.join(paths.memoryDir, 'healthy.md'), '---\nname: healthy\ndescription: 健康记忆\nmetadata:\n  type: project\n---\n\n健康正文。\n', 'utf8');
+
+  // 台账（契约①：按 sessionId 分组，file 为文件名）+ 两页底片
+  const oldPage = 'sess-old--2026-08-10T00-00-00-000Z.md';
+  const newPage = 'sess-new--2026-08-16T00-00-00-000Z.md';
+  writeFileSync(paths.negativeLedger, JSON.stringify({
+    'sess-old': { pages: [{ file: oldPage, fromIndex: 0, toIndex: 2, entryCount: 2, processedAt: '2026-08-10T00:00:01.000Z' }] },
+    'sess-new': { pages: [{ file: newPage, fromIndex: 0, toIndex: 8, entryCount: 8, processedAt: '2026-08-16T00:00:01.000Z' }] },
+  }, null, 2), 'utf8');
+  writeFileSync(path.join(paths.negativesDir, oldPage),
+    '---\nsessionId: sess-old\nrunId: 2026-08-10T00-00-00-000Z\n---\n\n### User\n\nq-item 这条基线之前的留话，不该被摘。\n\n### Assistant\n\n收到。\n',
+    'utf8');
+  writeFileSync(path.join(paths.negativesDir, newPage),
+    '---\nsessionId: sess-new\nrunId: 2026-08-16T00-00-00-000Z\n---\n\n'
+    + '### User\n\nq-item 这条隔离得对，别动它。\n\n'
+    + '### Assistant\n\n收到。\n\n'
+    + '### User (meta)\n\n关于 from-report-identifier.md 我补充一点。\n\n'
+    + '### User (steering)\n\nfrom-report-identifier 再想想。\n\n'
+    + '### User\n\n这段没有任何标识符，不该被摘。\n\n'
+    + '### Assistant\n\n好。\n',
+    'utf8');
+
+  const exec = createEngineLog({ logFile: path.join(paths.dreamDir, 'g9-engine.log') });
+
+  // 只读边界：记录底片目录前后状态
+  const negFilesBefore = readdirSync(paths.negativesDir).sort();
+  const negBytesBefore = Object.fromEntries(negFilesBefore.map((f) => [f, statSync(path.join(paths.negativesDir, f)).size]));
+
+  const result = retrieveUserMessages({ root, paths, exec });
+
+  check('G9 基线读取：baselineRunId 来自 last-dream.json', result.baselineRunId === baselineRunId);
+  check('G9 基线过滤：基线之后的页在范围内（pagesAfterBaseline=1）', result.pagesAfterBaseline === 1, `actual=${result.pagesAfterBaseline}`);
+  check('AC4 种植验证：隔离对象 slug 的用户留话被摘录（原文引用）', result.quotes.some((q) => q.matchedIdentifier === 'q-item' && q.text.includes('别动它')), JSON.stringify(result.quotes));
+  check('AC4 出处页指针：摘录带底片页文件名', result.quotes.every((q) => q.page === newPage && q.sessionId === 'sess-new'));
+  check('标识来源②：上梦报告提过的标识也能命中（meta/steering 两种标记都摘到）', result.quotes.filter((q) => q.matchedIdentifier === 'from-report-identifier').length === 2);
+  check('基线之前的页不摘（时间过滤生效）', !result.quotes.some((q) => q.page === oldPage), JSON.stringify(result.quotes.map((q) => q.page)));
+  check('无标识符的用户段落不摘（标识匹配不滥摘）', result.quotes.every((q) => q.text.includes('别动它') || q.text.includes('补充一点') || q.text.includes('再想想')));
+  check('摘录总数恰为 3（q-item×1 + from-report×2）', result.quotes.length === 3, JSON.stringify(result.quotes.map((q) => q.matchedIdentifier)));
+
+  // 只读边界（AC3）：运行时 + 静态双证
+  const negFilesAfter = readdirSync(paths.negativesDir).sort();
+  const negBytesAfter = Object.fromEntries(negFilesAfter.map((f) => [f, statSync(path.join(paths.negativesDir, f)).size]));
+  check('AC3 只读边界：G9 跑完底片目录字节零变化', JSON.stringify(negFilesBefore) === JSON.stringify(negFilesAfter) && JSON.stringify(negBytesBefore) === JSON.stringify(negBytesAfter));
+  const g9Source = readFileSync(path.join(SRC, 'engine', 'g9.mjs'), 'utf8');
+  check('AC3 只读边界：g9.mjs 源码不含任何写操作（结构上保证，不靠记得）', !/writeFileSync|appendFileSync|rmSync|renameSync|createWriteStream|truncateSync/.test(g9Source));
+
+  // 首梦无基线：全部页在范围内（宁多摘不漏摘）
+  rmSync(paths.lastDreamState);
+  const firstDream = retrieveUserMessages({ root, paths, exec });
+  check('首梦（无基线）：全部页在范围内，基线之前的留话也摘到', firstDream.baselineRunId === null && firstDream.quotes.some((q) => q.page === oldPage), JSON.stringify(firstDream.pagesAfterBaseline));
+
+  sandboxes.push(root);
+}
+
 async function testFullChainAndRevertAndCooldownAndRecursion() {
   const sandbox = makeSandbox('chain');
   const paths = dreamPaths(sandbox);
@@ -1582,6 +1675,7 @@ try {
   await testDisposal();
   await testFuse();
   await testReport();
+  await testG9();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());
