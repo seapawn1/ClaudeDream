@@ -68,7 +68,7 @@
 | # | 源 AC | 操作化判据 | 测法 | 判定 |
 |---|---|---|---|---|
 | H-D1 | 02.3-AC1 | L0 随手修自动执行、进报告四要素 | S1 断链与 S2 索引漂移被修复，报告明细含两笔（动作/判据/证据/回滚提示） | 自动 |
-| H-D2 | 02.3-AC2 + 02.4-AC1 | 确凿票执行删除、删除对象仅限 M4 确凿级 | R1/R2 两文件被删（与熔断阈值不冲突：2 ≤ max(3, 4.5)——库存 45 含补种，算术以扩展对答案卡为准），其余无删除动作 | 自动 |
+| H-D2 | 02.3-AC2 + 02.4-AC1 | 确凿票执行删除、删除对象仅限 M4 确凿级 | R1/R2 两文件被删（与熔断阈值不冲突：2 ≤ max(3, 4)——floor(45×10%)=4，算术以扩展对答案卡为准），其余无删除动作 | 自动 |
 | H-D3 | 02.3-AC2 | 候选级无删除权（无讣告，不删） | B5 的候选文件原样保留 | 自动 |
 | H-D4 | 02.3-AC3 | `report-only` 档零删除动作 | **重建干净考场后**置 `delete_policy: report-only` 跑梦，R1/R2 未删、删除建议只进报告 | 自动 |
 | H-E1 | 02.3-AC5 | feedback 类种腐烂后字节不变、不进隔离 | `switch-to-vitest.md`（含补种断链）跑梦后文件字节与梦前一致、frontmatter 无 `quarantined`、断链未被自动修复 | 自动 |
@@ -145,7 +145,7 @@ node verify.mjs                     # 跑全部自动判据
 node verify.mjs --adapter <path> --json <path>   # 换适配层、导出判定结果
 ```
 
-出卷阶段没有 `adapter.json` 是正常的——那时全红，红的原因是「未答卷」，不是脚本坏了。developers 完工后按 `adapter.example.json` 填一份 `adapter.json`，本脚本才真正开跑。
+接线依据是 developers 按 DoD·D5 落盘的 `adapter.json`（Sprint-3 增量版，未变键沿用 Sprint-2 版）——本脚本按其声明接线。没找到 adapter.json 时全红退出，红的原因是「未答卷」，不是脚本坏了。
 
 ## §3 接口汇总（首活——考卷接线与开考自检依据）
 
@@ -272,4 +272,4 @@ node verify.mjs --adapter <path> --json <path>   # 换适配层、导出判定�
 | H-K2 | 连带影响 | 会话登记 / backfill 排除机制完好 | Sprint-01/02 卷对应判据重跑 | 自动 |
 | H-K3 | 连带影响 | 底片产线（压缩/补捞/台账/零写权）不受本轮影响 | Sprint-02 卷对应判据重跑（豁免按 §4 点名） | 自动 |
 
-**待建文件**：`verify.mjs`、`adapter.example.json`、`testbed/build-testbed.mjs`（Node 重写，复用方案层）、`testbed/fixtures/`（判据表 H 定稿后随批起草）。
+**待建文件**：已建 `testbed/build-testbed.mjs`（Node 重写，复用方案层）、`testbed/answer-key.md`（扩展对答案卡＝判分基线，机器版 out/answer-key.json）、G9 留话页模板（builder 产，不落位）；待建 `verify.mjs`（判分脚本，按 developers 已落盘的 adapter.json 接线——`adapter.example.json` 已不需要）。

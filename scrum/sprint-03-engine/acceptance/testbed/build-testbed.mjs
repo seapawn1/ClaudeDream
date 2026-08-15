@@ -83,17 +83,16 @@ ${body}
 `
 }
 
-/** 考场阀门配置：六键齐全，llm_checks 显式 off（贯穿说明：全部考场梦跑 off 档）。 */
+/** 考场阀门配置：只落不覆盖的两键——四键有意缺省（接口口径：环境变量只填补文件缺的键，
+ *  填了才有「本次由环境变量覆盖」标注），verify.mjs 按场景用 env 填入并观察 H-A1 标注。 */
 const VALVE_CONFIG = `---
 enabled: true
-llm_checks: off
-delete_policy: quarantine-first
-max_deletes: 3
 claude_md_edits: true
-cooldown_minutes: 30
 ---
 
-考场默认阀门配置（verify.mjs 按场景用环境变量覆盖冷却等键——H-A1 观察该覆盖标注）。
+考场阀门配置：只含不覆盖的两键。llm_checks/delete_policy/max_deletes/cooldown_minutes
+四键有意缺省——由 verify.mjs 按场景用环境变量填入（连跑场冷却 0、站 4 对照场
+max_deletes 999、H-D4 场 report-only、全场 llm_checks off）。
 `
 
 const GITIGNORE = `node_modules/
@@ -1062,10 +1061,10 @@ const ANSWER_KEY_DATA = {
         { file: 'switch-to-vitest.md', target: 'vitest-migration-plan', disposition: 'feedback 保护：不修复、不隔离、不删除——只进报告「待你裁决」节（H-E1/E2）' },
       ],
       m2Orphans: [
-        { file: 'legacy-cron-jobs.md', disposition: '检出（H-B2）；不入索引+零链接；不得删除；隔离或仅报告由实现自定' },
+        { file: 'legacy-cron-jobs.md', disposition: '检出（H-B2）；不入索引+零链接；不得删除；预期隔离（reason M2-orphan，接口枚举已声明）' },
       ],
       m3DanglingSources: [
-        { file: 'migration-timeline-notes.md', sources: 'docs/migration-notes.log', disposition: '检出（H-B3）；C3 入 C4 删有讣告；不得删除；隔离或仅报告由实现自定' },
+        { file: 'migration-timeline-notes.md', sources: 'docs/migration-notes.log', disposition: '检出（H-B3）；C3 入 C4 删有讣告；不得删除；预期隔离（reason M3-dangling-source）' },
       ],
       m4Confirmed: [
         { file: 'express-auth-middleware-notes.md', refs: ['src/middleware/auth.js'], obituary: 'C4 2026-07-12', disposition: '确凿删除 + 报告内联死者遗言（H-D2/H-H5）' },
@@ -1114,8 +1113,8 @@ const ANSWER_KEY_DATA = {
         'ioredis-reconnect-notes.md', 'pnpm-lockfile-notes.md', 'jwt-best-practices.md', 'redis-eviction-policy.md',
       ],
       breakerArithmetic: {
-        inventory: 45, pct10: 4.5, threshold: 4.5,
-        note: '确凿删除 2 ≤ 4.5 不触发熔断（TestPlan H-D2 括注「4.2」为补种前的估算值，以本卡为准）',
+        inventory: 45, pct10: 4.5, pct10Floor: 4, threshold: 4,
+        note: '确凿删除 2 ≤ 4 不触发熔断（接口口径 threshold = max(max_deletes, floor(库存×10%))；TestPlan H-D2 括注以本卡为准）',
       },
       claudeMdStale: {
         file: 'CLAUDE.md',
@@ -1128,8 +1127,8 @@ const ANSWER_KEY_DATA = {
       },
       configDefaults: {
         file: '.claude/claude-dream.local.md',
-        keys: { enabled: true, llm_checks: 'off', delete_policy: 'quarantine-first', max_deletes: 3, claude_md_edits: true, cooldown_minutes: 30 },
-        note: '考场档位 llm_checks 显式 off；考试连跑用 env 覆盖 cooldown_minutes=0（H-A1 观察标注）',
+        keys: { enabled: true, claude_md_edits: true },
+        note: 'llm_checks/delete_policy/max_deletes/cooldown_minutes 四键有意缺省——环境变量只填补文件缺的键，env 填入即「本次由环境变量覆盖」标注（H-A1）；考场连跑 env 冷却 0、全场 env llm_checks off、站 4 对照场 env max_deletes 999、H-D4 场 env delete_policy report-only',
       },
     },
 
@@ -1174,7 +1173,7 @@ const ANSWER_KEY_DATA = {
     file: 'out/g9-note-template.md',
     marker: '### User',
     slug: 'cache-helper-notes',
-    placement: '上游梦跑完后由 verify.mjs（自动线）或 PO（手工线）放置到底片目录，并同步 ledger.json（file 字段为文件名，按 sessionId 分组）——早放会被正确实现漏检（02.6-AC1 检索窗口 = 上次梦 runId 之后）',
+    placement: '上游梦跑完后由 verify.mjs（自动线）或 PO（手工线）放置到底片目录，并同步 ledger.json（file 字段为文件名，按 sessionId 分组）——早放会被正确实现漏检（02.6-AC1 检索窗口 = 上次梦 runId 之后）；页文件名须带 --<runId 段>（接口：页时间戳取文件名 -- 后段）',
     expected: '下一场梦报告收录原话 + 出处页指针（H-I1）；台账 basename + 原话保留 + ### User 标记三点契约成立即检索成功（H-I2）',
   },
 }
@@ -1250,10 +1249,10 @@ function renderAnswerMd(timelines) {
    （不预设项），本卷判「动作发生 + 报告四要素 + 连坐标注」，不判转换结果的具体日期。
 4. **PBI-07 零动作**：R3/R4 重复对、R5 矛盾对、CLAUDE.md 过期点（\`npm run build\`）——本轮
    机械管线不得删除、不得隔离、不得合并、不得改 CLAUDE.md；H-H7 的空真前提由 dream 提交差集核实。
-5. **主库熔断算术**：记忆文件 45 条 → 10% = 4.5 → 阈值 max(3, 4.5) = 4.5；确凿删除 2 ≤ 4.5 不触发。
-   （TestPlan H-D2 括注「4.2」为补种前的估算值，以本卡为准。）
-6. **处置口径**：M2 孤儿与 M3 悬空溯源的处置（隔离或仅报告）AC 未点名——实现自定，本卷只判检出
-   与「不得删除」。
+5. **主库熔断算术**：记忆文件 45 条 → floor(10%) = 4 → 阈值 max(3, 4) = 4；确凿删除 2 ≤ 4 不触发。
+   （接口口径 threshold = max(max_deletes, floor(库存×10%))；TestPlan H-D2 括注以本卡为准。）
+6. **处置口径**：M2 孤儿与 M3 悬空溯源按接口枚举隔离（reason M2-orphan / M3-dangling-source）；
+   唯一铁律仍是「不得删除」。
 
 ## 一、主库 acme-api
 
