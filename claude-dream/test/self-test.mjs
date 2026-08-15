@@ -12,6 +12,7 @@
 //  - PBI-01.1·AC5：底片写失败故障注入（D4 点烟）
 //  - PBI-01.1·AC6：漏网场补捞（排除梦会话/活稿判别/可重入/清理跳过，D4 点烟）
 //  - PBI-01.2·AC3：埋标记话，验证底片里按原文检索得到
+//  - PBI-02.1：阀门配置——六键解析/默认值/非法回退/文件>环境变量/enabled:false 不拉梦但底片照常
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, readdirSync, existsSync, mkdirSync, rmSync, utimesSync, createWriteStream, statSync } from 'node:fs';
@@ -228,6 +229,142 @@ async function testNotebookEditFieldName() {
   const result = await canUseTool('NotebookEdit', { notebook_path: path.join(root, '.claude', 'memory', 'x.ipynb') });
   check('NotebookEdit 走真实 createCanUseTool，按 notebook_path 正确放行白名单内目标', result.behavior === 'allow');
   rmSync(tmpLog, { force: true });
+}
+
+async function testValveConfig() {
+  // PBI-02.1：阀门配置。上半场是 resolveConfig 纯解析单测（不起会话），下半场是
+  // enabled: false 的真实全链路闸门（起 session-end -> 分离进程，亲眼看到底片照常落、
+  // 梦不拉）。
+  console.log('\n=== PBI-02.1 阀门配置（解析顺序/回退/enabled 闸门） ===');
+  const { resolveConfig, CONFIG_FILE_NAME } = await import('../src/engine/config.mjs');
+
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-config-'));
+  const cfgPath = path.join(tmpDir, '.claude', CONFIG_FILE_NAME);
+  const writeCfg = (content) => {
+    mkdirSync(path.dirname(cfgPath), { recursive: true });
+    writeFileSync(cfgPath, content, 'utf8');
+  };
+
+  // 环境变量卫生：测试期间清掉四个新变量 + 两个既有变量，跑完原样恢复——不污染后续测试组。
+  const envKeys = [
+    'CLAUDE_DREAM_ENABLED', 'CLAUDE_DREAM_LLM_CHECKS', 'CLAUDE_DREAM_DELETE_POLICY',
+    'CLAUDE_DREAM_MAX_DELETES', 'DREAM_CLAUDE_MD_EDITS', 'CLAUDE_DREAM_COOLDOWN_MINUTES',
+  ];
+  const savedEnv = Object.fromEntries(envKeys.map((k) => [k, process.env[k]]));
+  const clearEnv = () => envKeys.forEach((k) => delete process.env[k]);
+  const restoreEnv = () => envKeys.forEach((k) => {
+    if (savedEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = savedEnv[k];
+  });
+
+  try {
+    clearEnv();
+
+    // 1) 无配置文件：六键全默认，provenance 全 default
+    const noFile = resolveConfig(tmpDir);
+    check(
+      '无配置文件：六键全默认（true/on/quarantine-first/3/true/30）',
+      noFile.values.enabled === true && noFile.values.llm_checks === 'on' &&
+      noFile.values.delete_policy === 'quarantine-first' && noFile.values.max_deletes === 3 &&
+      noFile.values.claude_md_edits === true && noFile.values.cooldown_minutes === 30,
+      JSON.stringify(noFile.values)
+    );
+    check('无配置文件：provenance 全 default', Object.values(noFile.provenance).every((p) => p === 'default'));
+    check('无配置文件：envOverriddenKeys 为空（无覆盖可标注）', noFile.envOverriddenKeys.length === 0);
+
+    // 2) 全六键文件：值全部生效
+    writeCfg('---\nenabled: false\nllm_checks: off\ndelete_policy: report-only\nmax_deletes: 7\nclaude_md_edits: false\ncooldown_minutes: 0\n---\n正文随意\n');
+    const full = resolveConfig(tmpDir);
+    check(
+      '全六键文件：值全部生效',
+      full.values.enabled === false && full.values.llm_checks === 'off' &&
+      full.values.delete_policy === 'report-only' && full.values.max_deletes === 7 &&
+      full.values.claude_md_edits === false && full.values.cooldown_minutes === 0,
+      JSON.stringify(full.values)
+    );
+    check('全六键文件：provenance 全 file', Object.values(full.provenance).every((p) => p === 'file'));
+    check('配置文件存在标志为真', full.configFileExists === true);
+
+    // 3) 部分键：缺键回默认，provenance 混合
+    writeCfg('---\nmax_deletes: 5\n---\n');
+    const partial = resolveConfig(tmpDir);
+    check(
+      '部分键：max_deletes=5 来自文件，缺键回默认',
+      partial.values.max_deletes === 5 && partial.values.enabled === true && partial.values.delete_policy === 'quarantine-first',
+      JSON.stringify(partial.values)
+    );
+    check(
+      '部分键：provenance 混合 file/default',
+      partial.provenance.max_deletes === 'file' && partial.provenance.enabled === 'default',
+      JSON.stringify(partial.provenance)
+    );
+
+    // 4) AC4：配置文件优先于环境变量——文件有键时环境变量不生效、不进覆盖名单
+    process.env.CLAUDE_DREAM_MAX_DELETES = '9';
+    const fileWins = resolveConfig(tmpDir);
+    check('AC4 配置文件优先：文件有键时环境变量不生效', fileWins.values.max_deletes === 5, `实际 ${fileWins.values.max_deletes}`);
+    check('AC4 配置文件优先：该键不进 envOverriddenKeys', !fileWins.envOverriddenKeys.includes('max_deletes'), JSON.stringify(fileWins.envOverriddenKeys));
+
+    // 5) AC4：文件缺键 + 环境变量 → 环境变量生效，且必须进 envOverriddenKeys 供报告标注
+    writeCfg('---\nenabled: true\n---\n');
+    const envFills = resolveConfig(tmpDir);
+    check('文件缺键时环境变量生效（测试/临时注入通道）', envFills.values.max_deletes === 9, `实际 ${envFills.values.max_deletes}`);
+    check('覆盖生效进 envOverriddenKeys（报告阀门状态节据此标注）', envFills.envOverriddenKeys.includes('max_deletes'));
+    check('该键 provenance 为 env', envFills.provenance.max_deletes === 'env');
+    delete process.env.CLAUDE_DREAM_MAX_DELETES;
+
+    // 6) 非法值：回退默认 + 记入 notes（透明，报告可展示），不是静默吞掉也不是报错炸链
+    writeCfg('---\nmax_deletes: abc\ndelete_policy: nuke-everything\nenabled: maybe\n---\n');
+    const invalid = resolveConfig(tmpDir);
+    check(
+      '非法值回退默认（max_deletes/delete_policy/enabled 三键）',
+      invalid.values.max_deletes === 3 && invalid.values.delete_policy === 'quarantine-first' && invalid.values.enabled === true,
+      JSON.stringify(invalid.values)
+    );
+    check('非法值记入 notes', invalid.notes.length >= 3, JSON.stringify(invalid.notes));
+
+    // 7) frontmatter 不完整：只有开头没有收尾 / 根本没有 frontmatter——整体视为无效配置源，回默认
+    writeCfg('---\nenabled: false\n');
+    check('frontmatter 只有开头无收尾：回默认（enabled 不生效）', resolveConfig(tmpDir).values.enabled === true);
+    writeCfg('正文没有 frontmatter\nenabled: false\n');
+    check('无 frontmatter 的文件：回默认（enabled 不生效）', resolveConfig(tmpDir).values.enabled === true);
+
+    // 8) 引号与行尾注释容忍（YAML 常见写法）
+    writeCfg('---\nllm_checks: "off" # 手工关掉 LLM 层\n---\n');
+    check('带引号与行尾注释的值解析正确', resolveConfig(tmpDir).values.llm_checks === 'off');
+  } finally {
+    restoreEnv();
+    rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+
+  // 9) AC2 全链路闸门：enabled: false 时底片照常落、梦不拉。
+  // 这是 D4 覆盖的守卫分支——不是读代码猜"应该会 return"，是真起一场 session-end 亲眼看。
+  const sandbox = makeSandbox('config-disabled');
+  const paths = dreamPaths(sandbox);
+  mkdirSync(path.join(sandbox, '.claude'), { recursive: true });
+  writeFileSync(path.join(sandbox, '.claude', CONFIG_FILE_NAME), '---\nenabled: false\n---\n', 'utf8');
+  console.log(`enabled:false 闸门沙箱: ${sandbox}`);
+
+  runNode(path.join(SRC, 'session-end.mjs'), [], { cwd: sandbox, stdinJson: sessionEndPayload(sandbox, 'config-disabled') });
+
+  const negativesWritten = await waitFor(() => {
+    if (!existsSync(paths.negativeLedger)) return false;
+    try {
+      const ledger = JSON.parse(readFileSync(paths.negativeLedger, 'utf8'));
+      return (ledger[sandboxSessionId('config-disabled')]?.pages?.length ?? 0) > 0;
+    } catch {
+      return false;
+    }
+  });
+  check('AC2 enabled:false：底片照常落（台账有本场会话记录）', negativesWritten);
+
+  // 底片落盘证明分离进程已走完压缩步；enabled 闸门紧随其后。再给一小段宽限让进程走到闸门并退出。
+  await new Promise((r) => setTimeout(r, 3000));
+  check('AC2 enabled:false：不拉梦（last-dream.json 未产生）', !existsSync(paths.lastDreamState));
+  check('AC2 enabled:false：没有 dream: 提交', !git(sandbox, ['log', '--oneline']).includes('dream:'));
+  check('AC2 enabled:false：没有 dream.lock 残留（闸门在拿锁之前）', !existsSync(paths.lockFile));
+
+  return sandbox;
 }
 
 async function testFullChainAndRevertAndCooldownAndRecursion() {
@@ -855,6 +992,7 @@ const sandboxes = [];
 try {
   testScopeGuardUnit();
   testPluginManifestShape();
+  await testValveConfig();
   await testNegativesZeroApiAndCompressUnit();
   await testNegativesLargeTranscriptStress();
   await testNotebookEditFieldName();

@@ -226,11 +226,13 @@ canUseTool 本轮裁决：${allowCount} allow / ${denyCount} deny（拒绝明细
 `;
 }
 
-export async function runDream({ root, rogue = false, rogueTarget, triggeringSessionId }) {
-  // PBI-01.2·AC2：作恶模式可指定目标路径（至少可指向底片目录），验梦对底片零写权。
+export async function runDream({ root, rogue = false, rogueTarget, triggeringSessionId, runId: providedRunId }) {
+  // PBI-02.1·AC2：作恶模式可指定目标路径（至少可指向底片目录），验梦对底片零写权。
   // 不传时沿用 Sprint-1 的默认目标（项目根下 ROGUE-TARGET.md），行为不变。
   const rogueTargetPath = rogueTarget || ROGUE_TARGET_NAME;
-  const runId = runIdNow();
+  // PBI-02.6 铺垫：trigger-check.mjs 会先生成 runId（三种终态都要留进 last-dream.json 供
+  // G9 检索基准用）再传进来；CLI 直跑不传时这里照旧自己生成，行为不变。
+  const runId = providedRunId || runIdNow();
   const paths = dreamPaths(root);
   mkdirSync(paths.memoryDir, { recursive: true });
   mkdirSync(paths.dreamDir, { recursive: true });
