@@ -4,8 +4,9 @@
 //       结构性、可机械判定，直接做。
 //   确凿删除：删除票只由 M4「确凿」级（git 讣告在案）开出——铁律「无讣告，不删」。
 //       delete_policy=report-only 时零删除动作，删除建议只进报告。
-//   L3 隔离：M2 孤儿 / M3 悬空溯源 / M4 候选——判据不足一律隔离不删；frontmatter 标
-//       status: quarantined + quarantine 块（原因/起始信息），去掉标记即还原原状（可逆）。
+//   L3 隔离：M2 孤儿 / M3 悬空溯源 / M4 路径形候选——判据不足一律隔离不删（M4 命令/函数形
+//       候选只留证不隔离，见处置步②的两个口径）；frontmatter 标 status: quarantined +
+//       quarantine 块（原因/起始信息），去掉标记即还原原状（可逆）。
 //   feedback 类（metadata.type=feedback，用户亲口纠正过的）：永不自动删除、永不自动进隔离、
 //       永不自动改写正文——只进「待你裁决」清单。
 //   隔离复检（AC6）：已隔离条目每梦按起始原因复检，失效实体重新命中（复活）→ 解除隔离并记录。
@@ -15,7 +16,7 @@
 
 import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { buildLinkGraph } from './check.mjs';
+import { buildLinkGraph, judgeM2Orphan, readIndexedFiles } from './check.mjs';
 
 const QUARANTINE_REASONS = new Map([
   ['M2', 'M2-orphan'],
@@ -185,6 +186,12 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
 
   // ---------- 第一步：隔离复检（AC6）——复活解除隔离并记录 ----------
   const { inDegree, outLinks } = buildLinkGraph(mems);
+  // M2 复检口径与判据引擎同一来源（judgeM2Orphan）：索引登记与链接密度也是「是否仍为孤儿」的
+  // 输入——判据收窄后复检必须跟着收窄，否则隔离永远解不开。
+  const indexedFiles = readIndexedFiles(paths.memoryIndex);
+  const linkedCount = mems.filter(
+    (m) => (outLinks.get(m.slug) ?? []).length > 0 || (inDegree.get(m.slug)?.size ?? 0) > 0
+  ).length;
   for (const mem of mems) {
     if (mem.status !== 'quarantined' || !mem.quarantine) continue;
     const reason = mem.quarantine.reason ?? '';
@@ -194,8 +201,9 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
     if (reason === 'M2-orphan') {
       const out = (outLinks.get(mem.slug) ?? []).length;
       const inn = inDegree.get(mem.slug)?.size ?? 0;
-      recheckInputs = { outLinkCount: out, inLinkCount: inn };
-      revived = out > 0 || inn > 0;
+      const indexed = indexedFiles.has(`${mem.slug}.md`);
+      recheckInputs = { outLinkCount: out, inLinkCount: inn, indexed };
+      revived = !judgeM2Orphan({ outLinkCount: out, inLinkCount: inn, indexed, linkedCount, memoryCount: mems.length });
     } else if (reason === 'M3-dangling-source') {
       recheckInputs = { sources: mem.sources };
       revived = mem.sources.length > 0 && mem.sources.every((s) => existsSync(path.isAbsolute(s) ? s : path.join(root, s)));
@@ -297,7 +305,14 @@ export function applyDisposal({ root, paths, config, mems, findings, runId, exec
     }
 
     // L3 隔离（判据不足；已在隔离中的不复加标记——保留首次隔离的起始信息，AC6）
-    const quarantineWorthy = fs.filter((f) => QUARANTINE_REASONS.has(f.id));
+    // 两个口径（e2e-fix-brief 修复项 1）：
+    //  ① M4 命令/函数形候选只留证不隔离——命令知识常来自文档/外部，仓库文本 0 命中无强信号
+    //     （查准兜底 AC7，answer-key 基线 40 条口径）；路径形候选才有隔离票（无讣告可查防误删）。
+    //  ② 同文件多判据命中时 M2 排最后——M2 是弱判据，不得吞掉更高优先级判据（M3/M4 路径候选）
+    //     的处置语义，标记 reason 取非 M2 的首个。
+    const quarantineWorthy = fs
+      .filter((f) => QUARANTINE_REASONS.has(f.id) && !(f.id === 'M4' && f.detail?.entityKind === 'command-or-function'))
+      .sort((a, b) => (a.id === 'M2' ? 1 : 0) - (b.id === 'M2' ? 1 : 0));
     if (quarantineWorthy.length > 0 && mem?.status !== 'quarantined') {
       const content = readFile(filename);
       if (content !== null) {

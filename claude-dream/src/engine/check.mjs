@@ -30,6 +30,26 @@ export function listMemoryFiles(memoryDir) {
   return readdirSync(memoryDir).filter((f) => f.endsWith('.md') && f !== MEMORY_INDEX).sort();
 }
 
+/** 解析 MEMORY.md 索引行集合（[...](file.md) 目标，剥 ./ 前缀与尖括号包裹）——M2 的存在性
+ *  证据（判据引擎与隔离复检共用）与 M5 双向对账同一份解析（单一来源，不复刻）。 */
+export function readIndexedFiles(memoryIndexPath) {
+  let indexContent = '';
+  try {
+    indexContent = readFileSync(memoryIndexPath, 'utf8');
+  } catch {
+    indexContent = '';
+  }
+  const indexed = new Set();
+  for (const line of indexContent.split(/\r?\n/)) {
+    const m = line.match(/\[[^\]]*\]\(([^)]+)\)/);
+    if (!m) continue;
+    // 容忍两种写法：裸 file.md 与 <file.md>（尖括号是 markdown 链接的合法包裹，防御性剥离）
+    const target = m[1].trim().replace(/^\.\//, '').replace(/^<|>$/g, '');
+    if (target.endsWith('.md') && target !== MEMORY_INDEX) indexed.add(target);
+  }
+  return indexed;
+}
+
 function parseScalar(value) {
   let v = value.trim();
   // 去引号（成对单双引号）；YAML 行尾注释（六键级配置不含 #，记忆 frontmatter 的 description 可能含
@@ -198,7 +218,25 @@ export function buildLinkGraph(mems) {
   return { inDegree, outLinks };
 }
 
-function checkM2({ mems, memoryCount, exec }) {
+/**
+ * 链接密度下限：库内「有链接」记忆占比 ≥ 该值时，无链才算孤儿信号；低于则视为链接稀疏库
+ * （无链是常态——链接在真实记忆库中本就稀疏，answer-key M2 口径注），无链单独不构成信号。
+ * 与 R3 冷启动保护同族：孤儿判据是统计校准的，信号被库的形态稀释时判据收窄而不是乱杀。
+ */
+export const M2_LINK_DENSITY_MIN = 0.5;
+
+/**
+ * M2 孤儿判据（单条记忆）：零出链 ∧ 零入链 ∧（未登索引 ∨ 库内链接不稀疏）。
+ * 「索引登记」是结构级存在性证据：在 MEMORY.md 里 = 被系统登记过，即使无链也不算漂移；
+ * 链接稀疏的库里无链是健康常态，只有同时不入索引才算真正漂移（e2e-fix-brief 修复项 1：
+ * 无链 ≠ 腐烂；真孤儿 = 不入索引 + 零链接）。
+ */
+export function judgeM2Orphan({ outLinkCount, inLinkCount, indexed, linkedCount, memoryCount }) {
+  const dense = memoryCount > 0 && linkedCount / memoryCount >= M2_LINK_DENSITY_MIN;
+  return outLinkCount === 0 && inLinkCount === 0 && (!indexed || dense);
+}
+
+function checkM2({ mems, memoryCount, memoryIndexPath, exec }) {
   if (memoryCount < M2_COLD_START_MIN) {
     exec.record({
       criterion: 'M2', inputs: { memoryCount, threshold: M2_COLD_START_MIN },
@@ -207,17 +245,27 @@ function checkM2({ mems, memoryCount, exec }) {
     return { disabled: true, reason: `库存 ${memoryCount} 条 < ${M2_COLD_START_MIN}，冷启动保护（R3）整条禁用`, findings: [] };
   }
   const { inDegree, outLinks } = buildLinkGraph(mems);
+  const indexedFiles = readIndexedFiles(memoryIndexPath);
+  const linkedCount = mems.filter(
+    (m) => (outLinks.get(m.slug) ?? []).length > 0 || (inDegree.get(m.slug)?.size ?? 0) > 0
+  ).length;
   const findings = [];
   for (const mem of mems) {
     const links = outLinks.get(mem.slug) ?? [];
     const inCount = inDegree.get(mem.slug)?.size ?? 0;
+    const indexed = indexedFiles.has(`${mem.slug}.md`);
+    const orphan = judgeM2Orphan({ outLinkCount: links.length, inLinkCount: inCount, indexed, linkedCount, memoryCount });
     const evidence = exec.record({
       criterion: 'M2', object: mem.slug,
-      inputs: { outLinkCount: links.length, inLinkCount: inCount },
-      result: links.length === 0 && inCount === 0 ? 'orphan' : 'connected',
+      inputs: { outLinkCount: links.length, inLinkCount: inCount, indexed, linkedCount, memoryCount },
+      result: orphan ? 'orphan' : 'connected',
     });
-    if (links.length === 0 && inCount === 0) {
-      findings.push({ id: 'M2', object: mem.slug, detail: { outLinkCount: 0, inLinkCount: 0 }, evidence });
+    if (orphan) {
+      findings.push({
+        id: 'M2', object: mem.slug,
+        detail: { outLinkCount: links.length, inLinkCount: inCount, indexed, linkedCount, memoryCount },
+        evidence,
+      });
     }
   }
   return { disabled: false, reason: null, findings };
@@ -303,7 +351,66 @@ function checkM4({ mems, root, exec }) {
   for (const mem of mems) {
     const bodyLines = mem.body.split(/\r?\n/);
     for (const entity of extractEntities(mem.body)) {
-      // 第一步：项目现状检索（git grep 跟踪文件，排除 .claude/；未跟踪文件不参与——已知边界）。
+      const kind = entityKind(entity);
+      const inputs = { entity, entityKind: kind };
+
+      // ---- 路径形实体：存在性 = 「该路径是仓库里已跟踪的文件/目录」（git ls-files）----
+      // 纯 grep 内容检索会把文档里的历史提法误当存在——e2e 实测：README 提到已删的
+      // src/server.js 曾让确凿讣告被误判成 hit、删除票被吞（e2e-fix-brief 修复项 1 连锁伤害）。
+      // 已跟踪判定与既有「git grep 跟踪文件，未跟踪不参与」边界一致（ls-files 命中但全在
+      // .claude/ 下 = 记忆库自引用，不算当前项目实体——与原 M4_EXCLUDE_PATHSPEC 语义一致）。
+      if (kind === 'path') {
+        const gitPath = toGitPath(entity, root);
+        if (!gitPath) {
+          // 项目外绝对路径：非当前项目实体——0 命中候选，无讣告通道（防改名误判保持）
+          const evidence = exec.record({ criterion: 'M4', object: mem.slug, inputs, result: 'zero-hits-candidate' });
+          findings.push({
+            id: 'M4', object: mem.slug,
+            detail: { entity, entityKind: kind, line: lineOf(bodyLines, entity), obituary: null },
+            evidenceLevel: 'candidate', evidence,
+          });
+          continue;
+        }
+        const listed = exec.run('git', ['ls-files', '--', gitPath], { cwd: root });
+        const trackedPath = listed.ok
+          && listed.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).some((l) => !l.startsWith('.claude/'));
+        if (trackedPath) {
+          exec.record({ criterion: 'M4', object: mem.slug, inputs, result: 'hit' });
+          continue;
+        }
+        // 字符串存在性（grep）仅作次级信号——可被讣告推翻：README/CLAUDE.md 提一句已删路径
+        // 不算存在（stale mention）；package.json 里的依赖名（@fastify/jwt 之类）没有对应文件，
+        // grep 命中 + 无讣告仍算存在。
+        const grep = exec.run('git', ['grep', '-I', '-F', '-e', entity, '--', M4_EXCLUDE_PATHSPEC], { cwd: root });
+        const grepHits = grep.ok && grep.stdout.trim().length > 0;
+        // -M（--find-renames）显式开启 rename 检测：改名在 git 历史里呈现为 R 而非 D+A——
+        // 防止仓库配置 diff.renames=false 时把改名误报成「删除+新增」制造假讣告（D3 review L2）。
+        const log = exec.run('git', ['log', '-M', '--diff-filter=D', '--format=%H', '-1', '--', gitPath], { cwd: root });
+        const deleted = log.ok && log.stdout.trim().length > 0;
+        const obituary = { path: gitPath, deleted, evidence: log.entry };
+        if (grepHits && !deleted) {
+          exec.record({ criterion: 'M4', object: mem.slug, inputs, result: 'hit', commands: [grep.entry] });
+          continue;
+        }
+        const evidenceLevel = deleted ? 'confirmed' : 'candidate';
+        const evidence = exec.record({
+          criterion: 'M4', object: mem.slug, inputs,
+          result: grepHits ? `stale-mention-${evidenceLevel}` : `zero-hits-${evidenceLevel}`,
+          // 命令证据随判定记录一并携带（报告按 C2 命令记法渲染：命令原文+exit code+stdout 摘要+时间戳）
+          commands: [grep.entry, obituary.evidence].filter(Boolean),
+        });
+        findings.push({
+          id: 'M4', object: mem.slug,
+          detail: { entity, entityKind: kind, line: lineOf(bodyLines, entity), obituary: obituary.path },
+          evidenceLevel, // 'candidate' | 'confirmed' ——两级证据必须可区分（AC4）
+          evidence,
+        });
+        continue;
+      }
+
+      // ---- 命令/函数形：无机械讣告通道，git grep 命中即存在；0 命中留候选 finding ----
+      // （候选留证但不隔离——命令知识常来自文档/外部，仓库文本查无是常态而非腐烂强信号，
+      // 处置层见 act.mjs；查准兜底 AC7，answer-key 基线 40 条口径）。
       // git grep 无命中时退出码 1（不是进程错误）；退出码 0 = 命中。其他退出码 = 检索本身失败，
       // 不据此制造候选（检索失败 ≠ 0 命中，宁缺毋滥）。
       const grep = exec.run('git', ['grep', '-I', '-F', '-e', entity, '--', M4_EXCLUDE_PATHSPEC], { cwd: root });
@@ -311,41 +418,22 @@ function checkM4({ mems, root, exec }) {
       if (grep.ok) {
         hits = grep.stdout.trim().length > 0;
       } else if (grep.entry.exitCode !== 1) {
-        exec.record({ criterion: 'M4', object: mem.slug, result: 'search-failed', inputs: { entity }, error: grep.entry.error });
+        exec.record({ criterion: 'M4', object: mem.slug, result: 'search-failed', inputs, error: grep.entry.error });
         continue;
       }
       if (hits) {
-        exec.record({ criterion: 'M4', object: mem.slug, inputs: { entity }, result: 'hit' });
+        exec.record({ criterion: 'M4', object: mem.slug, inputs, result: 'hit' });
         continue;
       }
-
-      // 第二步：0 命中 → 候选；路径形实体再跑 git 讣告（git log --diff-filter=D），有删除记录升确凿。
-      let evidenceLevel = 'candidate';
-      let obituary = null;
-      const kind = entityKind(entity);
-      if (kind === 'path') {
-        const gitPath = toGitPath(entity, root);
-        if (gitPath) {
-          // -M（--find-renames）显式开启 rename 检测：改名在 git 历史里呈现为 R 而非 D+A——
-          // 防止仓库配置 diff.renames=false 时把改名误报成「删除+新增」制造假讣告（D3 review L2，
-          // 「防改名误判」从配置依赖变成结构性保证）。
-          const log = exec.run('git', ['log', '-M', '--diff-filter=D', '--format=%H', '-1', '--', gitPath], { cwd: root });
-          const deleted = log.ok && log.stdout.trim().length > 0;
-          obituary = { path: gitPath, deleted, evidence: log.entry };
-          if (deleted) evidenceLevel = 'confirmed';
-        }
-      }
       const evidence = exec.record({
-        criterion: 'M4', object: mem.slug,
-        inputs: { entity, entityKind: kind, searchCommand: grep.entry.command },
-        result: `zero-hits-${evidenceLevel}`,
-        // 命令证据随判定记录一并携带（报告按 C2 命令记法渲染：命令原文+exit code+stdout 摘要+时间戳）
-        commands: [grep.entry, obituary?.evidence ?? null].filter(Boolean),
+        criterion: 'M4', object: mem.slug, inputs,
+        result: 'zero-hits-candidate',
+        commands: [grep.entry],
       });
       findings.push({
         id: 'M4', object: mem.slug,
-        detail: { entity, entityKind: kind, line: lineOf(bodyLines, entity), obituary: obituary?.path ?? null },
-        evidenceLevel, // 'candidate' | 'confirmed' ——两级证据必须可区分（AC4）
+        detail: { entity, entityKind: kind, line: lineOf(bodyLines, entity), obituary: null },
+        evidenceLevel: 'candidate', // 'candidate' | 'confirmed' ——两级证据必须可区分（AC4）
         evidence,
       });
     }
@@ -360,20 +448,7 @@ function checkM4({ mems, root, exec }) {
  * 两个方向都检出、都标 auto_fixable（L0 修复）。非指针行（标题/空行/注释）不参与。
  */
 function checkM5({ mems, memoryIndexPath, exec }) {
-  let indexContent = '';
-  try {
-    indexContent = readFileSync(memoryIndexPath, 'utf8');
-  } catch {
-    indexContent = '';
-  }
-  const indexed = new Set();
-  for (const line of indexContent.split(/\r?\n/)) {
-    const m = line.match(/\[[^\]]*\]\(([^)]+)\)/);
-    if (!m) continue;
-    // 容忍两种写法：裸 file.md 与 <file.md>（尖括号是 markdown 链接的合法包裹，防御性剥离）
-    const target = m[1].trim().replace(/^\.\//, '').replace(/^<|>$/g, '');
-    if (target.endsWith('.md') && target !== MEMORY_INDEX) indexed.add(target);
-  }
+  const indexed = readIndexedFiles(memoryIndexPath);
   const onDisk = new Set(mems.map((m) => `${m.slug}.md`));
 
   const findings = [];
@@ -408,7 +483,7 @@ export function runMechanicalChecks({ root, paths, exec }) {
   const findings = [];
 
   findings.push(...checkM1({ mems, memoryDir: paths.memoryDir, root, exec }));
-  const m2 = checkM2({ mems, memoryCount, exec });
+  const m2 = checkM2({ mems, memoryCount, memoryIndexPath: paths.memoryIndex, exec });
   findings.push(...m2.findings);
   findings.push(...checkM3({ mems, root, exec }));
   findings.push(...checkM4({ mems, root, exec }));
