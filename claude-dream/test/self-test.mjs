@@ -384,6 +384,206 @@ async function testValveConfig() {
   return sandbox;
 }
 
+function plantMemory(dir, slug, { type = 'project', body = '', sources = null, name = null } = {}) {
+  const srcLines = sources
+    ? sources.length === 1
+      ? [`sources: ${sources[0]}`]
+      : ['sources:', ...sources.map((s) => `  - ${s}`)]
+    : [];
+  const fm = [
+    '---',
+    `name: ${name ?? slug}`,
+    `description: ${slug} 种植记忆`,
+    'metadata:',
+    `  type: ${type}`,
+    ...srcLines,
+    '---',
+    '',
+    body,
+    '',
+  ].join('\n');
+  writeFileSync(path.join(dir, `${slug}.md`), fm, 'utf8');
+}
+
+function plantIndex(memoryDir, entries) {
+  // entries: [{slug, label}] 或带 extraSlug 的幽灵行由调用方追加
+  const lines = ['# Memory Index', '', ...entries.map((e) => `- [${e.label}](${e.slug}.md) — ${e.slug}`), ''];
+  writeFileSync(path.join(memoryDir, 'MEMORY.md'), lines.join('\n'), 'utf8');
+}
+
+async function testMechanicalChecks() {
+  // PBI-02.2：M1–M5 判据引擎。种植腐烂沙箱逐类检出 + 健康记忆零误报（AC7 查准兜底）
+  // + M2 冷启动禁用 + 实体抽取纯函数单测。零 API：本测试组不碰 SDK，全程受信任代码。
+  console.log('\n=== PBI-02.2 M1–M5 机械体检判据引擎（种植腐烂沙箱） ===');
+  const { runMechanicalChecks, extractEntities, extractLinks, resolveLink, parseMemoryFile } = await import('../src/engine/check.mjs');
+  const { createEngineLog } = await import('../src/lib/exec-log.mjs');
+
+  // ---- 0) 实体抽取纯函数单测（不起沙箱） ----
+  const urlBody = '参考 https://example.com/docs.md 与 https://example.org/deep/link.js ——不应抽实体；`npm` 单蹦词也不抽；'
+    + '`node claude-dream/test/self-test.mjs` 路径形抽；`SPECIAL COMMAND SENTENCE` 命令形抽；裸路径 src/lib/thing.mjs 抽。';
+  const ents = extractEntities(urlBody);
+  check('M4 抽取：URL（即使以 .md/.js 结尾）不抽为实体', !ents.some((e) => e.includes('example.com') || e.includes('example.org')), JSON.stringify(ents));
+  check('M4 抽取：反引号纯词不抽（`npm`）', !ents.includes('npm'), JSON.stringify(ents));
+  check('M4 抽取：路径形反引号 token 抽', ents.includes('node claude-dream/test/self-test.mjs'));
+  check('M4 抽取：命令形（含空格）反引号 token 抽', ents.includes('SPECIAL COMMAND SENTENCE'));
+  check('M4 抽取：裸路径形 token（已知扩展名）抽', ents.includes('src/lib/thing.mjs'));
+
+  const memUnit = parseMemoryFile;
+  // 用沙箱内一个真文件顺带验 parseMemoryFile 的 sources 块解析（下面主沙箱会建）
+  const unitDir = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-checkunit-'));
+  try {
+    plantMemory(unitDir, 'unit-mem', { sources: ['a.jsonl', 'b.jsonl'] });
+    const parsed = memUnit(path.join(unitDir, 'unit-mem.md'));
+    check('parseMemoryFile：sources 块列表解析为两条', parsed.sources.length === 2 && parsed.sources[0] === 'a.jsonl' && parsed.sources[1] === 'b.jsonl', JSON.stringify(parsed.sources));
+    check('parseMemoryFile：type 从 metadata.type 读出', parsed.type === 'project');
+    const links = extractLinks('前文 [[foo]] 中段 [[bar.md]] 与 [[foo]] 重复。');
+    check('extractLinks：去重保序', links.length === 2 && links[0] === 'foo' && links[1] === 'bar.md', JSON.stringify(links));
+  } finally {
+    rmSync(unitDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+
+  // ---- 1) 主沙箱：种植腐烂 + 健康对照 ----
+  const root = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-checks-'));
+  git(root, ['init', '-q']);
+  git(root, ['config', 'user.email', 'test@example.com']);
+  git(root, ['config', 'user.name', 'claude-dream self-test']);
+  mkdirSync(path.join(root, 'src', 'lib'), { recursive: true });
+  mkdirSync(path.join(root, 'scripts'), { recursive: true });
+  mkdirSync(path.join(root, 'data'), { recursive: true });
+  // 注意 M4 的检索语义：git grep 搜的是「实体字符串在跟踪文件内容里的出现」，不是路径存在性。
+  // 健康记忆引用的 src/lib/thing.mjs 要在文件内容里真的出现（如 import 语句/文件头自述），
+  // 否则照样 0 命中误判候选。
+  writeFileSync(path.join(root, 'src', 'lib', 'thing.mjs'), '// src/lib/thing.mjs — THING-EXISTS-MARKER\nimport { x } from "./other.mjs";\nexport const x = 1;\n', 'utf8');
+  writeFileSync(path.join(root, 'scripts', 'run.mjs'), '// RUN-ALL-MARKER-TOKEN\nconsole.log("SPECIAL COMMAND SENTENCE");\n', 'utf8');
+  writeFileSync(path.join(root, 'data', 'real-source.jsonl'), '{"type":"user"}\n', 'utf8');
+  writeFileSync(path.join(root, 'doomed.txt'), 'doomed content\n', 'utf8');
+  writeFileSync(path.join(root, 'CLAUDE.md'), '# Check Sandbox\n', 'utf8');
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'plant project files']);
+  // doomed.txt 讣告：删除并提交——M4 确凿级的证据来源
+  rmSync(path.join(root, 'doomed.txt'));
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'remove doomed.txt']);
+
+  const memoryDir = path.join(root, '.claude', 'memory');
+  mkdirSync(memoryDir, { recursive: true });
+
+  // 健康记忆：链接互指 + 引用存在的项目实体——逐条查准，任何判据都不该碰它们
+  plantMemory(memoryDir, 'healthy-a', { body: '健康记忆 A。使用 [[healthy-b]] 的结论，实现见 src/lib/thing.mjs。' });
+  plantMemory(memoryDir, 'healthy-b', { body: '健康记忆 B，被 [[healthy-a]] 引用。' });
+  plantMemory(memoryDir, 'healthy-d', { sources: ['data/real-source.jsonl'], body: '溯源健康，sources 指向真实存在的文件。链接 [[healthy-a]]。' });
+  plantMemory(memoryDir, 'url-noise', { body: '参考 https://example.com/docs.md 的写法；`npm` 装依赖。链接 [[healthy-a]]。' });
+  plantMemory(memoryDir, 'generic-word', { body: '跑 `SPECIAL COMMAND SENTENCE` 即可，`npm` 单蹦。链接 [[healthy-a]]。' });
+
+  // 腐烂种植：每类判据至少一条。除 orphan-island 外的腐烂文件都带 [[healthy-a]] 出链——
+  // 它们是"有链接的腐烂"，不是孤儿；孤儿是单独一类，只允许 orphan-island 一条。
+  plantMemory(memoryDir, 'broken-link', { body: '断链记忆：[[ghost-slug]] 与 [[missing/path.md]] 都不存在。' });
+  plantMemory(memoryDir, 'orphan-island', { body: '一条孤立记忆，没有任何链接，也没有任何人链接它。' });
+  plantMemory(memoryDir, 'dangling-source', { sources: ['missing/log.jsonl'], body: '溯源悬空，来源日志已消失。链接 [[healthy-a]]。' });
+  plantMemory(memoryDir, 'stale-entity-candidate', { body: '该功能见 never-existed-file.txt。链接 [[healthy-a]]。' });
+  plantMemory(memoryDir, 'dead-entity-confirmed', { body: '参见 doomed.txt。链接 [[healthy-a]]。' });
+  plantMemory(memoryDir, 'unindexed-memory', { body: '漏索引的记忆，链接 [[healthy-a]]。' });
+
+  // 填充记忆：带出链，凑满 M2 冷启动门槛（15）
+  const fillerSlugs = [];
+  for (let i = 1; i <= 10; i++) {
+    const slug = `filler-${String(i).padStart(2, '0')}`;
+    fillerSlugs.push(slug);
+    plantMemory(memoryDir, slug, { body: '填充记忆，链接 [[healthy-a]]。' });
+  }
+
+  const indexedSlugs = ['healthy-a', 'healthy-b', 'healthy-d', 'url-noise', 'generic-word',
+    'broken-link', 'orphan-island', 'dangling-source', 'stale-entity-candidate', 'dead-entity-confirmed',
+    ...fillerSlugs];
+  plantIndex(memoryDir, indexedSlugs.map((s) => ({ slug: s, label: s })));
+  // M5 幽灵行：索引里有、盘上无
+  const indexWithGhost = readFileSync(path.join(memoryDir, 'MEMORY.md'), 'utf8') + '- [幽灵条目](ghost-index.md) — 盘上不存在\n';
+  writeFileSync(path.join(memoryDir, 'MEMORY.md'), indexWithGhost, 'utf8');
+
+  const paths = dreamPaths(root);
+  const logFile = path.join(paths.dreamDir, 'checks-engine.log');
+  const exec = createEngineLog({ logFile });
+  const { findings, meta, mems } = runMechanicalChecks({ root, paths, exec });
+
+  check('主沙箱记忆库存 ≥15（M2 不被冷启动禁用）', meta.memoryCount >= 15, `count=${meta.memoryCount}`);
+  check('M2 未被禁用', meta.m2Disabled === false, meta.m2DisabledReason);
+
+  const byId = (id) => findings.filter((f) => f.id === id);
+  const onObject = (id, obj) => findings.filter((f) => f.id === id && f.object === obj);
+
+  // M1：两条断链各自检出，附出处（对象+行号+链接原文）
+  const m1s = byId('M1');
+  check('M1 检出数恰为 2（ghost-slug + missing/path.md）', m1s.length === 2, JSON.stringify(m1s.map((f) => f.detail)));
+  check('M1 出处指向 broken-link 文件', m1s.every((f) => f.object === 'broken-link'));
+  check('M1 两笔链接各检出（ghost-slug 与 missing/path.md）', m1s.some((f) => f.detail.link === 'ghost-slug') && m1s.some((f) => f.detail.link === 'missing/path.md'));
+  check('M1 出处细化到行号', m1s.every((f) => typeof f.detail.line === 'number' && f.detail.line >= 1), JSON.stringify(m1s.map((f) => f.detail.line)));
+  check('M1 健康链接零误报（healthy-a↔healthy-b、fillers→healthy-a 均解析成功）', !m1s.some((f) => !['broken-link'].includes(f.object)));
+
+  // M2：恰一条孤儿
+  const m2s = byId('M2');
+  check('M2 检出恰为 1（orphan-island）', m2s.length === 1 && m2s[0].object === 'orphan-island', JSON.stringify(m2s.map((f) => f.object)));
+  check('M2 健康记忆零误报（有出链或有入链的都不算孤儿）', !m2s.some((f) => f.object !== 'orphan-island'));
+
+  // M3：恰一条悬空溯源；指向存在文件的 sources 零误报
+  const m3s = byId('M3');
+  check('M3 检出恰为 1（dangling-source）', m3s.length === 1 && m3s[0].object === 'dangling-source', JSON.stringify(m3s.map((f) => f.detail)));
+  check('M3 指向存在文件的溯源零误报（healthy-d）', !m3s.some((f) => f.object === 'healthy-d'));
+
+  // M4：两级证据可区分——候选（无讣告）vs 确凿（讣告在案）；命中场景零误报
+  const m4s = byId('M4');
+  const m4Candidate = m4s.find((f) => f.detail.entity === 'never-existed-file.txt');
+  const m4Confirmed = m4s.find((f) => f.detail.entity === 'doomed.txt');
+  check('M4 候选级：never-existed-file.txt 检出为 candidate', m4Candidate?.evidenceLevel === 'candidate', JSON.stringify(m4s.map((f) => f.detail)));
+  check('M4 确凿级：doomed.txt 检出为 confirmed（git 讣告在案）', m4Confirmed?.evidenceLevel === 'confirmed', JSON.stringify(m4Confirmed?.detail));
+  check('M4 确凿级证据携带讣告路径', m4Confirmed?.detail.obituary === 'doomed.txt');
+  check(
+    'M4 命中场景零误报（存在实体/命令句/URL/单蹦词均不产生 finding）',
+    !m4s.some((f) => ['healthy-a', 'url-noise', 'generic-word', 'healthy-b', 'healthy-d'].includes(f.object)),
+    JSON.stringify(m4s.map((f) => f.object))
+  );
+  // 总数恰为 3：broken-link 的 missing/path.md（路径形断链目标同时也是 M4 实体，0 命中无讣告
+  // → 候选——M1 与 M4 各自看到同一引用是真实行为，处置层合并处理）+ 候选 never-existed-file.txt
+  // + 确凿 doomed.txt。
+  check(
+    'M4 检出总数恰为 3（两候选一确凿，无其他实体漏进）',
+    m4s.length === 3 && m4s.filter((f) => f.evidenceLevel === 'candidate').length === 2 && m4s.filter((f) => f.evidenceLevel === 'confirmed').length === 1,
+    JSON.stringify(m4s.map((f) => `${f.object}:${f.detail.entity}:${f.evidenceLevel}`))
+  );
+
+  // M5：双向对账，两个方向都检出且标 auto_fixable
+  const m5s = byId('M5');
+  check('M5 幽灵索引行检出（ghost-index.md，auto_fixable）', m5s.some((f) => f.detail.direction === 'indexed-but-missing-on-disk' && f.detail.file === 'ghost-index.md' && f.autoFixable === true), JSON.stringify(m5s.map((f) => f.detail)));
+  check('M5 漏索引检出（unindexed-memory.md，auto_fixable）', m5s.some((f) => f.detail.direction === 'on-disk-but-missing-in-index' && f.object === 'unindexed-memory.md' && f.autoFixable === true), JSON.stringify(m5s.map((f) => f.detail)));
+
+  // 执行日志：命令类与代码类证据都有记录，落盘可查
+  const logContent = existsSync(logFile) ? readFileSync(logFile, 'utf8') : '';
+  check('执行日志落盘（C2 数据源）', existsSync(logFile));
+  check('执行日志含真实命令记录（git grep）', logContent.includes('git grep'));
+  check('执行日志含讣告查询记录（git log --diff-filter=D）', logContent.includes('--diff-filter=D'));
+  check('每条 finding 带证据引用（ts + kind）', findings.every((f) => f.evidence && typeof f.evidence.ts === 'string' && f.evidence.kind), JSON.stringify(findings.find((f) => !f.evidence)?.id));
+
+  sandboxes.push(root);
+
+  // ---- 2) 小库沙箱：M2 冷启动禁用（R3） ----
+  const smallRoot = mkdtempSync(path.join(os.tmpdir(), 'claude-dream-self-test-checksmall-'));
+  git(smallRoot, ['init', '-q']);
+  git(smallRoot, ['config', 'user.email', 'test@example.com']);
+  git(smallRoot, ['config', 'user.name', 'claude-dream self-test']);
+  writeFileSync(path.join(smallRoot, 'CLAUDE.md'), '# Small Sandbox\n', 'utf8');
+  git(smallRoot, ['add', '-A']);
+  git(smallRoot, ['commit', '-q', '-m', 'init']);
+  const smallMemDir = path.join(smallRoot, '.claude', 'memory');
+  mkdirSync(smallMemDir, { recursive: true });
+  plantMemory(smallMemDir, 'small-1', { body: '小库记忆一，无链接。' });
+  plantMemory(smallMemDir, 'small-2', { body: '小库记忆二，无链接。' });
+  plantIndex(smallMemDir, ['small-1', 'small-2'].map((s) => ({ slug: s, label: s })));
+  const smallResult = runMechanicalChecks({ root: smallRoot, paths: dreamPaths(smallRoot), exec: createEngineLog({}) });
+  check('R3 冷启动保护：库存 <15 时 M2 整条禁用（meta 如实入报告）', smallResult.meta.m2Disabled === true, smallResult.meta.m2DisabledReason);
+  check('R3 冷启动保护：禁用状态下零 M2 检出', smallResult.findings.filter((f) => f.id === 'M2').length === 0);
+  check('R3 冷启动保护：禁用原因写明库存数', smallResult.meta.m2DisabledReason.includes('2 条'), smallResult.meta.m2DisabledReason);
+  sandboxes.push(smallRoot);
+}
+
 async function testFullChainAndRevertAndCooldownAndRecursion() {
   const sandbox = makeSandbox('chain');
   const paths = dreamPaths(sandbox);
@@ -954,14 +1154,19 @@ function testPluginManifestShape() {
 
 function testNegativesZeroApiAndCompressUnit() {
   // AC2「验法写死：压缩链路不引用 Agent SDK」——静态源码检查，不是运行时行为断言：
-  // 直接读 negatives/ 目录下每个源文件，确认没有一处 import 了 SDK 包名。
-  console.log('\n=== PBI-01.1·AC2 零 API 静态检查 + compress.mjs 纯函数单测（不起会话） ===');
+  // 直接读目录下每个源文件，确认没有一处 import 了 SDK 包名。Sprint-3 起机械管线（engine/）
+  // 与受信任执行通道（lib/）纳入同一检查（D3 review 建议1）：除 run-dream.mjs 的 rogue 分支外，
+  // 受信任代码一律不得引用 SDK 包名。
+  console.log('\n=== 零 API 静态检查（negatives/engine/lib）+ compress.mjs 纯函数单测（不起会话） ===');
 
-  const negativesDir = path.join(SRC, 'negatives');
   const sdkPackageName = '@anthropic-ai/claude-agent-sdk';
-  for (const file of readdirSync(negativesDir).filter((f) => f.endsWith('.mjs'))) {
-    const content = readFileSync(path.join(negativesDir, file), 'utf8');
-    check(`AC2 零 API：negatives/${file} 不引用 ${sdkPackageName}`, !content.includes(sdkPackageName));
+  const negativesDir = path.join(SRC, 'negatives');
+  for (const sub of ['negatives', 'engine', 'lib']) {
+    const dir = path.join(SRC, sub);
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.mjs'))) {
+      const content = readFileSync(path.join(dir, file), 'utf8');
+      check(`AC2 零 API：${sub}/${file} 不引用 ${sdkPackageName}`, !content.includes(sdkPackageName));
+    }
   }
 
   return import(pathToFileURL(path.join(negativesDir, 'compress.mjs')).href).then(({ compressEntries }) => {
@@ -1014,6 +1219,7 @@ try {
   await testNegativesZeroApiAndCompressUnit();
   await testNegativesLargeTranscriptStress();
   await testNotebookEditFieldName();
+  await testMechanicalChecks();
   await testStaleLockDetection();
   sandboxes.push(await testFullChainAndRevertAndCooldownAndRecursion());
   sandboxes.push(await testNegativesFaultInjection());
@@ -1022,6 +1228,11 @@ try {
   sandboxes.push(await testRogue());
   sandboxes.push(await testRogueTargetsNegativesDir());
   sandboxes.push(await testCommitPathspecDoesNotSwallowHumanStaged());
+} catch (err) {
+  // 测试组抛出的未捕获异常此前会被 finally 里的 process.exit(0) 静默吞掉——异常挂起时
+  // failed 还是空的，exit(0) 直接把一次中途夭折的测试跑伪装成"全绿"。这是「从没红过的绿灯」
+  // 的活标本（D4）：夭折当通过。补 catch 把夭折显性化为一条 FAIL，退出码跟着红。
+  check('测试序列未中途夭折（无未捕获异常）', false, String(err?.stack ?? err));
 } finally {
   const failed = results.filter((r) => !r.pass);
   console.log(`\n=== 结果：${results.length - failed.length}/${results.length} 通过 ===`);
