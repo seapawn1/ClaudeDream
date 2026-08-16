@@ -6,7 +6,7 @@
 
 新会话先读 [README.md](README.md)（项目地图与当前状态）。要理解**方案是什么、为什么这么设计**，读 [scrum/.IDEO/design-sprint/DesignReview.md](scrum/.IDEO/design-sprint/DesignReview.md)——设计冲刺的总结算与全部档案入口；要看 Scrum 段产品目标与 backlog，读 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
-**当前阶段**：Sprint-1（骨架回环）已收口；Sprint-2（底片层）已收口（2026-08-14）；Sprint-3（引擎主干·纯机械梦）施工中：主菜 PBI-02 切口版（M1–M5 判据/机械处置/熔断器/C2C3 留证/G9 翻底片回程），LLM 层拆出 PBI-07 接棒，PBI-05/06 后置；施工走 `.claude/worktrees/sprint-03-engine`（分支 `sprint-03-engine`），收口时并回 `main`。详见 [README.md](README.md) 当前状态与 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
+**当前阶段**：Sprint-1（骨架回环）已收口；Sprint-2（底片层）已收口（2026-08-14）；Sprint-3（引擎主干·纯机械梦）已收口（2026-08-16，七站亲验+双盲对照、PO 验收通过）；Sprint-4（引擎 LLM 层·PBI-07）Planning 定案（2026-08-16）：八条拆条一刀全上（主路径与档位/S1S2 判据/S3 连接落盘/L1 处置/铁律执行器/L2 阀门/候删/报告接口），`llm_checks` 默认 on + 无登录态优雅降级；施工走 `.claude/worktrees/sprint-04-llm`（分支 `sprint-04-llm`），收口时并回 `main`。详见 [README.md](README.md) 当前状态与 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。
 
 ## 常用命令
 

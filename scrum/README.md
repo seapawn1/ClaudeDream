@@ -20,9 +20,12 @@ ClaudeDream 当前的工作区。设计冲刺已于 2026-08-02 结束并归档�
 | `ProductBacklog.md` | Product 总述与 Vision（兼任 Goal）、两份 DoD、Product Backlog、架构（角色表+全流程图+批注） |
 | `sprint-01-skeleton/` | Sprint-1（骨架回环）完整档案——入口 [README.md](sprint-01-skeleton/README.md)：SprintBacklog（含 Review/Retro 记录）+ 验收考卷考场 + AC0 spike |
 | `sprint-02-negatives/` | Sprint-2（底片层）完整档案——[SprintBacklog.md](sprint-02-negatives/SprintBacklog.md)（含 Review/Retro 记录）+ 验收考卷考场（`acceptance/`） |
-| `sprint-03-engine/` | Sprint-3（引擎主干）SprintBacklog——[SprintBacklog.md](sprint-03-engine/SprintBacklog.md)（Sprint Goal/DoD、PBI-02 拆条与 AC；第三节施工计划待 Developers 填）；施工走独立工作树 `.claude/worktrees/sprint-03-engine`（分支同名），主工作区仍在 main |
+| `sprint-03-engine/` | Sprint-3（引擎主干·纯机械梦，已收口 2026-08-16）完整档案——[SprintBacklog.md](sprint-03-engine/SprintBacklog.md)（含七站亲验验收 Review/Retro）+ 验收考场（`acceptance/`，含 e2e 修复任务书与双盲对照） |
+| `sprint-04-llm/` | Sprint-4（引擎 LLM 层，Planning 定案 2026-08-16）——[SprintBacklog.md](sprint-04-llm/SprintBacklog.md)（PBI-07 八拆条 AC 初稿）；施工走独立工作树 `.claude/worktrees/sprint-04-llm`（分支同名），主工作区仍在 main |
 | `.IDEO/design-sprint/` | 已结束的设计冲刺全部档案（原仓库根 `.IDEO/`，2026-08-07 归档于此）——总入口 [DesignReview.md](.IDEO/design-sprint/DesignReview.md) |
 
 ## 当前状态
 
-**2026-08-14：Sprint-2（底片层）已收口**（三轮验收 16 过/5 不过/6 待办，PO 裁定不追绿先收口；两大发现——自建规则表覆盖缺口→PBI-06、考卷接口脱靶→验收流程约定）。**2026-08-15：refinement 完成**（DoD 归位 D1–D5 + 新立「验收流程约定」小节）。**同日 Sprint-3 Planning 定案**：PBI-02（纯机械梦切口）为主菜，LLM 层拆出新条目 PBI-07 接棒，PBI-05/06 本轮不做。详见 [ProductBacklog.md](ProductBacklog.md)、[sprint-03-engine/SprintBacklog.md](sprint-03-engine/SprintBacklog.md)。
+**2026-08-14：Sprint-2（底片层）已收口**（三轮验收 16 过/5 不过/6 待办，PO 裁定不追绿先收口；两大发现——自建规则表覆盖缺口→PBI-06、考卷接口脱靶→验收流程约定）。**2026-08-15：refinement 完成**（DoD 归位 D1–D5 + 新立「验收流程约定」小节）。**同日 Sprint-3 Planning 定案**：PBI-02（纯机械梦切口）为主菜，LLM 层拆出新条目 PBI-07 接棒，PBI-05/06 本轮不做。
+
+**2026-08-16：Sprint-3 验收通过并收口**（端到端七站亲验三处硬伤→双盲对照出卷线 agent 版胜出→修复全绿；Retro 流程三条入 ProductBacklog「验收流程约定」第 3–5 条）。**同日 Sprint-4 Planning 定案**：PBI-07（引擎 LLM 层）一刀全上，八拆条与 AC 初稿见 [sprint-04-llm/SprintBacklog.md](sprint-04-llm/SprintBacklog.md)；新立 PBI-08（命令面，PBI-07 后主菜候选）。详见 [ProductBacklog.md](ProductBacklog.md)。
