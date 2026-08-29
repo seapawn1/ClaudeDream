@@ -6,3 +6,7 @@
 - [review 结果先汇报再动手](review-report-before-fix.md) — 独立 review 出结果后先整理汇报给 PO，别自己直接开始改
 - [旧冲刺 Python 代码不搬用](python-sprint-code-no-reuse.md) — PO 澄清「安装税」≠语言禁令，是不要复用设计冲刺 Python 代码；testbed 方案层复用、builder Node 重写
 - [验收只走端到端七站](acceptance-e2e-only.md) — PO 裁定 AC 判分线收口作废；七站亲验三处硬伤双盲对照，我方 agent 版胜出，Sprint-3 验收通过（2026-08-16）；流程三条入 ProductBacklog 验收流程约定
+- [PR 工作流：main 只经 PR 前进](pr-based-merge-workflow.md) — Sprint-4 起 main 本地==origin/main，全部提交走 sprint 分支；推送等 PO 指令；main 工作树旧状态以分支工作树为准
+- [工作树本地设置按目录生效](worktree-settings-local-per-cwd.md) — settings.local.json 不入 git；施工工作树 developer 风格、主文件夹 scrum-master；单一 autoMemoryDirectory
+- [工作树分支操作先报再动](worktree-git-ops-report-first.md) — ff/merge/reset/删工作树分支等 PO 指令；集成分支档案提交照旧
+- [Sprint-4 向主线计划](sprint-04-mainline-intent.md) — 撤回当日被 PO 改判撤销：sprint-04-dev 已恢复 01c789b 完整施工态，PO 意图以其替代 main 成新主线；替代方式待 PO 指令
