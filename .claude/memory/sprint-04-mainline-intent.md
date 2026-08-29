@@ -1,21 +1,17 @@
 ---
 name: sprint-04-mainline-intent
-description: 2026-08-30 定局重写：旧"Sprint-4 施工态替代 main"意图作废——PO 定局为「重构仓库」，新基线 repo-restructure @ a19dd627，三个工作分支（sprint-03-engine / sprint-04-dev / sprint-04-llm）打 tag 归档，工作树已删
+description: 2026-08-30 再定局：PO 宣布全仓库重构，旧产物（Sprint-4 施工三分支、tag、远端仓库）全部弃用，待 PO 重构指令；并记录「tag 未带目标 ref 打在 HEAD」的教训
 metadata: 
   node_type: memory
   type: project
   originSessionId: 583a2388-114e-4b3d-b8d8-87bd07f5c54f
-  modified: 2026-08-30T06:30:00.000Z
+  modified: 2026-08-30T07:00:00.000Z
 ---
 
-2026-08-30（本日，PO 指令「重构本仓库」）定局：**旧「sprint-04-dev 替代 main 当新主线」意图作废**，改为仓库重构。
+2026-08-30 最终定局（PO 指令：「算了，不用了，我要重构整个 claudedream 了……之前的我全都不想要了，甚至远端仓库我都要删掉的，未来等我重构完毕」）：**全仓库重构启动，旧物弃用**；停止一切恢复/备份动作，等 PO 重构指令，不做任何远端操作。
 
-**执行后实况**：
-- 主文件夹 checkout：`repo-restructure`（@ `a19dd627`，Sprint-3 收口文档提交 = Sprint-4 公共起点；**不含 Sprint-4 任何施工/收尾结果**）。
-- 三个非 main 工作分支已打 tag 并删除（PO 拍板「三个全删」）：`sprint-03-engine`（bee1ad8，其"端到端修复 1/2/3"末笔**未并入 main**，该笔在 tag 里）、`sprint-04-dev`（01c789b 完整施工态）、`sprint-04-llm`（E2E 卷面三件套 + 记忆落账 59402e1）。
-- 工作树 `.claude/worktrees/sprint-04-dev`（上面是 main @ 820ad99）已删除；远端 `origin/sprint-03-engine` 未动。
-- 记忆集全套（11 条索引）已从 59402e1 迁至新基线并落账（b0d1e66）。
+**事实校正（重要）**：先前落账「打 tag 双保险零丢失」有误——三条 tag（sprint-03-engine / sprint-04-dev / sprint-04-llm）是在分支删除前用 `git tag <name>` **不带目标 ref** 打的，全部落在当时 HEAD（b0d1e66）上，未指向分支末梢 bee1ad8 / 01c789b / 59402e1。真实末梢现状：仅 reflog（默认 90 天）可达 + `origin/sprint-03-engine`（=bee1ad8，远端未动）。PO 已弃用旧物，不回修；若日后改口，恢复路径：先从 reflog 取分支末梢，再 `git tag --force <name> <sha>` 修正指向。
 
-**Why**：PO 从「Sprint-4 施工态成新主线」终极改判为「重构仓库」——Sprint-4 LLM 层结果不入新基线，靠 tag（+ origin，sprint-03-engine 侧）双保险，零丢失。
+**How to apply（教训）**：删分支前打 tag 必须 `git tag <name> <branch-tip>`，并用 `git for-each-ref --format='%(refname:short) -> %(objectname:short)' refs/tags/<name>` 核验指向后再删分支——本次只看了 tag 名、没看指向。另：重要报告前先验证支撑证据，别把"有 tag"当"备份到"。
 
-**How to apply**：后续若 PO 提及「把 Sprint-4 结果并回/恢复主线」，先对齐目标（基线仍是从 a19dd627 起步吗 / 从哪个 tag 恢复分支）；动 main 指针与推送仍等 PO 指令（[[pr-based-merge-workflow]]、[[worktree-git-ops-report-first]]）。CLAUDE.md「当前阶段」与新 README 仍描述旧布局——重构期文档以 PO 指令为准，没有指令别自行重写。
+**后续**：`repo-restructure` 检出保持现状；远端（删 origin 等）一律等 PO 重构指令（[[worktree-git-ops-report-first]]、[[pr-based-merge-workflow]]）。

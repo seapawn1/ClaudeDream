@@ -9,4 +9,4 @@
 - [PR 工作流：main 只经 PR 前进](pr-based-merge-workflow.md) — Sprint-4 起 main 本地==origin/main，全部提交走 sprint 分支；推送等 PO 指令；main 工作树旧状态以分支工作树为准
 - [工作树本地设置按目录生效](worktree-settings-local-per-cwd.md) — settings.local.json 不入 git；施工工作树 developer 风格、主文件夹 scrum-master；单一 autoMemoryDirectory
 - [工作树分支操作先报再动](worktree-git-ops-report-first.md) — ff/merge/reset/删工作树分支等 PO 指令；集成分支档案提交照旧
-- [Sprint-4 主线走向定局](sprint-04-mainline-intent.md) — 2026-08-30 PO 定局：重构仓库，新基线 repo-restructure @ a19dd627；sprint-03-engine / sprint-04-dev / sprint-04-llm 打 tag 后删除，工作树已删；旧「施工态替代 main」意图作废
+- [Sprint-4 主线走向定局](sprint-04-mainline-intent.md) — 2026-08-30 再定局为全仓库重构：旧物（三分支/tag/远端）全部弃用，等重构指令；含「tag 未带目标=打在 HEAD」教训与事实校正
