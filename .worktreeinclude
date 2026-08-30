@@ -1,0 +1,7 @@
+.env
+settings.local.json
+
+reference/**/.git/
+reference/.git/
+**/.git/
+reference/claude-code-log/
