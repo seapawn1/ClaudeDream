@@ -8,10 +8,10 @@
 - [验收只走端到端七站](acceptance-e2e-only.md) — PO 裁定 AC 判分线收口作废；七站亲验三处硬伤双盲对照，我方 agent 版胜出，Sprint-3 验收通过（2026-08-16）；流程三条入 ProductBacklog 验收流程约定
 - [产品立论蒸馏](product-rationale-distilled.md) — 官方三缺口与两事故·前人三路径同构·logs/ 缺失须自建·差异化三点及限定（原根 README「为什么需要它」抢救）
 - [README 静态、状态归 CLAUDE.md](readme-static-status-in-claude-md.md) — README 只留「这里是什么/文件地图」两段；当前阶段单一来源在 CLAUDE.md，勿写回 README
-- [工作流现状：重构期直接提交](pr-based-merge-workflow.md) — 旧「main 只经 PR」Sprint-4 集成分支工作流随重构定局弃用；推送/远端/tag 一律等 PO 指令；留有「单分支单工作树」常青事实
+- [工作流现状：main 直提](pr-based-merge-workflow.md) — 重构收口后 main == origin/main == 基线 5b2fffd，PO 指挥下直接在 main 提交；旧 PR 工作流弃用；收口类推送即推、日常等指令
 - [工作树本地设置技术事实](worktree-settings-local-per-cwd.md) — settings.local.json 不入 git·按 cwd 生效·单一 autoMemoryDirectory；「每 Sprint 施工工作树」模式已成历史
 - [工作树分支操作先报再动](worktree-git-ops-report-first.md) — ff/merge/reset/删工作树分支等 PO 指令；集成分支档案提交照旧
-- [Sprint-4 主线走向定局](sprint-04-mainline-intent.md) — 2026-08-30 定局全仓库重构；进展：.IDEO/scrum 档案已删、蒸馏落账、README/CLAUDE.md 已重写；22 个 tag 与远端残留未清；含「tag 未带目标=打在 HEAD」教训
+- [Sprint-4 主线走向定局与重构收口](sprint-04-mainline-intent.md) — 2026-08-30 定局重构并当日收口：merge 5b2fffd、tag restructure-2026-08-30 已推、repo-restructure 已删；残余旧物（22 本地 tag 含三条打偏、origin/sprint-03-engine、reflog 末梢）未清；含 tag 教训
 - [CLAUDE.md 定位 .claude/](claude-md-at-claude-dir.md) — PO 2026-08-30 移动定局「以后保持如此」；.worktreeinclude 同批入库
 - [PS 5.1 无 BOM UTF-8 读写陷阱](ps51-utf8-no-bom-trap.md) — 写保护下禁用 PS 管道读写 UTF-8 文本；Write 到 tmp + cmd copy 字节级落盘 + Read 核验再提交
 
