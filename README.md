@@ -15,12 +15,8 @@ Claude Code 内置了离线记忆整合（Auto Dream），但零留证、禁碰 
 | `claude-dream/` | **插件产物**——Sprint-1 触发链/围栏/回环、Sprint-2 底片产线、Sprint-3 机械引擎（`src/engine/`：config/check/act/fuse/g9/report）、`run-dream.mjs` 机械编排（默认零 SDK）、`run-dream-rogue.mjs`（SDK 故障演练） |
 | `scrum/ProductBacklog.md` | **产品日志**——Product/Vision、DoD 与验收流程约定、backlog、架构图 |
 | `reference/` | 外部方案原料（auto-dream · auto-memory · claude-memory-compiler · claude-code-log · claude-mem · claude-dream）——只放原料不放结论，见 [reference/README.md](reference/README.md) |
-| `.claude/CLAUDE.md` | 项目指令（每次会话自动加载） |
+| `.claude/CLAUDE.md` | 项目指令（每次会话自动加载）：**当前阶段**、常用命令、目录约定、环境与坑 |
 | `.claude/memory/` | **知识库**——跨会话记忆 + 设计冲刺/Sprint-1~3 档案的蒸馏（`MEMORY.md` 索引：IDEO Index / Scrum Index） |
 | `.claude-plugin/marketplace.json` | 插件分发骨架 |
 | `.worktreeinclude` | worktree 创建时从主检出复制的文件清单 |
 | `.env` / `seapawn.md` | 本地私人文件，不可阅读 |
-
-## 当前状态
-
-**2026-08-30 起全仓库重构进行中**（`repo-restructure` 分支）。机械引擎已交付（Sprint-1~3，验收通过）；LLM 层（PBI-07）为 backlog 主菜候选。过程档案已蒸馏进 `.claude/memory/`，历史见 git。产品目标与排期见 [scrum/ProductBacklog.md](scrum/ProductBacklog.md)。

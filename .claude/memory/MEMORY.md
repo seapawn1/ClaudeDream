@@ -7,6 +7,7 @@
 - [旧冲刺 Python 代码不搬用](python-sprint-code-no-reuse.md) — PO 澄清「安装税」≠语言禁令，是不要复用设计冲刺 Python 代码；testbed 方案层复用、builder Node 重写
 - [验收只走端到端七站](acceptance-e2e-only.md) — PO 裁定 AC 判分线收口作废；七站亲验三处硬伤双盲对照，我方 agent 版胜出，Sprint-3 验收通过（2026-08-16）；流程三条入 ProductBacklog 验收流程约定
 - [产品立论蒸馏](product-rationale-distilled.md) — 官方三缺口与两事故·前人三路径同构·logs/ 缺失须自建·差异化三点及限定（原根 README「为什么需要它」抢救）
+- [README 静态、状态归 CLAUDE.md](readme-static-status-in-claude-md.md) — README 只留「这里是什么/文件地图」两段；当前阶段单一来源在 CLAUDE.md，勿写回 README
 - [工作流现状：重构期直接提交](pr-based-merge-workflow.md) — 旧「main 只经 PR」Sprint-4 集成分支工作流随重构定局弃用；推送/远端/tag 一律等 PO 指令；留有「单分支单工作树」常青事实
 - [工作树本地设置技术事实](worktree-settings-local-per-cwd.md) — settings.local.json 不入 git·按 cwd 生效·单一 autoMemoryDirectory；「每 Sprint 施工工作树」模式已成历史
 - [工作树分支操作先报再动](worktree-git-ops-report-first.md) — ff/merge/reset/删工作树分支等 PO 指令；集成分支档案提交照旧
