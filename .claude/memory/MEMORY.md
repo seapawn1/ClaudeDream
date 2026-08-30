@@ -12,3 +12,10 @@
 - [Sprint-4 主线走向定局](sprint-04-mainline-intent.md) — 2026-08-30 再定局为全仓库重构：旧物（三分支/tag/远端）全部弃用，等重构指令；含「tag 未带目标=打在 HEAD」教训与事实校正
 - [CLAUDE.md 定位 .claude/](claude-md-at-claude-dir.md) — PO 2026-08-30 移动定局「以后保持如此」；.worktreeinclude 同批入库
 - [PS 5.1 无 BOM UTF-8 读写陷阱](ps51-utf8-no-bom-trap.md) — 写保护下禁用 PS 管道读写 UTF-8 文本；Write 到 tmp + cmd copy 字节级落盘 + Read 核验再提交
+
+## IDEO Index
+
+- [设计冲刺·顶层蒸馏（DesignMap/DesignReview）](design-sprint-core-distilled.md) — 长期目标双承诺·11 步数据流·四条冲刺问题答案·五条验收信号结算·方法论六条与去向
+- [设计冲刺·Target-1 主靶档案蒸馏](design-sprint-target1-distilled.md) — 定稿方案全骨架（M1-M5/S1-S3·L0-L3·三阀·报告六节·阀门六键）·四派草图·三场真梦+故障注入·C1–C7·testbed 模式·测试方法论
+
+## Scrum Index
