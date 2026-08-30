@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-`scrum/.IDEO/design-sprint/Target-1-Consolidation/`（已冻结的设计冲刺主靶档案）的全量蒸馏，2026-08-30 仓库重构逐文件读后落成。未逐行读的仅生成物与脚本体（testbed/acme-api 45 文件、dream-full.diff×3、__pycache__、build-acme.py/m-checks.py/scope-guard.py 全文）——其设计已由 README/rot-manifest/audit-notes/run-dream.py 头部声明承载。档案若在重构中删除，本记忆即唯一载体。上游全局图见 [[design-sprint-core-distilled]]；本靶方案已落成插件（Sprint-1~3 交付机械层与围栏，LLM 层 = PBI-07）。
+`scrum/.IDEO/design-sprint/Target-1-Consolidation/`（已冻结的设计冲刺主靶档案）的全量蒸馏，2026-08-30 仓库重构逐文件读后落成。未逐行读的仅生成物与脚本体（testbed/acme-api 45 文件、dream-full.diff×3、__pycache__、build-acme.py/m-checks.py/scope-guard.py 全文）——其设计已由 README/rot-manifest/audit-notes/run-dream.py 头部声明承载。**档案已随重构删除（2026-08-30，450040f），本记忆即唯一载体。**上游全局图见 [[design-sprint-core-distilled]]；本靶方案已落成插件（Sprint-1~3 交付机械层与围栏，LLM 层 = PBI-07）。
 
 ## 靶定义与结论
 

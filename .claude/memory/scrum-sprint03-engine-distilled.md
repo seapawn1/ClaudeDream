@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Sprint-3 档案（`scrum/sprint-03-engine/`，待重构收尾删除，本记忆为知识载体）按 Sprint Review 原则蒸馏，2026-08-30。验收考卷未读未引（standing 约定）。上游 [[scrum-sprint02-negatives-distilled]]；LLM 层接棒见 ProductBacklog PBI-07（Sprint-4 Planning 定案八拆条，施工被 2026-08-30 全仓重构定局叫停，档案仅 reflog 可达）。
+Sprint-3 档案（`scrum/sprint-03-engine/`，已删除 2026-08-30（7ef52cc），本记忆为唯一知识载体）按 Sprint Review 原则蒸馏，2026-08-30。验收考卷未读未引（standing 约定）。上游 [[scrum-sprint02-negatives-distilled]]；LLM 层接棒见 ProductBacklog PBI-07（Sprint-4 Planning 定案八拆条，施工被 2026-08-30 全仓重构定局叫停，档案仅 reflog 可达）。
 
 ## Sprint Goal 与达成
 

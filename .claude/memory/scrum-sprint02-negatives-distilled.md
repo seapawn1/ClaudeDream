@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Sprint-2 档案（`scrum/sprint-02-negatives/`，待重构收尾删除，本记忆为知识载体）按 Sprint Review 原则蒸馏，2026-08-30。验收考卷未读未引（standing 约定）。上游 [[scrum-sprint01-skeleton-distilled]]，下游 [[scrum-sprint03-engine-distilled]]。
+Sprint-2 档案（`scrum/sprint-02-negatives/`，已删除 2026-08-30（7ef52cc），本记忆为唯一知识载体）按 Sprint Review 原则蒸馏，2026-08-30。验收考卷未读未引（standing 约定）。上游 [[scrum-sprint01-skeleton-distilled]]，下游 [[scrum-sprint03-engine-distilled]]。
 
 ## Sprint Goal 与达成
 
