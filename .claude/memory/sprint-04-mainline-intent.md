@@ -10,7 +10,7 @@ metadata:
 
 2026-08-30 定局（PO 指令：「算了，不用了，我要重构整个 claudedream 了……之前的我全都不想要了，甚至远端仓库我都要删掉的，未来等我重构完毕」）：**全仓库重构启动，旧物弃用**。重构于同日执行并收口（PO 指令四连：merge → 删分支 → 打 tag → 推送）。
 
-**收口事实（2026-08-30）**：`repo-restructure` 全部工作以 `--no-ff` 合回 main（**5b2fffd**「merge: 全仓库重构收口」），工作分支 repo-restructure 已删（本地仅剩 main）；annotated tag **`restructure-2026-08-30`** 指向 5b2fffd（推送前 `for-each-ref %(*objectname)` 核验指向——tag 教训兑现）；main 与 tag 均已推送，**main == origin/main == 重构基线**。重构内容：scrum/ 收敛为仅 ProductBacklog.md、.IDEO 与 Sprint-1~3 档案删除、知识蒸馏入 memory（IDEO/Scrum Index）、根 README 与 .claude/CLAUDE.md 按 README/CLAUDE.md/memory 三层分工重写、立论事实抢救入 [[product-rationale-distilled]]。
+**收口事实（2026-08-30）**：`repo-restructure` 全部工作以 `--no-ff` 合回 main（**5b2fffd**「merge: 全仓库重构收口」），工作分支 repo-restructure 已删（本地仅剩 main）；annotated tag **`restructure-2026-08-30`** 指向 5b2fffd（推送前 `for-each-ref %(*objectname)` 核验指向——tag 教训兑现）；main 与 tag 均已推送，**main == origin/main == 重构基线**。重构内容：scrum/ 收敛为仅 ProductBacklog.md、.IDEO 与 Sprint-1~3 档案删除、知识蒸馏先入 memory、2026-08-31 迁 docs/（英文命名，memory 收敛为纯工作记忆）、根 README 与 .claude/CLAUDE.md 按 README/CLAUDE.md/memory 三层分工重写、立论事实抢救入 [[product-rationale-distilled]]。
 
 **仍未清（等 PO 指令）**：①22 个旧 tag 本地仍在（含三条打偏的 sprint-03-engine/sprint-04-dev/sprint-04-llm → 全指 b0d1e66，见下）；②远端 `origin/sprint-03-engine` 分支仍在；③Sprint-4 施工档案末梢（59402e1/bee1ad8/01c789b）仅 reflog 可达，默认约 90 天后 GC 蒸发（PO 已弃用，不回修；改口恢复路径：reflog 取末梢 → `git tag --force <name> <sha>`）。
 
