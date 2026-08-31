@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-设计冲刺档案蒸馏迁入 docs/（2026-08-31 PO 裁定：历史记录归 `docs/`，可复用知识留 memory）后回填的活规格。上游全文：`docs/ideo-design/顶层蒸馏.md`（全局图）与 `docs/ideo-design/主靶档案.md`（方案全骨架）。
+设计冲刺档案蒸馏迁入 docs/（2026-08-31 PO 裁定：历史记录归 `docs/`，可复用知识留 memory）后回填的活规格。上游全文：`docs/ideo-design/design-map-review-distilled.md`（全局图）与 `docs/ideo-design/target1-plan-and-testing.md`（方案全骨架）。
 
 **LLM 层三判据（PBI-07 规格，只吃机械筛出的候选）**：S1 记忆互矛盾（git 时间序 + 现状核验裁决，不许投票）｜S2 vs CLAUDE.md｜S3 连接候选（机械共现先筛，LLM 只判「非显然」）。铁律：**每判必引双方原文（无证不理）**；**删除票只能由机械确凿证据开出，LLM 只能否决、标注、降级**（全方案最硬的一条）。
 
