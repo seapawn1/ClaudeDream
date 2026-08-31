@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**全仓库重构进行中**（2026-08-30 起，`repo-restructure` 分支直接提交）：scrum/ 已收敛为仅 [ProductBacklog.md](../scrum/ProductBacklog.md)；设计冲刺与 Sprint-1~3 档案已删除，知识蒸馏在 `.claude/memory/`（`MEMORY.md` 的 IDEO Index / Scrum Index）。机械引擎已交付（触发/围栏/底片/判据/处置/熔断/报告/G9），backlog 主菜候选 PBI-07（LLM 层）。旧物（22 个 tag、远端 origin 残留）弃用待清——推送、远端、tag 一律等 PO 指令。
+**重构已收口**（2026-08-30 定局并当日完成：merge 5b2fffd、tag `restructure-2026-08-30` 已推、`repo-restructure` 分支已删；工作流为 main 直提，PO 指挥下提交）：scrum/ 已收敛为仅 [ProductBacklog.md](../scrum/ProductBacklog.md)；设计冲刺与 Sprint-1~3 档案蒸馏在 `docs/`（2026-08-31 迁入）。机械引擎已交付（触发/围栏/底片/判据/处置/熔断/报告/G9），backlog 主菜候选 PBI-07（LLM 层，活规格见 memory `dream-llm-spec`）。残余旧物（22 个本地 tag 含三条打偏、远端 origin/sprint-03-engine、reflog 末梢）弃用待清——推送、远端、tag 一律等 PO 指令。
 
 ## 常用命令
 
@@ -14,8 +14,9 @@
 ## 目录约定
 
 - `scrum/` 只剩 `ProductBacklog.md`（产品日志：Product/Vision、DoD 与验收流程约定、backlog、架构图）。
+- `docs/` 是成文档案层：设计冲刺与 Sprint-1~3 的档案蒸馏（见 `docs/README.md`）；档案原文经 git 历史可达。
 - `reference/` 只放原料，不放结论；与记忆蒸馏冲突时以原料为准。`reference/claude-dream/` 是只读参考材料，与插件产物 `claude-dream/` 是两回事。
-- `.claude/memory/` 是知识库（跨会话记忆 + 档案蒸馏），遵守官方 auto-memory 契约：一记一文件 + MEMORY.md 纯指针索引，勿破。
+- `.claude/memory/` 只放跨会话工作记忆（不放历史档案），遵守官方 auto-memory 契约：一记一文件 + MEMORY.md 纯指针索引，勿破。
 
 ## 环境与坑
 
