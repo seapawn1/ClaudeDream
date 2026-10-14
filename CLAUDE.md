@@ -2,25 +2,21 @@
 
 一个 Claude Code 插件，升级 Claude Code 的记忆系统，使 agent 免于腐烂，与用户和项目保持同步。
 
+## 愿景
+
+> 任何长期使用 Claude Code 的人，开新会话时 agent 都像昨天刚一起工作过；而且越用越懂你——记忆产生复利，agent 能连起你自己都没连起的线索。
+
 ## 当前阶段
 
-**重构已收口**（2026-08-30 定局并当日完成：merge 5b2fffd、tag `restructure-2026-08-30` 已推、`repo-restructure` 分支已删；工作流为 main 直提，PO 指挥下提交）：scrum/ 已收敛为仅 [ProductBacklog.md](scrum/ProductBacklog.md)；设计冲刺与 Sprint-1~3 档案蒸馏在 `docs/`（2026-08-31 迁入）。机械引擎已交付（触发/围栏/底片/判据/处置/熔断/报告/G9），backlog 主菜候选 PBI-07（LLM 层，活规格见 memory `dream-llm-spec`）。残余旧物（22 个本地 tag 含三条打偏、远端 origin/sprint-03-engine、reflog 末梢）弃用待清——推送、远端、tag 一律等 PO 指令。
-
-## 常用命令
-
-- `node claude-dream/test/smoke-check.mjs` —— 真梦前置冒烟：一条命令查登录态/token/SDK 可达，红绿分明、红时一句话说清缺什么。先跑这个再跑下面的自证。
-- `node claude-dream/test/self-test.mjs` —— DoD·D1 一键自证（全链路/冷却/防递归/故障注入），需登录态（见「环境与坑」）。
+**推倒重来，待开设计冲刺**（2026-10-14 PO 决定）：旧插件代码、设计冲刺与 Sprint-1~3 档案、ProductBacklog 已全部删除；新版本起点是 tag `v3.0`，旧版终态是它的上一个提交（`v3.0^`）。愿景保留，实现路径重新设计。下一步：PO 另开会话与 Designer 做新一轮 IDEO 设计冲刺。旧档案、旧规格、旧 DoD 不作为新冲刺的前提或约束；Sprint 编号从头开始。
 
 ## 目录约定
 
-- `scrum/` 只剩 `ProductBacklog.md`（产品日志：Product/Vision、DoD 与验收流程约定、backlog、架构图）。
-- `docs/` 是成文档案层：设计冲刺与 Sprint-1~3 的档案蒸馏（见 `docs/README.md`）；档案原文经 git 历史可达。
-- `reference/` 只放原料，不放结论；与记忆蒸馏冲突时以原料为准。`reference/claude-dream/` 是只读参考材料，与插件产物 `claude-dream/` 是两回事。
-- `~/.claude/memory/ClaudeDream/`（仓库外）只放跨会话工作记忆（不放历史档案），遵守官方 auto-memory 契约：一记一文件 + MEMORY.md 纯指针索引，勿破。
+- `.claude-plugin/marketplace.json`：插件市场注册（`claude-dream-dev`），插件列表暂空，新插件做出来后再登记。
+- `reference/`：外部方案原料，只放原料不放结论；部分内容是 2026-07 的快照，使用前对照官方现状复核。
+- `~/.claude/memory/ClaudeDream/`（仓库外）：跨会话工作记忆，遵守官方 auto-memory 契约：一记一文件 + MEMORY.md 纯指针索引。
 
 ## 环境与坑
 
-- 跑梦与 D1 自证需 Claude Code 登录态，缺失时 SDK 报 "Could not resolve authentication method"——先跑 smoke-check，别当代码 bug。托管/网关代理环境下凭据文件/环境变量可能都查不到而调用照样成功——唯一作数的判据是真跑一次最小 SDK 调用。
-- 梦进程的 git 提交必须限定 pathspec：先 `git diff --cached --name-only -- <pathspec>` 算具体文件再喂 commit——`git commit -- <目录>` 的 `--only` 语义在目录无匹配文件时整笔报错。
+- 本机走第三方中转：凭据文件和环境变量可能都查不到，SDK 调用却照样成功。判断登录态是否可用，唯一作数的是真跑一次最小 SDK 调用。
 - Git Bash 对未加引号的反斜杠路径会静默吞掉反斜杠——工作目录已在项目根时省略 `-C`，不要拼反斜杠路径。
-- 验收考卷对开发方约定保密：若未来再启用出卷/答卷分离验收，主动不读、不引用考卷内容。

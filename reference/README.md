@@ -3,9 +3,7 @@
 ## 这里是什么
 
 ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事，以及 Claude Code 自己内置了什么。
-只放原料，不放结论——从这些材料里读出的洞察蒸馏在 `.claude/memory/`（`MEMORY.md` 的 IDEO Index）。
-
-**这些原料在设计冲刺中被怎么用了**：三场闪电演示拆解全部六份材料，产出 14 条 big idea 与 6 条反面清单；定稿方案的多处设计可溯源至此——机械体检判据源自 compiler 的 `lint.py`、工具缴械思路源自 claude-mem 的 `hardened-options.ts`、"人不参与梦、报告即汇报"的流程对照官方 auto-dream（但反其道做了留证与改 CLAUDE.md）。结论蒸馏见 `.claude/memory/` 的 design-sprint-core-distilled 与 design-sprint-target1-distilled；档案原稿见 git 历史（2026-08-30 重构删除）。
+只放原料，不放结论。部分材料是 2026-07 的快照（各条目标有提取或克隆日期），使用前对照官方现状复核。
 
 三类东西，处理方式各不同：
 
