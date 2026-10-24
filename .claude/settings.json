@@ -2,17 +2,5 @@
   "permissions": {
     "allow": []
   },
-  "autoMemoryDirectory": "S:/SeaPawn-Memory/memory/ClaudeDream",
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File S:/SeaPawn-Memory/scripts/check.ps1 -Project ClaudeDream"
-          }
-        ]
-      }
-    ]
-  }
+  "autoMemoryDirectory": "S:/SeaPawn-Memory/memory/ClaudeDream"
 }
