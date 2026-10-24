@@ -12,6 +12,7 @@
 |---|---|
 | `.claude-plugin/marketplace.json` | 插件市场注册（`claude-dream-dev`） |
 | `reference/` | 外部方案原料，见 [reference/README.md](reference/README.md) |
+| `docs/` | 讨论底稿与设计文档 |
 | `CLAUDE.md` | 项目指令（每次会话自动加载），含当前阶段 |
 | `.worktreeinclude` | 建 worktree 时从主检出复制的文件清单 |
 | `.env` / `.claude/seapawn.md` | 本地私人文件，不可阅读 |
