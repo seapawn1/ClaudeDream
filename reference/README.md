@@ -5,10 +5,11 @@
 ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事，以及 Claude Code 自己内置了什么。
 只放原料，不放结论。部分材料是 2026-07 的快照（各条目标有提取或克隆日期），使用前对照官方现状复核。
 
-三类东西，处理方式各不同：
+四类东西，处理方式各不同：
 
 - **自己的提取文档**——入库。逐字从 `claude.exe` 二进制里逆出来的，上游没有，丢了要重来。
 - **克隆的第三方仓库**——入库为普通文件（移除 `.git`，不保留上游仓库身份）。只读参考，不维护 fork。由根 `.gitignore`（`reference/**/.git/`）防止子仓库的 `.git` 内脏混入。
+- **上游官方文档**——原样下载（含示例数据），不改写、不节选。
 - **AI 转化产物**——由 AI（非本项目 agent）把已入库的第三方仓库改写成另一种形态，无独立上游、无 commit 可追溯。当"转化依据"本身即是研究对象时才收，只读，不当作可信实现验证。
 
 ## 文件地图
@@ -21,6 +22,12 @@ ClaudeDream 的外部参照物：别人怎么做"给 agent 攒记忆"这件事�
 | `agent-memory/auto-dream/auto-dream.md` | Claude Code 内置的**离线整合层**：后台 agent 定期回看会话日志，把散落信号整合进记忆文件——去重、消解矛盾、清理过期、重建索引。REM 睡眠隐喻。本机从未运行（灰度未放行，不是"默认关闭"）。源同上，交叉验证 [Piebald-AI/claude-code-system-prompts](https://github.com/Piebald-AI/claude-code-system-prompts) 的 v2.1.120 抽取版 |
 
 这两份直接关系到本项目的定位：ClaudeDream 想做的"做梦"，Claude Code 内置的 auto-dream 就是同一件事的官方实现。
+
+### 上游官方文档（原样下载）
+
+| 目录 | 上游与内容 |
+|---|---|
+| `agent-memory/dreaming-cookbook/` | Anthropic 官方 cookbook [《Dreaming with a dynamic workflow》](https://github.com/anthropics/claude-cookbooks/blob/main/managed_agents/CMA_dreaming_with_a_dynamic_workflow.ipynb)，2026-11-07 从 `main` 下载。含 notebook 原件和完整的 `example_data/memory_distill/`：两张流程图、四个 prompt（lead / analyzer / organizer / work_request）、11 份示例 transcript（约 290 KB）。notebook 里的图片按相对路径可直接显示。 |
 
 ### 克隆的第三方仓库（已入库为普通文件，移除 .git）
 
