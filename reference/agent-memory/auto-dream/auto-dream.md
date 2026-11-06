@@ -35,9 +35,9 @@ function $kt(){
 
 **2026-11-07 复核（v2.1.319）：功能仍在、门控仍未放行、提示词有小改。**
 - 二进制里 auto-dream 全套还在（gate、`autoDreamEnabled`、`.consolidate-lock`、`DreamTask`、`dream-proposal`、`Dream: Memory Consolidation` 提示词），门控逻辑与本文一致：只能关、不能开。
-- 服务端开关本机缓存（`C:\Users\seapawn\.claude.json` 的 `cachedGrowthBookFeatures`）：`{"enabled": false, "minHours": 24, "minSessions": 3, "remoteEnabled": false}`。reclaude 账号各自的配置目录里不一定有这份缓存。
+- 服务端开关本机缓存快照（`C:\Users\seapawn\.claude.json` 的 `cachedGrowthBookFeatures`，`cachedGrowthBookFeaturesAt` = 11-06 05:24 +08）：`{"enabled": false, "minHours": 24, "minSessions": 3, "remoteEnabled": false}`。`minSessions` 3 是服务端覆盖值（代码默认 5）。这份快照只能证明最后一次抓到的值是关；`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` 会不会挡住刷新**未核实**（11-06 缓存还刷新过）。reclaude 账号各自的配置目录里不一定有这份缓存。
 - 官方文档仍搜不到 dream；本机记忆目录仍无 `.consolidate-lock`，从未跑过。
-- 提示词三处变化：**去掉了 `logs/YYYY/MM/DD/` 活动流这个来源**，Phase 1 改为「有 `sessions/` 子目录就看最近条目」；Phase 2 的来源从三项减为两项（漂移的既有记忆、按需 grep transcript）；Phase 3 新增「team 相关工具在 dream 里不可用，只整合本记忆目录」。不变的核心：删被推翻的事实、删过期指针、索引 ≤200 行且 ≤25KB、无人审、原地改。下文第五节的提示词全文和第七节第 1 条「主数据源是 `logs/`」是 v2.1.210 的样子。
+- 提示词至少三处变化：**去掉了 `logs/YYYY/MM/DD/` 活动流这个来源**，Phase 1 改为「有 `sessions/` 子目录就看最近条目」；Phase 2 的来源从三项减为两项（漂移的既有记忆、按需 grep transcript）；Phase 3 新增「team 相关工具在 dream 里不可用，只整合本记忆目录」——原文是 `The ${Pv} / ${yg} / ${jf} tools are unavailable in a dream: consolidate only this memory directory, and leave anything that section marks as shared with the project where it is`，变量名是混淆的，「team 工具」是读出来的。不变的核心：删被推翻的事实、删过期指针、索引 ≤200 行且 ≤25KB、无人审、原地改。下文第五节的提示词全文和第七节第 1 条「主数据源是 `logs/`」是 v2.1.210 的样子。
 - 来源：二进制与文档由另一会话复核；开关缓存由 ClaudeDream 会话读取。
 
 ## 三、触发条件(必须全部满足)

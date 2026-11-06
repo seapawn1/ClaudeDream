@@ -43,7 +43,7 @@
 | 设置 `autoDreamEnabled: true` 无效：开关的 `enabled` 或 `available` 为 true 时才读这个设置。只能关，不能开 | v2.1.309 二进制判定代码 | 10-25 |
 | 官方文档搜不到 dream / `autoDreamEnabled`；本机所有记忆目录没有 `.consolidate-lock`，从未运行 | claude-code-docs；本机文件 | 10-25 |
 | auto-dream 触发：距上次整合 ≥ 24 小时、新会话数 ≥ 阈值（默认 5，服务端现给 3）、服务端开关放行。改完直接写入，没有审阅环节（#47959 误删 23 个记忆文件） | 二进制；GitHub issue | 10-25；issue 为 2026-08 核实 |
-| 11-07 复核：v2.1.319 的开关缓存仍为 `{"enabled": false, "minHours": 24, "minSessions": 3, "remoteEnabled": false}`；二进制里 auto-dream 全套还在，门控逻辑不变；官方文档仍搜不到 dream | 本机 `C:\Users\seapawn\.claude.json`（本会话）；二进制与文档（另一会话） | 11-07 |
+| 11-07 复核：v2.1.319 的开关缓存快照（`cachedGrowthBookFeaturesAt` = 11-06 05:24 +08）为 `{"enabled": false, "minHours": 24, "minSessions": 3, "remoteEnabled": false}`，只能证明最后一次抓到的值是关；二进制里 auto-dream 全套还在，门控逻辑不变；官方文档仍搜不到 dream | 本机 `C:\Users\seapawn\.claude.json`（本会话）；二进制与文档（另一会话） | 11-07 |
 | 官方 dream 读的是预先消化的活动日志 `logs/`，不是原始 transcript（**11-07：v2.1.319 已去掉 `logs/`**，来源改为漂移的既有记忆加按需 grep transcript，有 `sessions/` 子目录时再看一眼；核心仍是删被推翻的事实、索引 ≤200 行且 ≤25KB、无人审、原地改） | PO 07-16 从 v2.1.210 提取的笔记；v2.1.319 二进制 | 11-07（另一会话） |
 | Managed Agents 有官方 Dreams（research preview）：读 memory store 加过去的会话，把重组结果写进**新** store。cookbook 是同一思路的自建版，原地更新 | cookbook 正文 | 11-07 |
 | cookbook 在 `anthropics/claude-cookbooks`，MIT 许可；notebook 于 2026-11-04 19:06 UTC 提交（#959） | GitHub API | 11-07 |
@@ -92,7 +92,7 @@
 13. 做梦动不动项目层：照 cookbook，对项目 transcript 做梦最自然的结果就是写该项目的记忆，和 10-25「项目记忆归原生 auto-memory 管」冲突。
 14. 全局层从哪来：analyzer 从 transcript 直接分流，还是先写项目层、再从各项目汇总上去。
 15. `instructions.md` 里 PO 的规矩做梦碰不碰。可借 auto-dream 对 CLAUDE.md 的做法：有冲突只标注、只报告，不改人写的层。改不改名：候选 `USER.md`（SM 推荐）、`CLAUDE.md`、保留原名；改名要同步各账号配置目录的 `@` 行、`.gitignore` 白名单（漏改会被 git 静默忽略）、README 和 4 个记忆文件。
-16. 删减要不要单独审：cookbook 只增不删，store 会一直长大；要删减得学 auto-dream，而 #47959 出事正出在删减这一步。SM 建议：删减单独审，增改照 cookbook 直接写。
+16. 删减要不要单独审：cookbook 不丢事实——事实行都保留，删的只是合并后的占位文件、第一人称叙述和走不通的假设——但 store 会一直长大；要删事实得学 auto-dream，而 #47959 出事正出在删减这一步。SM 建议：删减单独审，增改照 cookbook 直接写。
 17. 跨会话综合（「连起你自己都没连起的线索」）要不要做、放哪一层：cookbook 的 organizer 明确禁止（“reorganizing, not re-analyzing … Do not invent facts”），每个 analyzer 只看一份 transcript。
 18. 原料要不要加上 PO 决定表、ProductBacklog、`docs/`：cookbook 收人写的笔记（示例 `00-maintainer-notes.md`），PO 的决定能以原话、带日期进记忆；代价是这些文件会变，要判断哪些是新的。
 19. 工具结果保留多少：cookbook 说工具结果最重要，全量保留最准也最贵。先按它的格式全量渲染，测体积和成本，再定是否截断过长输出。
