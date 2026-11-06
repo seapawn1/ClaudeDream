@@ -30,8 +30,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    T["触发条件，全部满足才跑<br/>距上次 ≥ 24 小时<br/>且新会话 ≥ 5 个<br/>且服务端闸门放行<br/>tengu_onyx_plover"] --> D["后台任务 DreamTask<br/>显示为 dreaming"]
-    D --> P["一个 agent 按提示词走四章<br/>Orient：看现有记忆和索引<br/>Gather：翻最近 1–3 天会话日志<br/>Consolidate：合并、改、删矛盾事实<br/>Prune：删过期指针、重建 MEMORY.md"]
+    T["触发条件，全部满足才跑<br/>距上次 ≥ 24 小时<br/>且新会话数够（默认 5，本机缓存的服务端值是 3）<br/>且服务端闸门放行<br/>tengu_onyx_plover"] --> D["后台任务 DreamTask<br/>显示为 dreaming"]
+    D --> P["一个 agent 按提示词走四章<br/>Orient：看现有记忆和索引<br/>Gather：看漂移的既有记忆，按需 grep transcript<br/>（v2.1.319 已去掉 logs/ 活动流）<br/>Consolidate：合并、改、删矛盾事实<br/>Prune：删过期指针、重建 MEMORY.md"]
     P --> W[("直接原地改记忆目录<br/>没有备份、没有 diff、没有确认")]
     W --> N["下一次会话照旧加载<br/>错误这次看不出来"]
 ```
@@ -42,13 +42,13 @@ flowchart TD
 
 | | 官方 auto-dream | cookbook 做梦服务 | 我们的 v3 方向 |
 |---|---|---|---|
-| 跑在哪 | Claude Code 进程内，后台任务 | 独立服务，夜间 cron | Claude Code 会话 |
-| 谁干活 | 一个 agent，一段提示词 | lead + N 个 analyzer + organizer | 待定，倾向 lead 分派 |
-| 写哪 | 原地改现有记忆 | 原地改 memory store（保留 memory version，跑前留副本） | 提案 + wiki |
-| 谁来审 | 没人 | 默认没人（可改成先写新 store 再切换） | **PO 审 diff 后才采纳** |
+| 跑在哪 | Claude Code 进程内，后台任务 | 独立服务，夜间 cron | Claude Code 插件 |
+| 谁干活 | 一个 agent，一段提示词 | lead + N 个 analyzer + organizer | 照 cookbook：lead + analyzer + organizer，用 Workflow 或子代理 |
+| 写哪 | 原地改现有记忆 | 原地改 memory store（保留 memory version，跑前留副本） | 原地改本地记忆目录，git 提交 |
+| 谁来审 | 没人 | 默认没人（可改成先写新 store 再切换） | 照 cookbook 默认不审，git 回滚兜底（删减要不要单独审待议） |
 | 已知事故 | #47959：一天删掉 23 个记忆文件，用户无感知 | 未大规模运行 | — |
-| 现在的状态 | 闸门关着，不放行 | 官方 cookbook，可自建 | 设计中 |
+| 现在的状态 | 闸门关着，不放行 | 官方 cookbook，可自建 | 以 cookbook 为基线，移植设计中 |
 
-一句话：官方 auto-dream 栽在「无人审的原地写」，cookbook 把它拆成流水线、加了审计和边界但仍然默认无人审，我们 v3 的规矩（只出提案、审 diff、不可重建的负结果不能动）是同一件事上最保守的一档。
+一句话：官方 auto-dream 栽在「无人审的原地写」，cookbook 把它拆成流水线，加了全量读、逐条核对、只增不删、防注入和完整性核对，但仍然默认无人审。我们 v3 照 cookbook 来（PO 11-07 定），运行底座换成 Claude Code，靠 git 回滚兜底；旧版「只出提案、审 diff」已改。
 
 详细原料：cookbook 原件在 `reference/agent-memory/dreaming-cookbook/`，auto-dream 提取在 `reference/agent-memory/auto-dream/auto-dream.md`。
