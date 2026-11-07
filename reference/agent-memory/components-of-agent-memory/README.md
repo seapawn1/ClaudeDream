@@ -3,7 +3,7 @@
 - 原文：https://www.anthropic.com/research/components-of-agent-memory
 - 发布：2026-11-06（页面 `article:published_time`；最后修改 2026-11-06 21:15 UTC）
 - 作者：Lance Martin；编辑 Caitlin Love、Tom Chivers、Rebecca Hiscott、Jake Eaton、Blake Wilson；图 Monika Tuchowska
-- 抓取：2026-11-07。`article.html` 为原样快照。
+- 抓取：2026-11-07。`article.html` 为原样快照；`article-readable.html` 是离线可读版，16 张图在 `assets/`。
 - 性质：Anthropic 官方工程文章。本文件是事实摘录与短引文，不是全文翻译；带「图 N」的数字来自文章图表，正文没有逐字重复。引用前对照 `article.html`。
 
 ## 文章的定义
