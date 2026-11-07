@@ -1,6 +1,6 @@
 # 做梦的三种架构
 
-看不懂长文档时先看这里。两张架构图分别对应 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》和 Claude Code 内置的 auto-dream（提取自 `reference/agent-memory/auto-dream/auto-dream.md`），最后一张表把两者和我们的 v3 方向摆在一起。
+看不懂长文档时先看这里。两张架构图分别对应 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》和 Claude Code 内置的 auto-dream（提取自 `references/auto-dream/auto-dream.md`），最后一张表把两者和我们的 v3 方向摆在一起。
 
 ## 一、cookbook：把 dream 做成一条流水线
 
@@ -51,4 +51,4 @@ flowchart TD
 
 一句话：官方 auto-dream 栽在「无人审的原地写」，cookbook 把它拆成流水线，加了全量读、逐条核对、防注入和完整性核对，并且不丢事实——它会删合并后的占位文件、第一人称叙述和走不通的假设，但每条事实行都保留——但仍然默认无人审。我们 v3 照 cookbook 来（PO 11-07 定），运行底座换成 Claude Code，靠 git 回滚兜底；旧版「只出提案、审 diff」已改。
 
-详细原料：cookbook 原件在 `reference/agent-memory/dreaming-cookbook/`，auto-dream 提取在 `reference/agent-memory/auto-dream/auto-dream.md`。
+详细原料：cookbook 原件在 `references/dreaming-cookbook/`，auto-dream 提取在 `references/auto-dream/auto-dream.md`。

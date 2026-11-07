@@ -1,6 +1,6 @@
 # Cookbook 移植笔记
 
-精读 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》时的笔记，目标是把它移植成 Claude Code 插件（PO 11-07 定，见方向底稿 §2）。原件在 `reference/agent-memory/dreaming-cookbook/`；架构图见 `docs/dreaming-architectures.md`；待议问题统一记在方向底稿 §5。
+精读 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》时的笔记，目标是把它移植成 Claude Code 插件（PO 11-07 定，见方向底稿 §2）。原件在 `references/dreaming-cookbook/`；架构图见 `docs/dreaming-architectures.md`；待议问题统一记在方向底稿 §5。
 
 进度：第 1、2 段已读（2026-11-07）。
 

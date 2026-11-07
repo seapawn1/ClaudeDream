@@ -28,7 +28,7 @@
 | 10-25 | #30「SeaPawn 文件夹当个人助手（类 Hermes）」不并入 #5，不需要了；专心把 Claude Dream 做好 |
 | 10-25 | v3.0 是 v2.0 之后的进一步重构 |
 | 10-25 | 先定架构，再定怎么做。不开系统的设计冲刺；第一个增量可能是原型，用一次聚焦的 IDEO 研究（打一个点）来做，细节再议（11-07：架构以 cookbook 为基线；IDEO 研究还做不做未定） |
-| 11-07 | 以 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》（`reference/agent-memory/dreaming-cookbook/`）为基线；以前的规则与它冲突处，以 cookbook 为准。PO 判断它很可能就是官方将来的机制（这是判断，未核实） |
+| 11-07 | 以 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》（`references/dreaming-cookbook/`）为基线；以前的规则与它冲突处，以 cookbook 为准。PO 判断它很可能就是官方将来的机制（这是判断，未核实） |
 | 11-07 | 审阅照 cookbook：默认不审，原地改，靠 git 回滚兜底 |
 | 11-07 | 原料照 cookbook：直接读 transcript |
 | 11-07 | 产品形态是 Claude Code 插件，和本仓库定位一致：照抄 cookbook 的设计和四个提示词，运行底座换成 Claude Code。PO 有 API，但不走 API 路线；以后可以另出一个 API 版，两版共用提示词 |
@@ -103,14 +103,14 @@
 ## 6. 下一步
 
 1. 接着精读 cookbook 第 3–7 段，每段按「能照抄 / 要换底座 / 我们要改」分类，读完即得移植清单（`docs/cookbook-port-notes.md`）。
-2. 同类项目调研（PO 11-07 提）：`reference/` 是旧一轮的调研，cookbook 之后有没有新的做梦方案、讲 dream 的文章，甚至有没有人已经把 cookbook 做成了 Claude Code 插件，让现在做变得多余。交 PO 新建的 Developer 会话。
+2. 同类项目调研（PO 11-07 提）：`references/` 是旧一轮的调研，cookbook 之后有没有新的做梦方案、讲 dream 的文章，甚至有没有人已经把 cookbook 做成了 Claude Code 插件，让现在做变得多余。交 PO 新建的 Developer 会话。
 3. 读完、调研回来后开 v3 第一次 Sprint Planning：先建最小 Product Backlog；Sprint Goal 由 PO 定（SM 的候选：把 cookbook 移植成 Claude Code 插件，对一个项目的 transcript 跑通一次做梦）。
 
 ## 参考
 
 - SeaPawn ProductBacklog #5：`S:\SeaPawn\Scrum\ProductBacklog.md`
 - 笔记：`S:\SeaPawn\Notes\agent-memory\`（auto-memory.md、auto-dream.md、claude-memory-compiler.md、hermes-vs-claude-code.md、claude-md-vs-memory.md）
-- 本仓库 `reference/`：外部方案原料；cookbook 原件在 `reference/agent-memory/dreaming-cookbook/`
+- 本仓库 `references/`：外部方案原料；cookbook 原件在 `references/dreaming-cookbook/`
 - `docs/cookbook-port-notes.md`：cookbook 精读笔记与移植清单
 - `docs/dreaming-architectures.md`：cookbook、auto-dream、v3 三种做法的架构图和对照表
 - 记忆 `product-rationale-distilled`：2026-08 的产品立论快照，用前复核

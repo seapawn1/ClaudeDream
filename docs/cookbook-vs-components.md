@@ -79,7 +79,7 @@ flowchart TD
 
 ## 参考
 
-- `reference/agent-memory/dreaming-cookbook/`：cookbook 原件、四个 prompt、11 份示例 transcript
-- `reference/agent-memory/components-of-agent-memory/`：文章快照、离线可读版、事实摘录
+- `references/dreaming-cookbook/`：cookbook 原件、四个 prompt、11 份示例 transcript
+- `references/components-of-agent-memory/`：文章快照、离线可读版、事实摘录
 - `docs/cookbook-port-notes.md`：cookbook 精读笔记与移植清单
 - `docs/dreaming-architectures.md`：cookbook、auto-dream、v3 三种做法对照

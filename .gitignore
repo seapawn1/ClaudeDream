@@ -9,7 +9,6 @@ node_modules/
 settings.local.json
 *.code-workspace
 .claude/worktrees/
-reference/**/.git/
-reference/.git/
+references/**/.git/
+references/.git/
 **/.git/
-reference/claude-code-log/
