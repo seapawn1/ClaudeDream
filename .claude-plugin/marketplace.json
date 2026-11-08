@@ -4,5 +4,11 @@
   "owner": {
     "name": "SeaPawn"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "claude-dream",
+      "source": "./plugins/claude-dream",
+      "description": "Let Claude Code dream: look back over past sessions and consolidate memory."
+    }
+  ]
 }
