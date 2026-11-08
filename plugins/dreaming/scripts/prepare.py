@@ -66,12 +66,15 @@ def _measure_files(paths):
     return n
 
 
-def independent_total(projects, only):
+def independent_total(projects, only, sessions=None):
     """Measured characters in every transcript file under the projects dir (the reconciliation input)."""
     files = []
     for pdir in glob.glob(os.path.join(projects, "*")):
         if os.path.isdir(pdir) and (not only or os.path.basename(pdir) in only):
-            files += glob.glob(os.path.join(pdir, "**", "*.jsonl"), recursive=True)
+            for f in glob.glob(os.path.join(pdir, "**", "*.jsonl"), recursive=True):
+                rel = os.path.relpath(f, pdir).split(os.sep)[0]
+                if not sessions or os.path.splitext(rel)[0] in sessions:
+                    files.append(f)
     return _measure_files(files), len(files)
 
 
@@ -79,7 +82,7 @@ def thread_name(meta):
     return meta.get("agentType") or meta.get("description") or "subagent"
 
 
-def scan(projects, only, reg_sessions, reg_dirs, ledger):
+def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None):
     """Pass 1: every session found, with its exclusion status and its uuid index."""
     found = []
     for pdir in sorted(glob.glob(os.path.join(projects, "*"))):
@@ -91,6 +94,8 @@ def scan(projects, only, reg_sessions, reg_dirs, ledger):
         test_dir = os.path.normcase(os.path.normpath(pdir)) in reg_dirs
         for m in sorted(glob.glob(os.path.join(pdir, "*.jsonl"))):
             sid = os.path.splitext(os.path.basename(m))[0]
+            if sessions and sid not in sessions:
+                continue
             e = {"id": sid, "path": m, "project_dir": name}
             subs = tx.subagent_files(m)
             if test_dir:
@@ -215,11 +220,11 @@ def check(entries, budget):
     return problems
 
 
-def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS):
+def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, sessions=None):
     projects = common.resolve_projects_dir(projects_dir)
     reg_sessions, reg_dirs = load_registry()
     ledger = collections.Counter()
-    found = scan(projects, only, reg_sessions, reg_dirs, ledger)
+    found = scan(projects, only, reg_sessions, reg_dirs, ledger, sessions)
     live = [e for e in found if "_index" in e]
     owners = sg.owner_map([(e["id"], e.get("created"), e["_index"]) for e in live])
     entries = []
@@ -243,7 +248,7 @@ def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS):
     for e in entries:
         stats.update(e.get("stats") or {})
     conv = [e for e in entries if e["status"] == "converted"]
-    total_in, n_files = independent_total(projects, only)
+    total_in, n_files = independent_total(projects, only, sessions)
     booked = sum(ledger.values())
     if total_in != booked:
         problems.append(f"reconciliation: {total_in} characters in the files, {booked} booked")
@@ -276,9 +281,11 @@ def main(argv):
     ap.add_argument("workdir")
     ap.add_argument("--projects-dir", default=None)
     ap.add_argument("--project", action="append", default=None, help="only this project dir (repeatable)")
+    ap.add_argument("--session", action="append", default=None, help="only this session id (repeatable)")
     ap.add_argument("--segment-chars", type=int, default=SEGMENT_CHARS)
     a = ap.parse_args(argv)
-    m = prepare(a.workdir, a.projects_dir, set(a.project) if a.project else None, a.segment_chars)
+    m = prepare(a.workdir, a.projects_dir, set(a.project) if a.project else None, a.segment_chars,
+                set(a.session) if a.session else None)
     print(f"projects_dir: {m['projects_dir']}")
     print(f"sessions found: {m['sessions_found']}  {m['counts']}")
     for k, v in sorted(m["reasons"].items()):
