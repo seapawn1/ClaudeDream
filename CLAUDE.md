@@ -8,7 +8,7 @@
 
 ## 当前阶段
 
-**以官方 cookbook 为基线，精读并整理移植清单**（2026-10-14 推倒重来；2026-11-07 PO 定以 Anthropic cookbook《Dreaming with a dynamic workflow》为架构基线，做成 Claude Code 插件）：旧插件代码、设计冲刺与 Sprint-1~3 档案、ProductBacklog 已全部删除；新版本起点是 tag `v3.0`，旧版终态是它的上一个提交（`v3.0^`）。愿景保留。PO 已定的方向、已核实的事实和待议问题见 `docs/claude-dream-v3-direction-and-open-questions.md`；cookbook 精读笔记与移植清单见 `docs/cookbook-port-notes.md`。下一步：读完 cookbook 余下各段；同类项目调研（看有没有人已做完同样的东西）交 Developer 会话；之后开 v3 第一次 Sprint Planning，先建 Product Backlog。旧档案、旧规格、旧 DoD 不作为前提或约束；Sprint 编号从头开始。
+**Scrum 已建，下一步 Sprint 01 Planning**（2026-10-14 推倒重来；2026-11-07 PO 定以 Anthropic cookbook《Dreaming with a dynamic workflow》为基线，做成 Claude Code 插件；2026-11-08 建产品日志）：产品、Product Goal、DoD 与 PBI 见 `scrum/ProductBacklog.md`，竞品摘要见 `scrum/documents/competitor-scan-2026-11-07.md`。新版本起点是 tag `v3.0`，旧版终态是它的上一个提交（`v3.0^`）。讨论底稿：`docs/claude-dream-v3-direction-and-open-questions.md`（PO 已定的方向、已核实的事实）、`docs/cookbook-port-notes.md`（cookbook 精读与移植清单）。旧档案、旧规格、旧 DoD 不作为前提或约束；Sprint 编号从头开始。
 
 ## 目录约定
 

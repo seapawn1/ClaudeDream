@@ -102,6 +102,8 @@
 
 ## 6. 下一步
 
+**2026-11-08 起，待办和下一步以产品日志 `scrum/ProductBacklog.md` 为准**；§5 各条已分进其中的 PBI 或边界。下面是 11-07 的原计划，留作记录。
+
 1. 接着精读 cookbook 第 3–7 段，每段按「能照抄 / 要换底座 / 我们要改」分类，读完即得移植清单（`docs/cookbook-port-notes.md`）。
 2. 同类项目调研（PO 11-07 提）：`references/` 是旧一轮的调研，cookbook 之后有没有新的做梦方案、讲 dream 的文章，甚至有没有人已经把 cookbook 做成了 Claude Code 插件，让现在做变得多余。交 PO 新建的 Developer 会话。
 3. 读完、调研回来后开 v3 第一次 Sprint Planning：先建最小 Product Backlog；Sprint Goal 由 PO 定（SM 的候选：把 cookbook 移植成 Claude Code 插件，对一个项目的 transcript 跑通一次做梦）。
