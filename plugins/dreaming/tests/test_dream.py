@@ -101,5 +101,67 @@ class Journal(unittest.TestCase):
         self.assertFalse(dream.hook_evidence(old[:1], "W", n, ids)["ok"])
 
 
+class Continue(unittest.TestCase):
+    def setUp(self):
+        import time
+        self.tmp = tempfile.mkdtemp()
+        home = os.path.join(self.tmp, "home")
+        self.runs = os.path.join(home, "runs")
+        self.patches = [mock.patch.object(common, "DREAM_HOME", home),
+                        mock.patch.object(common, "RUNS_DIR", self.runs),
+                        mock.patch.object(common, "ACTIVE_DIR", os.path.join(home, "active")),
+                        mock.patch.object(common, "REGISTRY", os.path.join(home, "registry.jsonl")),
+                        mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self.tmp})]
+        for pt in self.patches:
+            pt.start()
+        self.work = os.path.join(self.runs, "dream-1")
+        parts = []
+        for i in ("a", "b"):
+            path = os.path.join(self.work, "transcripts", "P", f"{i}.p001.txt")
+            write(path, "SESSION x\n")
+            parts.append({"id": f"{i}.p001", "path": path})
+        self.run = {"run_id": "dream-1", "session_id": "s1", "sandbox": True, "started_at": time.time() - 100,
+                    "workdir": self.work, "groups": [{"key": "G", "memory_dir": "M", "base": "B", "stage": "S", "parts": parts}]}
+        write(os.path.join(self.work, "run.json"), json.dumps(self.run))
+        self.journal("s1", [("analyze a.p001", {"summary": "x"}), ("analyze b.p001", None)])
+        common.activate("s1", self.work, [self.work], "R")
+
+    def tearDown(self):
+        for pt in self.patches:
+            pt.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def journal(self, sid, items):
+        lines = []
+        for n, (label, result) in enumerate(items):
+            lines += [{"type": "started", "key": f"{sid}{n}", "label": label}, {"type": "result", "key": f"{sid}{n}", "result": result}]
+        write(os.path.join(self.tmp, "projects", "P", sid, "subagents", "workflows", "wf_1", "journal.jsonl"),
+              "\n".join(json.dumps(x) for x in lines) + "\n")
+
+    def test_only_unfinished_work_is_planned_and_sessions_are_merged(self):
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 0)
+        with open(os.path.join(self.work, "dream-run.js"), encoding="utf-8") as f:
+            script = f.read()
+        self.assertIn("b.p001", script)
+        self.assertNotIn("a.p001", script)
+        run = json.load(open(os.path.join(self.work, "run.json"), encoding="utf-8"))
+        self.assertEqual([s["session_id"] for s in run["sessions"]], ["s1", "s2"])
+        self.assertIsNone(common.active_state("s1"))  # the run moved to s2
+        self.assertEqual(common.active_state("s2")["workdir"], self.work)
+        self.journal("s2", [("analyze b.p001", {"summary": "y"}), ("organize G", {"index_entries": 1, "changes": []})])
+        r = dream.run_results(run)
+        self.assertEqual((r["analyze a.p001"], r["analyze b.p001"]), ({"summary": "x"}, {"summary": "y"}))
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 0)  # nothing left: straight to finish
+        run = json.load(open(os.path.join(self.work, "run.json"), encoding="utf-8"))
+        self.assertEqual(len(run["sessions"]), 2)  # the same session is not added twice
+
+    def test_refuses_finished_runs_and_missing_transcripts(self):
+        os.remove(self.run["groups"][0]["parts"][1]["path"])
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 1)
+        write(os.path.join(self.work, "run-report.json"), "{}")
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 2)
+        self.assertEqual(dream.main(["start", "s2", "--continue", "nope"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

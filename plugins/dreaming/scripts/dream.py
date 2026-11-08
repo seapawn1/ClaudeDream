@@ -1,13 +1,16 @@
 """ClaudeDream entry script, run by the lead of /dreaming:dream and by /dreaming:restore.
 
-  python dream.py start   <session_id> [--projects-dir PATH] [--project DIR]... [--session ID]... [--sandbox]
+  python dream.py start   <session_id> [--projects-dir PATH] [--project DIR]... [--skip-project TEXT]... [--session ID]... [--sandbox]
+  python dream.py start   <session_id> --continue RUN_ID
   python dream.py finish  <session_id>
   python dream.py restore <session_id> [--run RUN_ID] [--force]
   python dream.py plan    <session_id> [--projects-dir PATH]
 
 start: prepare the transcripts (prepare.py); per target memory directory keep a starting copy
 (base) and a working copy (stage); generate the workflow script with every part in it; turn the
-guard on.
+guard on. With --continue, pick up an unfinished run, in the same session or a new one: only the
+parts and directories that have no result yet go into the new workflow; the work dir, the staged
+copies and the rendered transcripts are the run's own.
 finish: check each directory before anything touches the real memory -- every part analyzed and
 the directory organized (from the workflow's own journal), native format of every file the run
 added or changed, MEMORY.md within 200 lines and 25KB, every file that existed at the start still
@@ -55,8 +58,101 @@ def plan_cmd(a):
     return 0
 
 
+def write_workflow(workdir, groups):
+    with open(os.path.join(HERE, "dream_workflow.tmpl.js"), encoding="utf-8") as f:
+        tmpl = f.read()
+    wf_plan = {"groups": [{"key": g["key"], "stage": g["stage"], "parts": g["parts"]} for g in groups]}
+    wf_path = os.path.join(workdir, "dream-run.js")
+    with open(wf_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(tmpl.replace("__PLAN__", json.dumps(wf_plan, ensure_ascii=False)))
+    return wf_path
+
+
+def run_sessions(run):
+    """The sessions a run has worked in, each with the time it started there."""
+    return run.get("sessions") or [{"session_id": run["session_id"], "started_at": run.get("started_at")}]
+
+
+def run_results(run):
+    """Agent results from every session of the run, one per label; a result beats a failure."""
+    out = {}
+    for s in run_sessions(run):
+        for lab, r in journal_results(s["session_id"], s["started_at"]).items():
+            if r is not None or lab not in out:
+                out[lab] = r
+    return out
+
+
+def run_activity(run):
+    per, ids = collections.defaultdict(lambda: {"calls": 0, "errors": []}), set()
+    for s in run_sessions(run):
+        p, _, i = agent_activity(s["session_id"], s["started_at"])
+        for name, v in p.items():
+            per[name]["calls"] += v["calls"]
+            per[name]["errors"] += v["errors"]
+        ids |= i
+    return dict(per), len(ids), ids
+
+
+def continue_cmd(a, started):
+    path = os.path.join(common.RUNS_DIR, a.continue_run, "run.json")
+    if not a.continue_run.startswith("dream-") or not os.path.exists(path):
+        print(f"no dream run named {a.continue_run}")
+        return 2
+    with open(path, encoding="utf-8") as f:
+        run = json.load(f)
+    workdir = run["workdir"]
+    if os.path.exists(os.path.join(workdir, "run-report.json")):
+        print(f"run {run['run_id']} is already finished; start a new run instead")
+        return 2
+    results = run_results(run)
+    todo, done_parts, total_parts = [], 0, 0
+    for g in run["groups"]:
+        left = [p for p in g["parts"] if not results.get(f"analyze {p['id']}")]
+        total_parts += len(g["parts"])
+        done_parts += len(g["parts"]) - len(left)
+        if left or not results.get(f"organize {g['key']}"):
+            gone = [p["id"] for p in left if not os.path.exists(p["path"])]
+            if gone:
+                print(f"the rendered transcripts of this run are gone ({len(gone)} parts, e.g. {gone[0]}); "
+                      f"start a new run instead")
+                return 1
+            todo.append({"key": g["key"], "stage": g["stage"], "parts": left})
+    sessions = run_sessions(run)
+    for s in sessions:  # the run moves to this session: its guard elsewhere goes off
+        st = common.active_state(s["session_id"])
+        if s["session_id"] != a.session_id and st and os.path.normcase(st["workdir"]) == os.path.normcase(workdir):
+            common.deactivate(s["session_id"])
+    old = common.active_state(a.session_id)
+    if old and os.path.normcase(old["workdir"]) != os.path.normcase(workdir):
+        print(f"note: an unfinished run in this session is abandoned, nothing of it written back: {old['workdir']}")
+        shutil.rmtree(os.path.join(old["workdir"], "transcripts"), ignore_errors=True)
+    if all(s["session_id"] != a.session_id for s in sessions):
+        sessions.append({"session_id": a.session_id, "started_at": started})
+        common.register({"kind": "dream-continue", "run_id": run["run_id"], "session_id": a.session_id,
+                         "workdir": workdir})
+    run.update(sessions=sessions, session_id=a.session_id)
+    wb.save(path, run)
+    print(f"run: {run['run_id']} (continued)\nworkdir: {workdir}\n"
+          f"mode: {'sandbox (nothing is written back)' if run['sandbox'] else 'write back'}")
+    print(f"parts analyzed before: {done_parts}/{total_parts}; left: {total_parts - done_parts}; "
+          f"memory dirs still to organize: {len(todo)}")
+    if not todo:
+        print("NOTHING_TO_RUN: every part is analyzed and every directory organized; go straight to finish")
+        common.activate(a.session_id, workdir, [workdir], PLUGIN_ROOT)
+        return 0
+    wf_path = write_workflow(workdir, todo)
+    common.activate(a.session_id, workdir, [workdir], PLUGIN_ROOT)
+    for g in todo:
+        print(f"  {len(g['parts']):4d} parts left -> {g['key']}")
+    print(f"WORKFLOW_SCRIPT: {fwd(wf_path)}")
+    return 0
+
+
 def start_cmd(a):
     started = time.time()
+    if a.continue_run:
+        return continue_cmd(a, started)
     old = common.active_state(a.session_id)
     if old:
         print(f"note: an unfinished run in this session is abandoned, nothing of it written back: {old['workdir']}")
@@ -97,13 +193,7 @@ def start_cmd(a):
     run = {"run_id": run_id, "session_id": a.session_id, "sandbox": bool(a.sandbox),
            "started_at": started, "workdir": workdir, "groups": plan}
     wb.save(os.path.join(workdir, "run.json"), run)
-    with open(os.path.join(HERE, "dream_workflow.tmpl.js"), encoding="utf-8") as f:
-        tmpl = f.read()
-    wf_plan = {"groups": [{"key": g["key"], "stage": g["stage"], "parts": g["parts"]} for g in plan]}
-    script = tmpl.replace("__PLAN__", json.dumps(wf_plan, ensure_ascii=False))
-    wf_path = os.path.join(workdir, "dream-run.js")
-    with open(wf_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(script)
+    wf_path = write_workflow(workdir, plan)
     common.activate(a.session_id, workdir, [workdir], PLUGIN_ROOT)
     print(f"memory dirs: {len(plan)}")
     for g in plan:
@@ -273,10 +363,9 @@ def finish_cmd(a):
     with open(os.path.join(workdir, "run.json"), encoding="utf-8") as f:
         run = json.load(f)
     common.deactivate(a.session_id)  # the guard is off before anything is written back
-    since = run.get("started_at")
-    results = journal_results(a.session_id, since)
+    results = run_results(run)
     log = load_hooklog(workdir)
-    attempts, transcript_writes, executed = agent_activity(a.session_id, since)
+    attempts, transcript_writes, executed = run_activity(run)
     hooks = hook_evidence(log, workdir, transcript_writes, executed)
     report = {"run_id": run["run_id"], "sandbox": run["sandbox"], "hook_log": hooks, "groups": []}
     for g in run["groups"]:
@@ -371,6 +460,8 @@ def main(argv):
     ap.add_argument("--sandbox", action="store_true", help="do not write the results back to the memory dirs")
     ap.add_argument("--run", default=None, help="restore: which run (default: the latest written-back run)")
     ap.add_argument("--force", action="store_true", help="restore: overwrite files changed after write-back")
+    ap.add_argument("--continue", dest="continue_run", default=None,
+                    help="start: pick up this unfinished run (same session or a new one); parts already analyzed are not redone")
     a = ap.parse_args(argv)
     return {"plan": plan_cmd, "start": start_cmd, "finish": finish_cmd, "restore": restore_cmd}[a.command](a)
 
