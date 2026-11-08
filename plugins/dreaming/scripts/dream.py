@@ -24,6 +24,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
@@ -55,6 +56,10 @@ def plan_cmd(a):
 
 
 def start_cmd(a):
+    started = time.time()
+    old = common.active_state(a.session_id)
+    if old:
+        print(f"note: an unfinished run in this session is abandoned, nothing of it written back: {old['workdir']}")
     run_id, workdir = common.new_run("dream", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
                      prep.SEGMENT_CHARS, set(a.session) if a.session else None)
@@ -89,7 +94,7 @@ def start_cmd(a):
         plan.append({"key": key, "memory_dir": mem, "base": fwd(base), "stage": fwd(stage),
                      "parts": [{"id": p["id"], "path": p["path"]} for p in g["parts"]]})
     run = {"run_id": run_id, "session_id": a.session_id, "sandbox": bool(a.sandbox),
-           "workdir": workdir, "groups": plan}
+           "started_at": started, "workdir": workdir, "groups": plan}
     wb.save(os.path.join(workdir, "run.json"), run)
     with open(os.path.join(HERE, "dream_workflow.tmpl.js"), encoding="utf-8") as f:
         tmpl = f.read()
@@ -106,11 +111,26 @@ def start_cmd(a):
     return 0
 
 
-def journal_results(session_id):
-    """Every agent result the workflow runs of this session recorded: {label: result or None}."""
+def workflow_dirs(session_id, since=None):
+    """The workflow run dirs of a session; with `since` (epoch seconds), only runs launched after it,
+    so a check and a dream run one after the other in one session do not read each other's agents."""
+    out = []
+    for d in glob.glob(os.path.join(common.config_dir(), "projects", "*", session_id, "subagents", "workflows", "*")):
+        if not os.path.isdir(d):
+            continue
+        if since is not None:
+            times = [os.path.getmtime(os.path.join(d, n)) for n in os.listdir(d)]
+            if not times or min(times) < since - 1:
+                continue
+        out.append(d)
+    return out
+
+
+def journal_results(session_id, since=None):
+    """Every agent result the session's workflow runs recorded: {label: result or None}."""
     out = {}
-    pattern = os.path.join(common.config_dir(), "projects", "*", session_id, "subagents", "workflows", "*", "journal.jsonl")
-    for j in sorted(glob.glob(pattern), key=os.path.getmtime):
+    journals = [os.path.join(d, "journal.jsonl") for d in workflow_dirs(session_id, since)]
+    for j in sorted((j for j in journals if os.path.exists(j)), key=os.path.getmtime):
         labels = {}
         with open(j, encoding="utf-8") as f:
             for line in f:
@@ -130,12 +150,12 @@ def journal_results(session_id):
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 
-def agent_activity(session_id):
+def agent_activity(session_id, since=None):
     """What the run's agents actually did, from their own transcripts: per file name, the write
     calls and the errors they got back; plus the total number of write calls."""
     per_file, total = collections.defaultdict(lambda: {"calls": 0, "errors": []}), 0
-    pattern = os.path.join(common.config_dir(), "projects", "*", session_id, "subagents", "workflows", "*", "agent-*.jsonl")
-    for path in glob.glob(pattern):
+    paths = [p for d in workflow_dirs(session_id, since) for p in glob.glob(os.path.join(d, "agent-*.jsonl"))]
+    for path in paths:
         calls = {}
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -235,9 +255,10 @@ def finish_cmd(a):
     with open(os.path.join(workdir, "run.json"), encoding="utf-8") as f:
         run = json.load(f)
     common.deactivate(a.session_id)  # the guard is off before anything is written back
-    results = journal_results(a.session_id)
+    since = run.get("started_at")
+    results = journal_results(a.session_id, since)
     log = load_hooklog(workdir)
-    attempts, transcript_writes = agent_activity(a.session_id)
+    attempts, transcript_writes = agent_activity(a.session_id, since)
     hooks = hook_evidence(log, workdir, transcript_writes)
     report = {"run_id": run["run_id"], "sandbox": run["sandbox"], "hook_log": hooks, "groups": []}
     for g in run["groups"]:
@@ -260,6 +281,7 @@ def finish_cmd(a):
     wb.save(os.path.join(workdir, "run.json"), run)
     report["complete"] = all(c["passed"] and (run["sandbox"] or c["written_back"]) for c in report["groups"])
     wb.save(os.path.join(workdir, "run-report.json"), report)
+    shutil.rmtree(os.path.join(workdir, "transcripts"), ignore_errors=True)  # rendered copies may hold secrets
     print(f"run {run['run_id']}: {'all checks passed' if report['complete'] else 'SOME CHECKS FAILED'}"
           f"{' (sandbox: nothing written back)' if run['sandbox'] else ''}")
     print(f"hook log: {hooks['calls']} calls, lead ran only plugin scripts={hooks['lead_ran_only_plugin_scripts']}, "

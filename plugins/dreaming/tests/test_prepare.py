@@ -156,6 +156,30 @@ def ev(kind, body, uid):
     return e
 
 
+class LiveFile(unittest.TestCase):
+    def test_a_growing_file_reads_the_same_until_reset(self):
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "s.jsonl")
+            with open(p, "wb") as f:
+                f.write(b'{"a": 1}\n{"a": 2}\n{"a": 3, "half')  # the writer is mid-record
+            tx.reset_reads()
+            first, bad = tx.read_records(p)
+            self.assertEqual(([r["a"] for r in first], bad), ([1, 2], 0))
+            with open(p, "ab") as f:
+                f.write(b'": 0}\n{"a": 4}\n')
+            self.assertEqual(tx.read_records(p)[0], first)  # a later read in the same run
+            tx.reset_reads()
+            self.assertEqual([r["a"] for r in tx.read_records(p)[0]], [1, 2, 3, 4])
+            with open(p, "ab") as f:
+                f.write(b'{"a": 5}')  # complete last record with no newline
+            tx.reset_reads()
+            self.assertEqual(len(tx.read_records(p)[0]), 5)
+        finally:
+            tx.reset_reads()
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class Pack(unittest.TestCase):
     def test_boundary_size_and_carried_summary(self):
         evs = [ev("user", "a" * 50, 0), ev("agent", "b" * 50, 1),

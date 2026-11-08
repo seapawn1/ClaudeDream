@@ -66,8 +66,8 @@ def _measure_files(paths):
     return n
 
 
-def independent_total(projects, only, sessions=None):
-    """Measured characters in every transcript file under the projects dir (the reconciliation input)."""
+def transcript_files(projects, only, sessions=None):
+    """Every transcript file under the projects dir, listed once when a run starts."""
     files = []
     for pdir in glob.glob(os.path.join(projects, "*")):
         if os.path.isdir(pdir) and (not only or os.path.basename(pdir) in only):
@@ -75,7 +75,7 @@ def independent_total(projects, only, sessions=None):
                 rel = os.path.relpath(f, pdir).split(os.sep)[0]
                 if not sessions or os.path.splitext(rel)[0] in sessions:
                     files.append(f)
-    return _measure_files(files), len(files)
+    return files
 
 
 def thread_name(meta):
@@ -93,6 +93,8 @@ def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None):
             continue
         test_dir = os.path.normcase(os.path.normpath(pdir)) in reg_dirs
         for m in sorted(glob.glob(os.path.join(pdir, "*.jsonl"))):
+            if not tx.listed(m):
+                continue  # created after the run started
             sid = os.path.splitext(os.path.basename(m))[0]
             if sessions and sid not in sessions:
                 continue
@@ -222,6 +224,8 @@ def check(entries, budget):
 
 def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, sessions=None):
     projects = common.resolve_projects_dir(projects_dir)
+    files = transcript_files(projects, only, sessions)
+    tx.reset_reads(files)
     reg_sessions, reg_dirs = load_registry()
     ledger = collections.Counter()
     found = scan(projects, only, reg_sessions, reg_dirs, ledger, sessions)
@@ -248,7 +252,7 @@ def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, session
     for e in entries:
         stats.update(e.get("stats") or {})
     conv = [e for e in entries if e["status"] == "converted"]
-    total_in, n_files = independent_total(projects, only, sessions)
+    total_in, n_files = _measure_files(files), len(files)  # independent of how scan grouped the files
     booked = sum(ledger.values())
     if total_in != booked:
         problems.append(f"reconciliation: {total_in} characters in the files, {booked} booked")

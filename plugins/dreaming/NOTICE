@@ -10,6 +10,8 @@ MIT License below:
 - scripts/dream_workflow.tmpl.js and skills/dream/SKILL.md carry the rules of
   prompts/work_request.md and prompts/lead_system.md
 - scripts/transcripts.py renders transcripts in the cookbook's plain-text export format
+- agents/checker.md (the health check) adapts the organizer prompt's rules for stale facts and
+  conflicts
 
 Changes from the originals: file paths; the memory format follows Claude Code's native auto
 memory (frontmatter `name`, `description`, `metadata.type`; MEMORY.md lines

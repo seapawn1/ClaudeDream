@@ -32,17 +32,51 @@ LABEL_RE = re.compile(
 REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>\s*", re.S)
 
 
+_READ_UPTO = {}
+_LISTED = None
+
+
+def reset_reads(listing=None):
+    """Start a run: forget earlier reads; with `listing`, the files listed when the run started are
+    the only ones it sees, so files created while it runs (new sessions, new subagents) wait for the
+    next run instead of being half counted."""
+    global _LISTED
+    _READ_UPTO.clear()
+    _LISTED = None if listing is None else {os.path.normcase(os.path.abspath(p)) for p in listing}
+
+
+def listed(path):
+    return _LISTED is None or os.path.normcase(os.path.abspath(path)) in _LISTED
+
+
 def read_records(path):
-    records, bad = [], 0
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
+    """The records of a jsonl transcript. A live session's file grows while it is read, and a run
+    reads each file more than once (scan, convert, the reconciliation total): the first read stops
+    at the end of the last complete line, and every later read until reset_reads() stops there too,
+    so all of them see the same records."""
+    key = os.path.normcase(os.path.abspath(path))
+    with open(path, "rb") as fh:
+        data = fh.read(_READ_UPTO[key]) if key in _READ_UPTO else fh.read()
+    if key not in _READ_UPTO:
+        cut = data.rfind(b"\n") + 1
+        tail = data[cut:].strip()
+        if tail:
             try:
-                records.append(json.loads(line))
+                json.loads(tail.decode("utf-8", errors="replace"))
+                cut = len(data)  # a complete last record without a newline
             except ValueError:
-                bad += 1
+                pass  # a record still being written: left for the next run
+        data = data[:cut]
+        _READ_UPTO[key] = cut
+    records, bad = [], 0
+    for line in data.split(b"\n"):
+        line = line.decode("utf-8", errors="replace").strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            bad += 1
     return records, bad
 
 
@@ -286,7 +320,7 @@ def events(records, stats, ledger=None):
 def subagent_files(main_path):
     """Sub-thread transcripts of a session: <session>/subagents/**/agent-*.jsonl, oldest first."""
     base = main_path[:-len(".jsonl")]
-    files = glob.glob(os.path.join(base, "subagents", "**", "*.jsonl"), recursive=True)
+    files = [f for f in glob.glob(os.path.join(base, "subagents", "**", "*.jsonl"), recursive=True) if listed(f)]
     return sorted(files, key=os.path.getmtime)
 
 
