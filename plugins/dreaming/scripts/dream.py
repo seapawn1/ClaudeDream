@@ -73,14 +73,62 @@ def run_sessions(run):
     return run.get("sessions") or [{"session_id": run["session_id"], "started_at": run.get("started_at")}]
 
 
-def run_results(run):
-    """Agent results from every session of the run, one per label; a result beats a failure."""
+def journal_runs(session_id, since=None):
+    """Each workflow run of a session: (when it started, {label: result, or None while it has none}).
+    Every label that started is there, so a part that was started again in a later run shows up."""
+    runs = []
+    for d in workflow_dirs(session_id, since):
+        j = os.path.join(d, "journal.jsonl")
+        if not os.path.exists(j):
+            continue
+        labels, out = {}, {}
+        with open(j, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("type") == "started":
+                    labels[r.get("key")] = r.get("label")
+                    out.setdefault(r.get("label"), None)
+                elif r.get("type") == "result" and labels.get(r.get("key")) and r.get("result") is not None:
+                    out[labels[r["key"]]] = r["result"]
+        runs.append((min(os.path.getmtime(os.path.join(d, n)) for n in os.listdir(d)), out))
+    return runs
+
+
+def run_journal(run):
+    """The workflow runs of every session of the run, oldest first."""
+    return sorted((x for s in run_sessions(run) for x in journal_runs(s["session_id"], s["started_at"])),
+                  key=lambda x: x[0])
+
+
+def run_results(run, runs=None):
+    """One result per label over all the runs: the latest result; None if it never got one."""
     out = {}
-    for s in run_sessions(run):
-        for lab, r in journal_results(s["session_id"], s["started_at"]).items():
+    for _, labels in runs if runs is not None else run_journal(run):
+        for lab, r in labels.items():
             if r is not None or lab not in out:
                 out[lab] = r
     return out
+
+
+def organized(g, runs):
+    """A directory counts as organized only if an organizer finished in a workflow run no earlier than
+    the last run that analyzed any of its parts: parts analyzed again need organizing again."""
+    ids = {f"analyze {p['id']}" for p in g["parts"]}
+    last = max((i for i, (_, labels) in enumerate(runs) if ids & set(labels)), default=-1)
+    return any(labels.get(f"organize {g['key']}") for i, (_, labels) in enumerate(runs) if i >= last)
+
+
+def last_activity(run):
+    """The latest write time in the run's workflow dirs or its hook log, or None."""
+    times = [os.path.getmtime(os.path.join(d, n)) for s in run_sessions(run)
+             for d in workflow_dirs(s["session_id"], s["started_at"]) for n in os.listdir(d)]
+    log = os.path.join(run["workdir"], "hooklog.jsonl")
+    if os.path.exists(log):
+        times.append(os.path.getmtime(log))
+    return max(times) if times else None
 
 
 def run_activity(run):
@@ -94,6 +142,9 @@ def run_activity(run):
     return dict(per), len(ids), ids
 
 
+BUSY_SECONDS = 300
+
+
 def continue_cmd(a, started):
     path = os.path.join(common.RUNS_DIR, a.continue_run, "run.json")
     if not a.continue_run.startswith("dream-") or not os.path.exists(path):
@@ -105,13 +156,20 @@ def continue_cmd(a, started):
     if os.path.exists(os.path.join(workdir, "run-report.json")):
         print(f"run {run['run_id']} is already finished; start a new run instead")
         return 2
-    results = run_results(run)
+    busy = last_activity(run)
+    if busy and time.time() - busy < BUSY_SECONDS:
+        print(f"run {run['run_id']} wrote something {int(time.time() - busy)} s ago, so its workflow may still be "
+              f"running in session {run['session_id']}: stop it there (or wait until nothing has happened for "
+              f"{BUSY_SECONDS // 60} minutes), then continue")
+        return 2
+    runs = run_journal(run)
+    results = run_results(run, runs)
     todo, done_parts, total_parts = [], 0, 0
     for g in run["groups"]:
         left = [p for p in g["parts"] if not results.get(f"analyze {p['id']}")]
         total_parts += len(g["parts"])
         done_parts += len(g["parts"]) - len(left)
-        if left or not results.get(f"organize {g['key']}"):
+        if left or not organized(g, runs):
             gone = [p["id"] for p in left if not os.path.exists(p["path"])]
             if gone:
                 print(f"the rendered transcripts of this run are gone ({len(gone)} parts, e.g. {gone[0]}); "
@@ -159,7 +217,7 @@ def start_cmd(a):
         shutil.rmtree(os.path.join(old["workdir"], "transcripts"), ignore_errors=True)  # may hold secrets
     run_id, workdir = common.new_run("dream", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
-                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project)
+                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project, a.skip_session)
     print(f"run: {run_id}\nworkdir: {workdir}\nmode: {'sandbox (nothing is written back)' if a.sandbox else 'write back'}")
     print(f"sessions found: {m['sessions_found']} {m['counts']}; parts: {m['parts']}")
     if not m["checks"]["passed"]:
@@ -317,9 +375,9 @@ def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
     }
 
 
-def check_group(g, results, attempts):
+def check_group(g, results, attempts, is_organized=True):
     missing = [p["id"] for p in g["parts"] if not results.get(f"analyze {p['id']}")]
-    org = results.get(f"organize {g['key']}")
+    org = results.get(f"organize {g['key']}") if is_organized else None
     diff = wb.compare(g["base"], g["stage"])
     fmt = memcheck.check_dir(g["stage"])
     touched = set(diff["added"]) | set(diff["modified"])
@@ -363,13 +421,14 @@ def finish_cmd(a):
     with open(os.path.join(workdir, "run.json"), encoding="utf-8") as f:
         run = json.load(f)
     common.deactivate(a.session_id)  # the guard is off before anything is written back
-    results = run_results(run)
+    runs = run_journal(run)
+    results = run_results(run, runs)
     log = load_hooklog(workdir)
     attempts, transcript_writes, executed = run_activity(run)
     hooks = hook_evidence(log, workdir, transcript_writes, executed)
     report = {"run_id": run["run_id"], "sandbox": run["sandbox"], "hook_log": hooks, "groups": []}
     for g in run["groups"]:
-        c = check_group(g, results, attempts)
+        c = check_group(g, results, attempts, organized(g, runs))
         if not hooks["ok"]:
             c["problems"].append("the hook log shows a shell, network or out-of-bounds write that was not blocked, "
                                  "or it missed write calls the agents' transcripts show")
@@ -457,6 +516,8 @@ def main(argv):
     ap.add_argument("--session", action="append", default=None)
     ap.add_argument("--skip-project", action="append", default=None,
                     help="skip every project dir whose name contains this text (repeatable)")
+    ap.add_argument("--skip-session", action="append", default=None,
+                    help="skip the session whose id starts with this text (repeatable)")
     ap.add_argument("--sandbox", action="store_true", help="do not write the results back to the memory dirs")
     ap.add_argument("--run", default=None, help="restore: which run (default: the latest written-back run)")
     ap.add_argument("--force", action="store_true", help="restore: overwrite files changed after write-back")

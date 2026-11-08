@@ -3,7 +3,7 @@ name: dream
 description: ClaudeDream - look back over past Claude Code sessions and consolidate memory. Run only when the user asks for it.
 disable-model-invocation: true
 model: sonnet
-argument-hint: "[--projects-dir <path>] [--project <dir>]... [--skip-project <text>]... [--session <id>]... [--sandbox] | --continue <run-id>"
+argument-hint: "[--projects-dir <path>] [--project <dir>]... [--skip-project <text>]... [--skip-session <id>]... [--session <id>]... [--sandbox] | --continue <run-id>"
 allowed-tools:
   - Bash(python *)
   - PowerShell(python *)

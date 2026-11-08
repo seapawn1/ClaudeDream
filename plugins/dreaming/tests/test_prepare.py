@@ -154,6 +154,13 @@ class Prepare(unittest.TestCase):
         self.assertEqual(len(skipped), 6)  # every session of C--nowhere-proj, matched case-insensitively
         self.assertEqual(m["parts"], 0)
 
+    def test_skip_session_by_id_prefix(self):
+        m = prepare.prepare(os.path.join(self.tmp, "work3"), self.projects, skip_sessions=["fo"])
+        self.assertTrue(m["ledger"]["reconciled"], m["ledger"])
+        by_id = {e["id"]: e for e in m["sessions"]}
+        self.assertEqual(by_id["fork"]["reason"], "session skipped by --skip-session fo")
+        self.assertEqual(by_id["s1"]["status"], "converted")
+
 
 def ev(kind, body, uid):
     e = {"kind": kind, "label": {"user": "USER:", "compact_boundary": "EVENT compact_boundary: {}",

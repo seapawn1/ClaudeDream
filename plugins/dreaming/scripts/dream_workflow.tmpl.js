@@ -22,7 +22,10 @@ const ORGANIZED = {
 }
 
 function analyzeTask(part, dir) {
-  return `Please read the transcript at ${part.path} and add the durable, verified facts it shows to the long-term memory directory at ${dir}. Other analyzers are working on other transcripts into the same directory at the same time, so check what is already there before writing and add to or update existing files rather than overwrite them. Write only inside that directory, and do not modify the transcript. When done, submit a short summary of what you added.`
+  return `Please read the transcript at ${part.path} and add the durable, verified facts it shows to the long-term memory directory at ${dir}. Other analyzers are working on other transcripts into the same directory at the same time, so check what is already there before writing and add to or update existing files rather than overwrite them. Write only inside that directory, and do not modify the transcript. When done, submit a short summary of what you added.` +
+    // Added by ClaudeDream (not in the cookbook): the transcript files are deleted after the run, and
+    // today is the day of the dream, not the day things happened.
+    ` When you note where a fact came from, name the session by its title and its dates, from the SESSION and NOTE ABOUT THIS FILE lines at the top of the transcript; do not cite the transcript's file name or part number, which will not exist after this run, and date facts by when they happened in the session, not by today's date.`
 }
 
 function organizeTask(dir) {

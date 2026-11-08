@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -103,7 +104,7 @@ class Journal(unittest.TestCase):
 
 class Continue(unittest.TestCase):
     def setUp(self):
-        import time
+        self.now = time.time()
         self.tmp = tempfile.mkdtemp()
         home = os.path.join(self.tmp, "home")
         self.runs = os.path.join(home, "runs")
@@ -120,10 +121,12 @@ class Continue(unittest.TestCase):
             path = os.path.join(self.work, "transcripts", "P", f"{i}.p001.txt")
             write(path, "SESSION x\n")
             parts.append({"id": f"{i}.p001", "path": path})
-        self.run = {"run_id": "dream-1", "session_id": "s1", "sandbox": True, "started_at": time.time() - 100,
+        self.run = {"run_id": "dream-1", "session_id": "s1", "sandbox": True, "started_at": self.now - 5000,
                     "workdir": self.work, "groups": [{"key": "G", "memory_dir": "M", "base": "B", "stage": "S", "parts": parts}]}
         write(os.path.join(self.work, "run.json"), json.dumps(self.run))
-        self.journal("s1", [("analyze a.p001", {"summary": "x"}), ("analyze b.p001", None)])
+        # the first run: a analyzed, b failed, the organizer ran after them
+        self.journal("s1", "wf_1", [("analyze a.p001", {"summary": "x"}), ("analyze b.p001", None),
+                                    ("organize G", {"index_entries": 1, "changes": []})], age=4000)
         common.activate("s1", self.work, [self.work], "R")
 
     def tearDown(self):
@@ -131,36 +134,66 @@ class Continue(unittest.TestCase):
             pt.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def journal(self, sid, items):
+    def journal(self, sid, wf, items, age):
         lines = []
         for n, (label, result) in enumerate(items):
-            lines += [{"type": "started", "key": f"{sid}{n}", "label": label}, {"type": "result", "key": f"{sid}{n}", "result": result}]
-        write(os.path.join(self.tmp, "projects", "P", sid, "subagents", "workflows", "wf_1", "journal.jsonl"),
-              "\n".join(json.dumps(x) for x in lines) + "\n")
+            lines += [{"type": "started", "key": f"{sid}{wf}{n}", "label": label},
+                      {"type": "result", "key": f"{sid}{wf}{n}", "result": result}]
+        j = os.path.join(self.tmp, "projects", "P", sid, "subagents", "workflows", wf, "journal.jsonl")
+        write(j, "\n".join(json.dumps(x) for x in lines) + "\n")
+        os.utime(j, (self.now - age, self.now - age))  # long done: the run is not busy
 
-    def test_only_unfinished_work_is_planned_and_sessions_are_merged(self):
+    def load(self):
+        with open(os.path.join(self.work, "run.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_continue_plans_only_what_is_left_and_merges_sessions(self):
         self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 0)
         with open(os.path.join(self.work, "dream-run.js"), encoding="utf-8") as f:
             script = f.read()
         self.assertIn("b.p001", script)
         self.assertNotIn("a.p001", script)
-        run = json.load(open(os.path.join(self.work, "run.json"), encoding="utf-8"))
+        run = self.load()
         self.assertEqual([s["session_id"] for s in run["sessions"]], ["s1", "s2"])
-        self.assertIsNone(common.active_state("s1"))  # the run moved to s2
+        self.assertIsNone(common.active_state("s1"))  # the guard moved to s2 with the run
         self.assertEqual(common.active_state("s2")["workdir"], self.work)
-        self.journal("s2", [("analyze b.p001", {"summary": "y"}), ("organize G", {"index_entries": 1, "changes": []})])
-        r = dream.run_results(run)
-        self.assertEqual((r["analyze a.p001"], r["analyze b.p001"]), ({"summary": "x"}, {"summary": "y"}))
+        run["sessions"][1]["started_at"] = self.now - 3000  # as if s2 started then
+        write(os.path.join(self.work, "run.json"), json.dumps(run))
+        self.journal("s2", "wf_1", [("analyze b.p001", {"summary": "y"}),
+                                    ("organize G", {"index_entries": 2, "changes": []})], age=2000)
         self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 0)  # nothing left: straight to finish
-        run = json.load(open(os.path.join(self.work, "run.json"), encoding="utf-8"))
-        self.assertEqual(len(run["sessions"]), 2)  # the same session is not added twice
+        self.assertEqual(len(self.load()["sessions"]), 2)  # the same session is not added twice
 
-    def test_refuses_finished_runs_and_missing_transcripts(self):
-        os.remove(self.run["groups"][0]["parts"][1]["path"])
-        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 1)
-        write(os.path.join(self.work, "run-report.json"), "{}")
-        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 2)
+    def test_results_and_the_organizer_rule(self):
+        self.run["sessions"] = [{"session_id": "s1", "started_at": self.now - 5000},
+                                {"session_id": "s2", "started_at": self.now - 3000}]
+        # the second run analyzed b again, then its organizer failed
+        self.journal("s2", "wf_1", [("analyze b.p001", {"summary": "y"}), ("organize G", None)], age=2000)
+        runs = dream.run_journal(self.run)
+        r = dream.run_results(self.run, runs)
+        self.assertEqual(r["analyze b.p001"], {"summary": "y"})  # a result beats an earlier failure
+        self.assertEqual(r["organize G"], {"index_entries": 1, "changes": []})  # the latest result there is
+        g = self.run["groups"][0]
+        self.assertFalse(dream.organized(g, runs))  # but it came before b was analyzed again
+        self.assertTrue(dream.organized(g, runs[:1]))
+        c = dream.check_group(dict(g, base=self.tmp, stage=self.tmp), r, {}, dream.organized(g, runs))
+        self.assertIn("not organized", c["problems"])
+        # continuing plans the organizer alone
+        write(os.path.join(self.work, "run.json"), json.dumps(self.run))
+        self.assertEqual(dream.main(["start", "s3", "--continue", "dream-1"]), 0)
+        with open(os.path.join(self.work, "dream-run.js"), encoding="utf-8") as f:
+            self.assertIn('"parts": []', f.read())
+
+    def test_refusals(self):
         self.assertEqual(dream.main(["start", "s2", "--continue", "nope"]), 2)
+        write(os.path.join(self.work, "hooklog.jsonl"), "{}\n")  # an agent wrote just now: still running
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 2)
+        os.utime(os.path.join(self.work, "hooklog.jsonl"), (self.now - 1000, self.now - 1000))
+        os.remove(self.run["groups"][0]["parts"][1]["path"])
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 1)  # transcripts gone
+        write(os.path.join(self.work, "run-report.json"), "{}")
+        self.assertEqual(dream.main(["start", "s2", "--continue", "dream-1"]), 2)  # finished
+
 
 
 if __name__ == "__main__":
