@@ -46,6 +46,34 @@ def read_records(path):
     return records, bad
 
 
+def measure(o):
+    """Characters of a record's message content, counted the way the sprint's first survey did:
+    text, tool_use input as JSON, tool_result text (images count 0), string content. Thinking is
+    not counted. Used to reconcile what came in with where it went."""
+    m = o.get("message")
+    if not isinstance(m, dict):
+        return 0
+    c = m.get("content")
+    if isinstance(c, str):
+        return len(c)
+    n = 0
+    for b in c if isinstance(c, list) else []:
+        if not isinstance(b, dict):
+            continue
+        bt = b.get("type")
+        if bt == "text":
+            n += len(b.get("text", ""))
+        elif bt == "tool_use":
+            n += len(json.dumps(b.get("input", {}), ensure_ascii=False))
+        elif bt == "tool_result":
+            cc = b.get("content")
+            if isinstance(cc, str):
+                n += len(cc)
+            elif isinstance(cc, list):
+                n += sum(len(x.get("text", "")) for x in cc if isinstance(x, dict))
+    return n
+
+
 def escape(text):
     return "\n".join(" " + ln if LABEL_RE.match(ln) else ln for ln in text.split("\n"))
 
@@ -112,15 +140,31 @@ def session_info(records, path):
     return info
 
 
-def events(records, stats):
-    """Turn one thread's records into events: dicts with label, body, uuid, ts, kind."""
+def _clean(raw, ledger):
+    """Strip system reminders and surrounding whitespace; book the removed characters."""
+    cleaned = REMINDER_RE.sub("", raw)
+    stripped = cleaned.strip()
+    ledger["system_reminders"] += len(raw) - len(cleaned)
+    ledger["whitespace"] += len(cleaned) - len(stripped)
+    ledger["rendered"] += len(stripped)
+    return stripped
+
+
+def events(records, stats, ledger=None):
+    """Turn one thread's records into events: dicts with label, body, uuid, ts, kind.
+
+    ledger (a Counter) books every measured character (see measure) to exactly one bucket."""
+    ledger = ledger if ledger is not None else collections.Counter()
     out, names = [], {}
     for o in records:
         t = o.get("type")
         uuid, ts = o.get("uuid"), o.get("timestamp")
         if t in SKIP_TYPES:
             stats["skipped:" + t] += 1
+            ledger["skipped_record:" + t] += measure(o)
             continue
+        if t in ("attachment", "system"):
+            ledger["other_records"] += measure(o)
         if t == "attachment":
             a = o.get("attachment") or {}
             at = a.get("type")
@@ -149,22 +193,31 @@ def events(records, stats):
             continue
         if t not in ("user", "assistant"):
             stats["unknown:" + str(t)] += 1
+            ledger["unknown_record"] += measure(o)
             continue
         if o.get("isApiErrorMessage"):
             stats["skipped:api_error_message"] += 1
+            ledger["api_error_messages"] += measure(o)
             continue
         content = (o.get("message") or {}).get("content")
         if t == "user":
             if o.get("isCompactSummary"):
-                text = content if isinstance(content, str) else _text_of(content)
+                if isinstance(content, str):
+                    text = REMINDER_RE.sub("", content)
+                    ledger["system_reminders"] += len(content) - len(text)
+                    ledger["rendered"] += len(text)
+                else:
+                    text = _text_of(content)
+                    ledger["rendered"] += measure(o)
                 out.append({"kind": "compact_summary", "label": "EVENT compact_summary:", "body": text,
                             "uuid": uuid, "ts": ts})
                 continue
             if o.get("isMeta"):
                 stats["skipped:meta_user"] += 1
+                ledger["meta_user_messages"] += measure(o)
                 continue
             if isinstance(content, str):
-                text = REMINDER_RE.sub("", content).strip()
+                text = _clean(content, ledger)
                 if text:
                     out.append({"kind": "user", "label": "USER:", "body": text, "uuid": uuid, "ts": ts})
                 continue
@@ -176,12 +229,31 @@ def events(records, stats):
                 if bt == "tool_result":
                     tool = names.get(b.get("tool_use_id"), "unknown")
                     err = " [error]" if b.get("is_error") else ""
+                    cc = b.get("content")
+                    if isinstance(cc, str):
+                        body = REMINDER_RE.sub("", cc)
+                        ledger["system_reminders"] += len(cc) - len(body)
+                        ledger["rendered"] += len(body)
+                    else:
+                        parts = []
+                        for x in cc or []:
+                            if isinstance(x, dict) and x.get("type") == "text":
+                                raw = x.get("text", "")
+                                cl = REMINDER_RE.sub("", raw)
+                                ledger["system_reminders"] += len(raw) - len(cl)
+                                ledger["rendered"] += len(cl)
+                                parts.append(cl)
+                            elif isinstance(x, dict):
+                                parts.append(f"[{x.get('type')}]")
+                                stats["non_text_result_blocks"] += 1
+                        body = "\n".join(parts)
                     out.append({"kind": "tool_result", "label": f"TOOL RESULT ({tool}){err}:",
-                                "body": REMINDER_RE.sub("", _text_of(b.get("content"))), "uuid": uuid, "ts": ts})
+                                "body": body, "uuid": uuid, "ts": ts})
                 elif bt == "text":
-                    texts.append(REMINDER_RE.sub("", b.get("text", "")).strip())
+                    texts.append(_clean(b.get("text", ""), ledger))
                 elif bt == "image":
                     texts.append("[image]")
+                    stats["images"] += 1
             text = "\n".join(x for x in texts if x)
             if text:
                 out.append({"kind": "user", "label": "USER:", "body": text, "uuid": uuid, "ts": ts})
@@ -191,14 +263,21 @@ def events(records, stats):
             if not isinstance(b, dict):
                 continue
             bt = b.get("type")
-            if bt == "text" and b.get("text", "").strip():
-                out.append({"kind": "agent", "label": "AGENT:", "body": b["text"], "uuid": uuid, "ts": ts})
+            if bt == "text":
+                txt = b.get("text", "")
+                if txt.strip():
+                    ledger["rendered"] += len(txt)
+                    out.append({"kind": "agent", "label": "AGENT:", "body": txt, "uuid": uuid, "ts": ts})
+                else:
+                    ledger["whitespace"] += len(txt)
             elif bt == "tool_use":
                 names[b.get("id")] = b.get("name")
+                ledger["rendered"] += len(json.dumps(b.get("input", {}), ensure_ascii=False))
                 out.append({"kind": "tool_call", "label": f"TOOL CALL {b.get('name')}:",
                             "body": _call_fields(b.get("input")), "uuid": uuid, "ts": ts})
             elif bt in ("thinking", "redacted_thinking"):
                 stats["skipped:thinking"] += 1
+                stats["thinking_chars"] += len(b.get("thinking", "") or "")
     for e in out:
         e["text"] = block(e["label"], e["body"])
     return out

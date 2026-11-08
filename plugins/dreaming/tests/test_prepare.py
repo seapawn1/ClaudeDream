@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import common  # noqa: E402
 import prepare  # noqa: E402
 import routing  # noqa: E402
+import segments as sg  # noqa: E402
 import transcripts as tx  # noqa: E402
 
 
@@ -85,6 +86,16 @@ class Prepare(unittest.TestCase):
             json.dump({"agentType": "dreaming:analyzer"}, f)
         write_jsonl(os.path.join(p, "dream.jsonl"), [rec(type="user", uuid="d1", cwd="C:/nowhere/proj", message={
             "role": "user", "content": "<command-name>/dreaming:dream</command-name>"})])
+        # work first, then the dream command in the same session: the work is kept
+        write_jsonl(os.path.join(p, "mixed.jsonl"), [
+            rec(type="user", uuid="k1", cwd="C:/nowhere/proj", message={"role": "user", "content": "real work"}),
+            rec(type="user", uuid="k2", message={"role": "user", "content": "<command-name>/dreaming:dream</command-name>"}),
+            rec(type="assistant", uuid="k3", message={"role": "assistant", "content": [{"type": "text", "text": "dream lead talk"}]})])
+        # a fork of s1: copies u1 and a1 with the parent's sessionId, then adds its own message
+        write_jsonl(os.path.join(p, "fork.jsonl"), [
+            dict(MAIN[1], sessionId="s1"), dict(MAIN[2], sessionId="s1"),
+            rec(type="user", uuid="f1", sessionId="fork", cwd="C:/nowhere/proj",
+                message={"role": "user", "content": "new question in the fork"})])
         write_jsonl(os.path.join(p, "reg.jsonl"), [rec(type="user", uuid="r1", cwd="C:/nowhere/proj",
                                                       message={"role": "user", "content": "hello"})])
         write_jsonl(os.path.join(p, "empty.jsonl"), [{"type": "custom-title", "customTitle": "x"}])
@@ -109,7 +120,9 @@ class Prepare(unittest.TestCase):
         work = os.path.join(self.tmp, "work")
         m = prepare.prepare(work, self.projects)
         by_id = {e["id"]: e for e in m["sessions"]}
-        self.assertEqual(m["sessions_found"], 5)
+        self.assertEqual(m["sessions_found"], 7)
+        self.assertTrue(m["checks"]["passed"], m["checks"]["problems"])
+        self.assertTrue(m["ledger"]["reconciled"], m["ledger"])
         self.assertEqual(by_id["s1"]["status"], "converted")
         self.assertEqual(by_id["dream"]["reason"], "dream command session (marker)")
         self.assertEqual(by_id["reg"]["reason"], "registered dream or test run")
@@ -118,12 +131,52 @@ class Prepare(unittest.TestCase):
         subs = {s["id"]: s for s in by_id["s1"]["subthreads"]}
         self.assertEqual(subs["agent-aa"]["status"], "converted")
         self.assertEqual(subs["agent-bb"]["status"], "excluded")
-        with open(by_id["s1"]["output"], encoding="utf-8") as fh:
-            text = fh.read()
+        text = "".join(open(pt["file"], encoding="utf-8").read() for pt in by_id["s1"]["parts"])
         self.assertIn("=== sub-thread agent-aa: Explore ===", text)
         self.assertNotIn("dream work", text)
         self.assertEqual(by_id["s1"]["memory_dir"],
                          os.path.join(self.tmp, "projects", "C--nowhere-proj", "memory"))
+        # the dream part of a mixed session is cut, the work before it kept
+        mixed = "".join(open(pt["file"], encoding="utf-8").read() for pt in by_id["mixed"]["parts"])
+        self.assertIn("real work", mixed)
+        self.assertNotIn("dream lead talk", mixed)
+        # the fork keeps only its own message and says which session holds the copies
+        fork = "".join(open(pt["file"], encoding="utf-8").read() for pt in by_id["fork"]["parts"])
+        self.assertIn("new question in the fork", fork)
+        self.assertNotIn("Run the tests", fork)
+        self.assertIn("copied messages are left out", fork)
+        self.assertEqual(by_id["fork"]["dedup_dropped"], {"s1": 2})
+
+
+def ev(kind, body, uid):
+    e = {"kind": kind, "label": {"user": "USER:", "compact_boundary": "EVENT compact_boundary: {}",
+                                 "compact_summary": "EVENT compact_summary:"}.get(kind, "AGENT:"),
+         "body": body, "uuid": uid, "_id": uid}
+    e["text"] = tx.block(e["label"], body)
+    return e
+
+
+class Pack(unittest.TestCase):
+    def test_boundary_size_and_carried_summary(self):
+        evs = [ev("user", "a" * 50, 0), ev("agent", "b" * 50, 1),
+               ev("compact_boundary", "", 2), ev("compact_summary", "SUMMARY-1", 3),
+               ev("user", "c" * 80, 4), ev("agent", "d" * 80, 5), ev("user", "e" * 80, 6)]
+        parts = sg.pack([("=== primary thread x: claude-code ===", evs)], budget=200)
+        placed = [e["_id"] for p in parts for _, es in p["sections"] for e in es if "_id" in e]
+        self.assertEqual(sorted(placed), list(range(7)))  # every event exactly once
+        self.assertEqual(len(placed), len(set(placed)))
+        first_after = [p for p in parts if any(e.get("_id") == 2 for _, es in p["sections"] for e in es)][0]
+        self.assertFalse(first_after["carried"])  # starts at the boundary, has its own summary
+        later = [p for p in parts if p["carried"]]
+        self.assertTrue(later)  # a size cut after the compaction carries SUMMARY-1
+        self.assertTrue(all("SUMMARY-1" in es[0]["text"] for p in later for _, es in p["sections"][:1]))
+
+    def test_long_tool_result_is_cut(self):
+        stats = tx.new_stats()
+        e = {"kind": "tool_result", "label": "TOOL RESULT (Read):", "body": "x" * (sg.MAX_EVENT + 5000)}
+        sg.shape(e, stats)
+        self.assertIn("characters of this tool result left out", e["text"])
+        self.assertEqual(stats["truncated_results"], 1)
 
 
 class Routing(unittest.TestCase):
