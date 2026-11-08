@@ -60,9 +60,10 @@ def start_cmd(a):
     old = common.active_state(a.session_id)
     if old:
         print(f"note: an unfinished run in this session is abandoned, nothing of it written back: {old['workdir']}")
+        shutil.rmtree(os.path.join(old["workdir"], "transcripts"), ignore_errors=True)  # may hold secrets
     run_id, workdir = common.new_run("dream", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
-                     prep.SEGMENT_CHARS, set(a.session) if a.session else None)
+                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project)
     print(f"run: {run_id}\nworkdir: {workdir}\nmode: {'sandbox (nothing is written back)' if a.sandbox else 'write back'}")
     print(f"sessions found: {m['sessions_found']} {m['counts']}; parts: {m['parts']}")
     if not m["checks"]["passed"]:
@@ -347,6 +348,8 @@ def main(argv):
                     help="where to read session transcripts; default: <Claude Code config dir>/projects")
     ap.add_argument("--project", action="append", default=None)
     ap.add_argument("--session", action="append", default=None)
+    ap.add_argument("--skip-project", action="append", default=None,
+                    help="skip every project dir whose name contains this text (repeatable)")
     ap.add_argument("--sandbox", action="store_true", help="do not write the results back to the memory dirs")
     ap.add_argument("--run", default=None, help="restore: which run (default: the latest written-back run)")
     ap.add_argument("--force", action="store_true", help="restore: overwrite files changed after write-back")

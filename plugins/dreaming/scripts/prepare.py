@@ -82,7 +82,15 @@ def thread_name(meta):
     return meta.get("agentType") or meta.get("description") or "subagent"
 
 
-def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None):
+def skip_hit(name, skip):
+    """--skip-project TEXT: the first TEXT found in a project dir's name (case-insensitive), or None."""
+    for t in skip or ():
+        if t and t.lower() in name.lower():
+            return t
+    return None
+
+
+def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None, skip=None):
     """Pass 1: every session found, with its exclusion status and its uuid index."""
     found = []
     for pdir in sorted(glob.glob(os.path.join(projects, "*"))):
@@ -92,6 +100,7 @@ def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None):
         if only and name not in only:
             continue
         test_dir = os.path.normcase(os.path.normpath(pdir)) in reg_dirs
+        skipped = skip_hit(name, skip)
         for m in sorted(glob.glob(os.path.join(pdir, "*.jsonl"))):
             if not tx.listed(m):
                 continue  # created after the run started
@@ -100,9 +109,10 @@ def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None):
                 continue
             e = {"id": sid, "path": m, "project_dir": name}
             subs = tx.subagent_files(m)
-            if test_dir:
+            if test_dir or skipped:
                 ledger["excluded_sessions"] += _measure_files([m] + subs)
-                found.append(dict(e, status="excluded", reason="registered test directory"))
+                found.append(dict(e, status="excluded", reason="registered test directory" if test_dir
+                                  else f"project dir skipped by --skip-project {skipped}"))
                 continue
             records, bad = tx.read_records(m)
             info = tx.session_info(records, m)
@@ -222,13 +232,13 @@ def check(entries, budget):
     return problems
 
 
-def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, sessions=None):
+def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, sessions=None, skip=None):
     projects = common.resolve_projects_dir(projects_dir)
     files = transcript_files(projects, only, sessions)
     tx.reset_reads(files)
     reg_sessions, reg_dirs = load_registry()
     ledger = collections.Counter()
-    found = scan(projects, only, reg_sessions, reg_dirs, ledger, sessions)
+    found = scan(projects, only, reg_sessions, reg_dirs, ledger, sessions, skip)
     live = [e for e in found if "_index" in e]
     owners = sg.owner_map([(e["id"], e.get("created"), e["_index"]) for e in live])
     entries = []
@@ -287,9 +297,11 @@ def main(argv):
     ap.add_argument("--project", action="append", default=None, help="only this project dir (repeatable)")
     ap.add_argument("--session", action="append", default=None, help="only this session id (repeatable)")
     ap.add_argument("--segment-chars", type=int, default=SEGMENT_CHARS)
+    ap.add_argument("--skip-project", action="append", default=None,
+                    help="skip every project dir whose name contains this text (repeatable)")
     a = ap.parse_args(argv)
     m = prepare(a.workdir, a.projects_dir, set(a.project) if a.project else None, a.segment_chars,
-                set(a.session) if a.session else None)
+                set(a.session) if a.session else None, a.skip_project)
     print(f"projects_dir: {m['projects_dir']}")
     print(f"sessions found: {m['sessions_found']}  {m['counts']}")
     for k, v in sorted(m["reasons"].items()):

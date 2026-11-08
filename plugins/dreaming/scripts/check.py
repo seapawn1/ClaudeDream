@@ -113,10 +113,11 @@ def start_cmd(a):
     old = common.active_state(a.session_id)
     if old:
         print(f"note: an unfinished run in this session is abandoned: {old['workdir']}")
+        shutil.rmtree(os.path.join(old["workdir"], "transcripts"), ignore_errors=True)  # may hold secrets
     sources = memory_sources(a.memory_from) if a.memory_from else None
     run_id, workdir = common.new_run("check", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
-                     prep.SEGMENT_CHARS, set(a.session) if a.session else None)
+                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project)
     print(f"run: {run_id}\nworkdir: {workdir}\nsessions found: {m['sessions_found']} {m['counts']}")
     if not m["checks"]["passed"]:
         print("prepare checks FAILED; nothing started:")
@@ -537,6 +538,8 @@ def main(argv):
     s.add_argument("--projects-dir", default=None)
     s.add_argument("--project", action="append", default=None)
     s.add_argument("--session", action="append", default=None)
+    s.add_argument("--skip-project", action="append", default=None,
+                   help="skip every project dir whose name contains this text (repeatable)")
     s.add_argument("--against", default=None, help="the earlier check run to compare with; 'none' for no comparison")
     s.add_argument("--memory-from", default=None,
                    help="RUN_ID[:base|:stage]: check a dream run's staged result (or starting copy), or an earlier "

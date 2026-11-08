@@ -147,6 +147,13 @@ class Prepare(unittest.TestCase):
         self.assertIn("copied messages are left out", fork)
         self.assertEqual(by_id["fork"]["dedup_dropped"], {"s1": 2})
 
+    def test_skip_project_excludes_and_still_reconciles(self):
+        m = prepare.prepare(os.path.join(self.tmp, "work2"), self.projects, skip=["NOWHERE-pr"])
+        self.assertTrue(m["ledger"]["reconciled"], m["ledger"])
+        skipped = [e for e in m["sessions"] if e.get("reason") == "project dir skipped by --skip-project NOWHERE-pr"]
+        self.assertEqual(len(skipped), 6)  # every session of C--nowhere-proj, matched case-insensitively
+        self.assertEqual(m["parts"], 0)
+
 
 def ev(kind, body, uid):
     e = {"kind": kind, "label": {"user": "USER:", "compact_boundary": "EVENT compact_boundary: {}",
