@@ -33,7 +33,7 @@
 | 11-07 | 原料照 cookbook：直接读 transcript |
 | 11-07 | 产品形态是 Claude Code 插件，和本仓库定位一致：照抄 cookbook 的设计和四个提示词，运行底座换成 Claude Code。PO 有 API，但不走 API 路线；以后可以另出一个 API 版，两版共用提示词 |
 | 11-07 | 先照着 cookbook 做。fork 去重、收尾会话当天处理，留作以后的候选 PBI；顺手的话可以一起做 |
-| 11-07 | PO 看法：`instructions.md` 本质上就是全局层的 `MEMORY.md` 入口（导入 `GlobalMemory/MEMORY.md`，外加 PO 的规矩），结构不用拆。改不改名未定，见 §5 第 15 条 |
+| 11-07 | PO 看法：`instructions.md` 本质上就是全局层的 `MEMORY.md` 入口（导入 `GlobalMemory/MEMORY.md`，外加 PO 的规矩），结构不用拆。改不改名未定，见 §5 第 15 条（11-08 定：删 `instructions.md`，换成 `SEAPAWN.md` 加 7 个 GlobalMemory 条目）|
 
 ## 3. 已核实的事实
 

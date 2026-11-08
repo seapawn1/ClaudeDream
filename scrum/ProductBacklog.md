@@ -12,7 +12,7 @@ ClaudeDream 是一个 Claude Code 插件，让 Claude Code 做梦：回看过去
 边界（当前版本的范围；以后加功能就扩大边界）：
 1. 以 Anthropic 官方 cookbook《Dreaming with a dynamic workflow》为基线，照它的流程、提示词和记忆格式做。记忆格式是互相链接的小文件加一个索引，cookbook 称之为 wiki-style memory。
 2. 只做事后整理。会话进行中当场记的部分，仍由 Claude Code 原生的 auto-memory 负责。
-3. 只改记忆：项目层是项目的 auto-memory 目录，全局层是 `instructions.md` 和 `GlobalMemory/`。不改仓库里的 CLAUDE.md，不整理技能，不建对话库。
+3. 只改记忆：项目层是项目的 auto-memory 目录，全局层是 `GlobalMemory/`。不改 `SEAPAWN.md`（用户写的常驻层，原 `instructions.md`）和仓库里的 CLAUDE.md，不整理技能，不建对话库。
 4. 在 Claude Code 里运行，用用户自己的登录。默认不审：原地改，跑之前留回滚点。
 
 ### 1.2 Product Goal
@@ -95,7 +95,7 @@ flowchart TD
 | PBI-004 | 体检 | 作为 PO，我想要做梦时把每条记忆拿去对照项目现状，过时、错误的改正或标注，以便没人再提的旧记忆也不会烂在那里 | Map ⑦ | 待排序（v0 候选：先只出报告，不改文件） | M | 对应目标里的“腐烂的、不新鲜的”。cookbook 只核对新会话碰到的记忆，没有这一步；auto-dream 有，它会找与现在的代码对不上的记忆。旁证：Hugging Face 上一位用户这样逐条体检，只有约 20% 的笔记还有效（见竞品摘要）。同一套体检在做梦前后各跑一次，就是 Outcome Done“记忆新鲜”的量法。和仓库里的 CLAUDE.md 冲突时只报告 |
 | PBI-005 | 每晚自动跑 | 作为 PO，我想要做梦每晚自己跑，以便不用记着去跑 | Map ② | 待排序 | M | 对应目标里的“每晚”。候选做法：Windows 任务计划程序 + `claude -p`（看 PBI-003 ②）；开会话时检查，照 auto-dream 满 24 小时且新会话够数才跑；照 claude-memory-compiler，用 hook 拉起后台进程。云端的 `/schedule` 读不到本机的会话记录，用不了 |
 | PBI-006 | 只读新增，fork 去重 | 作为 PO，我想要每次只读上次以来新增的消息，fork 复制过来的历史只算一次，以便不重复花钱、不重复记 | Map ③ | 待排序 | M | 按消息 uuid 记水位；本机约 28% 的消息在多个文件里重复出现。顺带让当天收尾的会话当天就能处理。PO 11-07 定：以后做，顺手的话可以一起做 |
-| PBI-007 | 全局 / 项目两层 | 作为 PO，我想要跨项目通用的东西（偏好、做事方式）进全局层，项目里的事实留在项目层，以便换了项目 agent 也懂我 | Map ⑥⑧ | 待排序 | L | cookbook 只有一层。PO 11-08：`instructions.md` 是全局层的记忆索引，做梦可以改；以后把它并进 `GlobalMemory/MEMORY.md`，用户级 CLAUDE.md 直接 `@` 这个文件。经 `@` 导入的文件整份加载，不受 200 行的限制。待议：路由规则（方向底稿 §5 第 12–14 条） |
+| PBI-007 | 全局 / 项目两层 | 作为 PO，我想要跨项目通用的东西（偏好、做事方式）进全局层，项目里的事实留在项目层，以便换了项目 agent 也懂我 | Map ⑥⑧ | 待排序 | L | cookbook 只有一层。11-08 已完成：`instructions.md` 换成 `SEAPAWN.md`，其余规则拆成 `GlobalMemory/` 的 7 个条目；用户级 CLAUDE.md 直接 `@` 两个文件（`SEAPAWN.md` 和 `GlobalMemory/MEMORY.md`），经 `@` 导入整份加载，不受 200 行的限制；`SEAPAWN.md` 不归做梦改。待议：路由规则（方向底稿 §5 第 12–14 条） |
 | PBI-008 | 敏感内容过滤 | 作为 PO，我想要令牌、密码不进记忆，指定项目（SGCC、MidTerm）的内容不转述，以便记忆仓库可以放心同步 | Map ③⑥ | 待排序 | M | 内容进了 git 历史就很难删，所以要在写入前挡住。`jayadevrana/claude-dream-skill` 做了脱敏，但它的许可禁止 AI 读取和衍生，只能借思路 |
 | PBI-009 | 新用户上手 | 作为新用户，我想要一条 `claude plugin install` 就装好，第一次跑就把保留期内的历史回填进记忆，跑之前自动备份，以便第一天就有用，出错也能恢复 | Map ①② | 待排序 | L | 竞品的空位：agent-memory 不是插件，也没找到回填入口；有回填功能的插件只找到 `TT-Wang/memem`。本仓库的市场 `claude-dream-dev` 已经注册。会话记录默认只留 30 天。发布到 GitHub 之前由 PO 确认。竞品摘要见 `documents/competitor-scan-2026-11-07.md`。精化时拆分 |
 | PBI-010 | 综合层 | 作为 PO，我想要做梦把散在多份笔记里的东西综合成主题页、连起线索，以便 agent 连起我自己都没连起的东西 | Map ⑧ 之后 | 待排序 | L | 对应愿景后半句。cookbook 的 organizer 禁止再分析和编造。参考 claude-memory-compiler 的 concepts 和 connections 文章、knowledge-wiki、components 文章。做之前要先想清楚怎么防止编造 |
