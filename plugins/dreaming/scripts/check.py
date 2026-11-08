@@ -284,8 +284,8 @@ def finish_cmd(a):
     since = run.get("started_at")
     results = dream.journal_results(a.session_id, since)
     log = dream.load_hooklog(workdir)
-    _, writes = dream.agent_activity(a.session_id, since)
-    hooks = dream.hook_evidence(log, workdir, writes)
+    _, writes, executed = dream.agent_activity(a.session_id, since)
+    hooks = dream.hook_evidence(log, workdir, writes, executed)
     with open(os.path.join(workdir, "manifest.json"), encoding="utf-8") as f:
         sessions = {e["id"]: e for e in json.load(f)["sessions"]}
     by_key = {g["key"]: g for g in run["groups"]}

@@ -151,13 +151,20 @@ def journal_results(session_id, since=None):
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 
+VALIDATION_ERROR = "<tool_use_error>"
+
+
 def agent_activity(session_id, since=None):
     """What the run's agents actually did, from their own transcripts: per file name, the write
-    calls and the errors they got back; plus the total number of write calls."""
-    per_file, total = collections.defaultdict(lambda: {"calls": 0, "errors": []}), 0
+    calls and the errors they got back; the number of write calls that got past Claude Code's input
+    checks, and their ids. A call refused by those checks (file changed since read, string not found,
+    file not read yet: results starting with <tool_use_error>) never reaches the PreToolUse hook, so
+    it is not counted against the hook log; it still counts as a failed write of that file."""
+    per_file = collections.defaultdict(lambda: {"calls": 0, "errors": []})
+    executed = set()
     paths = [p for d in workflow_dirs(session_id, since) for p in glob.glob(os.path.join(d, "agent-*.jsonl"))]
     for path in paths:
-        calls = {}
+        calls, refused = {}, set()
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 try:
@@ -173,12 +180,15 @@ def agent_activity(session_id, since=None):
                         name = os.path.basename(str((b.get("input") or {}).get("file_path") or ""))
                         calls[b.get("id")] = name
                         per_file[name]["calls"] += 1
-                        total += 1
-                    elif b.get("type") == "tool_result" and b.get("tool_use_id") in calls and b.get("is_error"):
+                    elif (b.get("type") == "tool_result" and b.get("tool_use_id") in calls and b.get("is_error")
+                          and b["tool_use_id"] not in refused):
                         c = b.get("content")
-                        per_file[calls[b["tool_use_id"]]]["errors"].append(
-                            (c if isinstance(c, str) else json.dumps(c, ensure_ascii=False))[:200])
-    return dict(per_file), total
+                        text = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
+                        per_file[calls[b["tool_use_id"]]]["errors"].append(text[:200])
+                        if text.lstrip().startswith(VALIDATION_ERROR):
+                            refused.add(b["tool_use_id"])
+        executed |= set(calls) - refused
+    return dict(per_file), len(executed), executed
 
 
 def load_hooklog(workdir):
@@ -189,24 +199,31 @@ def load_hooklog(workdir):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def hook_evidence(log, workdir, transcript_writes):
+def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
     """What the hook log shows for PBI-002 acceptance criterion 3, and whether it saw every write
-    call the agents' transcripts show (a hook that fails to read its input decides nothing)."""
+    call the agents' transcripts show (a hook that fails to read its input decides nothing). With the
+    calls' ids (the guard logs tool_use_id), every executed write call must be in the log by id."""
     lead_shell = [r.get("command") for r in log if not r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")]
     agent_shell = [r for r in log if r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")]
     network = [r for r in log if r.get("tool") in ("WebFetch", "WebSearch") or str(r.get("tool", "")).startswith("mcp__")]
     writes = [r for r in log if r.get("tool") in ("Write", "Edit", "MultiEdit", "NotebookEdit")]
     allowed_outside = [r for r in writes if r.get("decision") == "allow" and not common.within(r.get("path"), [workdir])]
     lead_ok = all(d == "allow" for d in (r.get("decision") for r in log if not r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")))
+    agent_writes = [r for r in writes if r.get("agent_id")]
+    if executed_ids is not None and agent_writes and all(r.get("tool_use_id") for r in agent_writes):
+        missing = sorted(set(executed_ids) - {r["tool_use_id"] for r in agent_writes})
+    else:  # a hook log without ids (or written partly by an older guard): compare counts
+        missing = ["(count)"] * max(0, transcript_writes - len(agent_writes))
     return {
         "calls": len(log), "decisions": dict(collections.Counter(str(r.get("decision")) for r in log)),
         "lead_shell_commands": lead_shell, "lead_ran_only_plugin_scripts": lead_ok,
         "agent_shell_attempts_blocked": len(agent_shell), "network_or_mcp_attempts_blocked": len(network),
         "writes": len(writes), "writes_allowed_outside_workdir": len(allowed_outside),
         "write_calls_in_agent_transcripts": transcript_writes,
+        "write_calls_missing_from_hook_log": len(missing), "missing_ids": missing[:10],
         "unreadable_inputs": sum(1 for r in log if r.get("error")),
         "ok": lead_ok and not allowed_outside and all(r.get("decision") == "deny" for r in agent_shell + network)
-              and transcript_writes <= len([r for r in writes if r.get("agent_id")]),
+              and not missing,
     }
 
 
@@ -259,8 +276,8 @@ def finish_cmd(a):
     since = run.get("started_at")
     results = journal_results(a.session_id, since)
     log = load_hooklog(workdir)
-    attempts, transcript_writes = agent_activity(a.session_id, since)
-    hooks = hook_evidence(log, workdir, transcript_writes)
+    attempts, transcript_writes, executed = agent_activity(a.session_id, since)
+    hooks = hook_evidence(log, workdir, transcript_writes, executed)
     report = {"run_id": run["run_id"], "sandbox": run["sandbox"], "hook_log": hooks, "groups": []}
     for g in run["groups"]:
         c = check_group(g, results, attempts)
@@ -288,8 +305,9 @@ def finish_cmd(a):
     print(f"hook log: {hooks['calls']} calls, lead ran only plugin scripts={hooks['lead_ran_only_plugin_scripts']}, "
           f"blocked agent shell={hooks['agent_shell_attempts_blocked']}, blocked network/MCP={hooks['network_or_mcp_attempts_blocked']}, "
           f"writes allowed outside the work dir={hooks['writes_allowed_outside_workdir']}, "
-          f"agent write calls: {hooks['write_calls_in_agent_transcripts']} in transcripts, "
-          f"{len([r for r in log if r.get('agent_id') and r.get('tool') in WRITE_TOOLS])} seen by the hook")
+          f"agent write calls: {hooks['write_calls_in_agent_transcripts']} in transcripts (past input checks), "
+          f"{len([r for r in log if r.get('agent_id') and r.get('tool') in WRITE_TOOLS])} seen by the hook, "
+          f"{hooks['write_calls_missing_from_hook_log']} missing from it")
     for c in report["groups"]:
         d = c["diff"]
         moved = sum(1 for v in c["whereabouts"].values() if v.startswith("moved"))

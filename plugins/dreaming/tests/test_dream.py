@@ -72,6 +72,34 @@ class Journal(unittest.TestCase):
         self.assertIsNone(r["analyze s.p002"])  # ran but failed: counts as not analyzed
         self.assertNotIn("organize G", r)  # started, never finished
 
+    def test_write_calls_matched_to_the_hook_log_by_id(self):
+        def use(i, path):
+            return {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": i, "name": "Edit", "input": {"file_path": path}}]}}
+
+        def result(i, text, err):
+            return {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": i, "content": text, "is_error": err}]}}
+        recs = [use("t1", "W/a.md"), result("t1", "ok", False),
+                use("t2", "W/a.md"), result("t2", "<tool_use_error>File has been modified since read", True),
+                use("t3", "W/b.md"), result("t3", "File content has changed since it was last read", True),
+                use("t3", "W/b.md")]  # the same record twice in a transcript
+        p = os.path.join(self.tmp, "projects", "P", "sess", "subagents", "workflows", "wf_1", "agent-x.jsonl")
+        write(p, "\n".join(json.dumps(x) for x in recs) + "\n")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self.tmp}):
+            per, n, ids = dream.agent_activity("sess")
+        self.assertEqual((n, ids), (2, {"t1", "t3"}))  # t2 was refused before the hook could see it
+        self.assertEqual((per["a.md"]["calls"], len(per["a.md"]["errors"]), len(per["b.md"]["errors"])), (2, 1, 1))
+        log = [{"agent_id": "x", "tool": "Edit", "path": "W/a.md", "tool_use_id": "t1", "decision": "allow"},
+               {"agent_id": "x", "tool": "Edit", "path": "W/b.md", "tool_use_id": "t3", "decision": "allow"}]
+        self.assertTrue(dream.hook_evidence(log, "W", n, ids)["ok"])
+        h = dream.hook_evidence(log[:1], "W", n, ids)
+        self.assertFalse(h["ok"])
+        self.assertEqual(h["missing_ids"], ["t3"])
+        old = [dict(r, tool_use_id=None) for r in log]  # a hook log from before the guard logged ids
+        self.assertTrue(dream.hook_evidence(old, "W", n, ids)["ok"])
+        self.assertFalse(dream.hook_evidence(old[:1], "W", n, ids)["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

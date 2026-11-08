@@ -86,6 +86,7 @@ def main():
     rec = {
         "agent_id": data.get("agent_id"),
         "agent_type": data.get("agent_type"),
+        "tool_use_id": data.get("tool_use_id"),
         "tool": data.get("tool_name"),
         "path": tin.get("file_path") or tin.get("notebook_path"),
         "command": tin.get("command"),
