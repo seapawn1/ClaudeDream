@@ -118,10 +118,33 @@ PO 选定（2026-11-09）。PBI-006 不选：cookbook 本身没有水位，只�
 
 | # | Work item | Output | Done when |
 | --- | --- | --- | --- |
+| 1 | PBI-003 的 CLI 部分（①②③⑦），外加两项编排要用的：workflow 里的 agent 能否指定插件子代理类型；插件 hook 能否看到调用来自哪个 agent、对 workflow 里的 agent 生不生效 | 每项的结论和证据记进 3.2；试验用的临时插件放在冲刺文件夹里，收尾时删掉 | 每项都有结论；编排方式定下来，见“关键选择”第 2 条 |
+| 2 | 插件骨架：`plugins/claude-dream/`（plugin.json、MIT 声明、`dream` 和 `check` 两个命令的空壳）、市场登记、会话记录目录参数（PBI-012）。PBI-003 的桌面端三项（④⑤⑥）请 PO 在桌面端装上后验证 | 能装的插件；PO 在桌面端的验证结果记进 3.2 | CLI 能装能调；PO 确认桌面端能装、命令和子代理能跑；PBI-012 的验收标准通过 |
+| 3 | 会话转换（PBI-001）：扫描、排除做梦会话、对应记忆目录、按 uuid 去重、渲染成 cookbook 格式、按压缩点和大小切段、出清单 | `scripts/prepare.py` 和它的测试 | 在真实目录上跑通，PBI-001 的验收标准 1～5 全部通过（每条要保留的消息恰好落在一段里、同一 uuid 只渲染一次，都由脚本核对） |
+| 4 | 做梦流水线（PBI-002）上：四个提示词（保留 MIT 声明，格式段落改成原生格式）、analyzer 和 organizer 子代理、编排、“每段都分析过”的核对 | `dream` 命令能跑完一轮 | 在沙盒（见“关键选择”第 4 条）里跑一小批会话：每段都有分析记录，`MEMORY.md` 不超限，organizer 记下合并和改名 |
+| 5 | 做梦流水线下：回滚点和一步恢复、只在做梦时生效的写入限制 hook 和日志、跑完的核对脚本 | 回滚、hook、核对三样 | 恢复后记忆目录和跑之前逐字节一致；hook 拦得住越界写入和网络工具，不做梦的会话里什么都不做；核对脚本能对出 PBI-002 的验收标准 1～5 和 7（每条老记忆的下落） |
+| 6 | 体检（PBI-004）：体检子代理、`check` 命令、报告；能追踪 organizer 合并或改名的条目 | `check` 命令和报告格式 | 沙盒里同一份记忆连跑两次，量出前后两次结论的一致程度，记进 3.2（这就是体检的噪声）；报告里能列出“找不到下落”的条目 |
+| 7 | CLI 全流程演练：在沙盒里对两个项目（ClaudeDream、IDEO-Scrum）跑“体检 → 做梦 → 体检” | 演练记录：耗时、token、失败项 | 全部验收标准在沙盒里通过；交 Master 审 |
+| 8 | 正式跑：写一页运行说明，PO 在桌面端对整个会话记录目录跑“体检 → 做梦 → 体检”；Developer 逐项核对 DoD 和验收标准 | 两份体检报告、核对记录 | DoD 七项逐项有证据（“用得上”由 PO 第二天判断）；交 Master 审，PO 验收 |
 
 **Key choices**
 
+1. **脚本用 Python 标准库**：本机有 Python 3.13，不引第三方包。新用户的环境留给 PBI-009。
+2. **编排优先用插件自带的 workflow**：插件能带 `workflows/`，脚本逐段派 analyzer，“每段都分析过”由脚本保证，不靠 lead 记，正式跑时 lead 是 Haiku 级模型也不怕；用量到上限时 workflow 会暂停等重置。workflow 脚本本身不能碰文件和 shell，所以命令分三步：lead 跑 `prepare.py` → 调 workflow → lead 跑核对脚本。如果第 1 项查出 workflow 里的 agent 限不了工具，就改由 lead 用 Agent 工具分批派插件子代理（frontmatter `tools:` 限工具），核对仍由脚本对清单。
+3. **lead 只跑插件自带的脚本**（Master 定）：其余 agent 没有 shell；做梦期间所有 agent 都不能用网络工具。由 hook 执行并记日志，hook 只在有本轮运行状态文件、且会话对得上时生效。
+4. **测试一律不碰真实记忆**：测试时用一个开关把所有目标记忆目录映射到沙盒里的副本。只有 PO 的正式跑写真实记忆。
+5. **回滚点用文件副本，不用 git**：跑之前把每个要写的记忆目录复制到本轮工作目录，恢复就是原样拷回。这样不会提交或冲掉记忆仓库里别的会话没提交的改动。
+6. **本轮工作目录放在 `~/.claude-dream/runs/<run-id>/`**：渲染好的会话、清单、回滚副本、日志、体检报告都在这里，既不在记忆目录里，也不在 `~/.claude/` 下面（避开那里的写入保护）。
+
 **Risks and open points**
+
+- **规模**：去重后约 1100 万 token、一两百个 analyzer；workflow 默认最多同时跑 16 个 agent。桌面端如果是订阅额度，可能要等额度重置，一次跑完要一两个小时甚至更久。第 7 项演练会给出实际数字。
+- **会话记录是 Claude Code 的内部格式**，官方说随版本会变；转换脚本遇到不认识的记录类型要记进清单，不能悄悄丢掉。
+- **SeaPawn 的 `MEMORY.md` 已有 22.5 KB**，做梦后可能超过 25 KB，要靠 organizer 收紧索引。
+- **恢复会覆盖做梦期间别处对同一目录的改动**：正式跑时，别的会话不要写记忆。
+- **体检的结论有噪声**（Haiku 级模型），前后两次的差别要和第 6 项量出的噪声对照着看。
+- **待 PO**：`claude-dream-dev` 改成从本地目录登记（开发时指向工作树，合并后指向仓库根目录），要先移除现在的 GitHub 登记。这是改 PO 的 Claude Code 配置，由 PO 本人做或当面批准，放在第 2 项开头。
+- PBI-003 里如果有做不到的项，和 PO 定替代做法。
 
 Go-ahead: （待 PO）
 
@@ -132,5 +155,7 @@ Go-ahead: （待 PO）
 | 2026-11-09 | Planning 第一阶段：定 Sprint Goal、PBI、DoD、分支、Developer | PO 定：目标见 1.1；选 PBI-001～004、012，PBI-006 不选（cookbook 没有水位）；DoD 七项全用、措辞不改；分支 `sprint-01-first-dream`；Developer 从 Master 会话 fork 到 CLI，不用桌面端，因为桌面端模型约为 Haiku 级、本冲刺中等偏难；不开设计，不做原型 | Master 会话的对话 | Developer 复述精化，写 How |
 | 2026-11-09 | `.claude/settings.local.json` 设 `worktree.baseRef: "head"`（不进 git） | 默认的 `fresh` 从 `origin/main` 建工作树，那里没有未推送的 b04553f，也没有冲刺日志 | `.claude/settings.local.json` | Developer 用 EnterWorktree 建 `sprint-01-first-dream` |
 | 2026-11-09 | Developer 建好工作树（`worktree-sprint-01-first-dream`，含 e3cc641），复述精化，提出五点：fork 去重、记忆格式、体检及格线、“没有 shell”管到谁、怎么装插件 | PO 授权 Master 定；结论见 2.2 各处的“Master 定，PO 授权”。第 5 点没照 Developer 的方案（测试用本地市场、收尾推送后再从 GitHub 装）：那样 DoD 要等收尾以后才能验 | Developer 会话的消息；`~/.claude/plugins/known_marketplaces.json` 里 `claude-dream-dev` 的来源是 GitHub | Developer 写 3.1；PO 说精化结束 |
+| 2026-11-09 | Developer 写 3.1 How（8 项） | 编排优先用插件自带的 workflow（插件能带 `workflows/`；最多同时 16 个 agent，每轮最多 1000 个，到用量上限会暂停等重置；脚本本身不能碰文件和 shell）；测试只写沙盒，只有 PO 的正式跑写真实记忆 | 实测：`~/.claude/projects` 下 451 个 jsonl、378 MB，消息正文 6640 万字符，其中 3410 万是 fork 重复；本机有 Python 3.13、Node 26。文档：workflows 页“Behavior and limits”“Distribute a workflow in a plugin”；memory 页“Storage location”（默认记忆目录按 git 仓库算，worktree 和子目录共用一个） | Master 审 How，PO 放行 |
+| 2026-11-09 | 发现 `.worktreeinclude` 还写着旧路径 `reference/`（现为 `references/`） | 收尾时一并改；不影响本冲刺，工作树里 `references/` 是 git 跟踪的 | `.worktreeinclude` | 收尾时改 |
 
 ## 4. Review
