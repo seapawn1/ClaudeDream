@@ -14,7 +14,7 @@ const TASK = [
   'Report each step outcome, error text word for word.',
 ].join('\n')
 
-const restricted = await agent(TASK, { agentType: 'claude-dream:smoke-probe', label: 'restricted' })
+const restricted = await agent(TASK, { agentType: 'dreaming:smoke-probe', label: 'restricted' })
 const sonnet = await agent('State the exact model name or ID you are running as, as given in your system prompt. One line, nothing else.', { model: 'sonnet', label: 'model-sonnet' })
 const haiku = await agent('State the exact model name or ID you are running as, as given in your system prompt, then list the exact names of every tool you can call. Two lines, nothing else.', { model: 'haiku', label: 'model-haiku' })
 return { restricted, sonnet, haiku }

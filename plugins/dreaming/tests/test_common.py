@@ -33,7 +33,7 @@ class Guard(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.state = {"workdir": self.tmp, "write_roots": [self.tmp],
-                      "plugin_root": "C:/plugins/claude-dream"}
+                      "plugin_root": "C:/plugins/dreaming"}
 
     def d(self, **kw):
         return guard.decide(kw, self.state)[0]
@@ -43,7 +43,7 @@ class Guard(unittest.TestCase):
         self.assertEqual(self.d(tool_name="Bash", agent_id="a1", tool_input={"command": "ls"}), "deny")
 
     def test_lead_plugin_script_allowed_only(self):
-        ok = 'python -I "C:/plugins/claude-dream/scripts/smoke.py" finish "s1"'
+        ok = 'python -I "C:/plugins/dreaming/scripts/smoke.py" finish "s1"'
         self.assertEqual(self.d(tool_name="PowerShell", tool_input={"command": ok}), "allow")
         self.assertEqual(self.d(tool_name="Bash", tool_input={"command": "python other.py"}), "deny")
         self.assertEqual(self.d(tool_name="Bash", tool_input={"command": ok + " ; rm -rf x"}), "deny")
