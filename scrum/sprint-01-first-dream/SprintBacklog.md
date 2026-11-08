@@ -133,9 +133,9 @@ PO 选定（2026-11-09）。PBI-006 不选：cookbook 本身没有水位，只�
 
 1. **脚本用 Python 标准库**：本机有 Python 3.13，不引第三方包。新用户的环境留给 PBI-009。
 2. **编排优先用插件自带的 workflow**：插件能带 `workflows/`，脚本逐段派 analyzer，“每段都分析过”由脚本保证，不靠 lead 记，正式跑时 lead 是 Haiku 级模型也不怕；用量到上限时 workflow 会暂停等重置。workflow 脚本本身不能碰文件和 shell，所以命令分三步：lead 跑 `prepare.py` → 调 workflow → lead 跑核对脚本。如果第 1 项查出 workflow 里的 agent 限不了工具，就改由 lead 用 Agent 工具分批派插件子代理（frontmatter `tools:` 限工具），核对仍由脚本对清单。
-3. **lead 只跑插件自带的脚本**（Master 定）：其余 agent 没有 shell；做梦期间所有 agent 都不能用网络工具。由 hook 执行并记日志，hook 只在有本轮运行状态文件、且会话对得上时生效。
-4. **测试一律不碰真实记忆**：测试时用一个开关把所有目标记忆目录映射到沙盒里的副本。只有 PO 的正式跑写真实记忆。
-5. **回滚点用文件副本，不用 git**：跑之前把每个要写的记忆目录复制到本轮工作目录，恢复就是原样拷回。这样不会提交或冲掉记忆仓库里别的会话没提交的改动。
+3. **lead 只跑插件自带的脚本**（Master 定）：其余 agent 没有 shell（Windows 上 shell 工具叫 PowerShell，也要拦）；做梦期间所有 agent 都不能用网络工具。由 hook 执行并记日志，hook 只在有本轮运行状态文件、且会话对得上时生效。
+4. **agent 只改暂存副本，跑完由脚本写回**（第 1 项后改）：跑之前把每个目标记忆目录复制到本轮工作目录的暂存区，analyzer 和 organizer 只改暂存副本；核对通过后，lead 跑脚本把暂存副本写回真实记忆目录。理由：第 1 项实测，`~/.claude/projects/*/memory/` 对 agent 是“敏感文件”，默认和 acceptEdits 模式下 hook 放行也写不进去，只有 bypass 能写；暂存后 hook 的规则简化成“只许写本轮工作目录”；核对在碰真实记忆之前做完。测试和沙盒运行就是不写回。
+5. **回滚点用文件副本，不用 git**：写回之前，把每个要写的真实记忆目录原样复制一份，恢复就是原样拷回。这样不会提交或冲掉记忆仓库里别的会话没提交的改动。
 6. **本轮工作目录放在 `~/.claude-dream/runs/<run-id>/`**：渲染好的会话、清单、回滚副本、日志、体检报告都在这里，既不在记忆目录里，也不在 `~/.claude/` 下面（避开那里的写入保护）。渲染副本可能含密钥，每条命令跑完就删，体检要用就自己重新渲染；回滚副本留到 PO 验收后再删；日志和报告保留。
 7. **认出做梦会话靠运行登记**：每次运行（包括测试和沙盒运行）都把发起它的会话 ID 记进 `~/.claude-dream/` 的登记表，转换时按登记排除这些会话和它们名下的子代理、workflow 记录；登记缺失时，再用命令留在会话开头的标记兜底。
 
@@ -164,5 +164,6 @@ Go-ahead: 2026-11-09 01:48，PO 在 Master 会话里放行，精化随之结束�
 | 2026-11-09 | 发现 `.worktreeinclude` 还写着旧路径 `reference/`（现为 `references/`） | 收尾时一并改；不影响本冲刺，工作树里 `references/` 是 git 跟踪的 | `.worktreeinclude` | 收尾时改 |
 | 2026-11-09 | Master 审 How（970124a），Developer 按意见改 3.1 | 照改三处：A 桌面端提前验——第 2 项改成桌面端冒烟测试（最小 workflow、限工具子代理、hook、python 脚本），新增第 9 项桌面端沙盒演练；B 第 7 项量出噪声后判断及格线要不要留余量，要调报 PO，在正式跑前写死进 2.2；E 测试和沙盒运行产生的会话也算做梦会话，写进第 3、10 项的 Done when。建议三处也采纳：C 运行说明请 PO 关掉别的会话，恢复前列出别处的改动；D 渲染副本每条命令跑完就删，回滚副本等 PO 验收后删；F 第 3、4 项各拆成两项，共 10 项 | Master 会话的消息；workflows 页的可用范围（付费计划、API 和几家云平台） | Master 核对，PO 确认精化结束并放行 |
 | 2026-11-09 | Master 核对 6aed640，How 审核通过；PO 放行 | 放行范围见 3.1 最后一行 | PO 在 Master 会话里说“放行吧” | Developer 从第 1 项开始 |
+| 2026-11-09 | 第 1 项完成：PBI-003 的 CLI 部分。试验插件 `probe-plugin/`，从 `C:\Users\seapawn\AppData\Local\Temp\claude\dream-probe` 用 `claude -p --plugin-dir` 跑（Claude Code 2.1.319） | 结论：①插件子代理的 `tools:` 白名单生效，用 Agent 工具派、或在 workflow 里用 `agentType` 都一样，只拿到 Read、Write、Glob、Grep，没有 shell 和网络工具；workflow 的 `agentType` 能指定插件子代理。②插件命令在 `claude -p` 下能跑；插件 workflow 在 `-p` 下要加 `--allowedTools Workflow`，否则报 `Review dynamic workflow before running`（交互模式会弹批准卡片）。③`--fork-session` 出来的会话原样复制父会话消息（同 uuid，51% 正文重复）；fork 型子代理和 workflow 里的 agent 不复制父会话内容（0 条父会话 uuid，父会话里的标记串 0 次）。⑦agent 写 `~/.claude/projects/*/memory/` 会被当成“敏感文件”拦下，默认和 acceptEdits 模式都拦，hook 放行也没用，只有 bypass 能写；写工作目录之外的普通路径（如 `S:/SeaPawn-Memory`）默认要批准，但插件 PreToolUse hook 返回 allow 就不弹提示直接写。另：插件 hook 对子代理和 workflow 里的 agent 都触发，输入里有 `agent_id` 和 `agent_type`；hook 返回 deny 拦得住 shell 和越界写入；Windows 上 shell 工具叫 PowerShell。编排方式定为插件 workflow 加 `agentType`（关键选择第 2 条不变）；关键选择第 4 条改为“agent 只改暂存副本、核对后由脚本写回”，第 5 条随之调整，理由见 3.1 | `~/.claude-dream/probe/hooklog.jsonl`；探针会话在 `~/.claude/projects/C--Users-seapawn-AppData-Local-Temp-claude-dream-probe/`（含 `5acd296b…/subagents/agent-a2b77c05….meta.json`：`"agentType":"fork"`）；workflow 里 agent 的记录在 `<会话>/subagents/workflows/<runId>/agent-*.jsonl`，旁边的 `.meta.json` 写着 `agentType` | 第 2 项：插件骨架、PBI-012、桌面端冒烟测试。注意：探针目录的会话是测试会话，正式跑要排除；写回时若真实文件在留副本之后又被别处改过，不覆盖，列出来交 PO |
 
 ## 4. Review
