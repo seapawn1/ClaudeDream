@@ -10,7 +10,7 @@
 
 | 文件/目录 | 内容 |
 |---|---|
-| `.claude-plugin/marketplace.json` | 插件市场注册（`claude-dream-dev`） |
+| `.claude-plugin/marketplace.json` | 插件市场注册（`claude-dream`） |
 | `references/` | 外部方案原料，见 [references/README.md](references/README.md) |
 | `docs/` | 讨论底稿与设计文档 |
 | `CLAUDE.md` | 项目指令（每次会话自动加载），含当前阶段 |

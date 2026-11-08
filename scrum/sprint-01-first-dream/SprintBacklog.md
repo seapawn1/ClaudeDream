@@ -18,7 +18,7 @@ PO 定：产品日志 1.3 的七项全部适用，措辞不改（PO：“桌面�
 | --- | --- | --- |
 | Outcome | 记忆新鲜 | 做梦后再体检一次，过时、错误的记忆比做梦前少 |
 | Outcome | 用得上 | PO 开新会话，agent 用上了整理后的记忆，PO 不用重讲 |
-| Output | 能装能跑 | 从本仓库的 `claude-dream-dev` 市场能装上，在 PO 的一个真实项目上跑通 |
+| Output | 能装能跑 | 从本仓库的 `claude-dream` 市场能装上，在 PO 的一个真实项目上跑通 |
 | Output | 只改记忆 | 只写记忆目录；做梦的 agent 没有 shell，也没有网络 |
 | Output | 可回滚 | 跑之前有回滚点 |
 | Output | 索引不超限 | 项目层的 `MEMORY.md` 不超过 200 行、25KB（原生加载只读这么多） |
@@ -47,7 +47,8 @@ PO 选定（2026-11-09）。PBI-006 不选：cookbook 本身没有水位，只�
 - 这次不写 GlobalMemory：管全局的 PBI-007 不在本冲刺（Master）。
 - 敏感内容：cookbook 的提示词本来就禁止把密钥、令牌、密码写进记忆，只许写名字，照抄就带上；本账号没有 SGCC、MidTerm 的会话。PBI-008 不提前（Master，PO 同意）。
 - 审阅由 Master 做，需要时派全新子代理（PO）。
-- 测试和正式跑怎么装插件：这个冲刺把 `claude-dream-dev` 改成从本地仓库目录注册，开发时指向工作树，合并后指向仓库根目录；DoD“能装能跑”在 Review 前用它验，不推送。现在的注册来自 GitHub（`seapawn1/ClaudeDream`），同名市场不能并存，要先移除；改注册由 PO 做或当面批准。从 GitHub 安装留到 PBI-009 或 PO 决定推送时再验（Master 定，PO 授权，11-09 经 Developer 会话转达）。
+- 名字（PO 11-09 定）：市场 `claude-dream`（原 `claude-dream-dev`），插件 `dreaming`，许可证 MIT。原定的插件名 `claude-dream` 过不了 `claude plugin validate`：以 `claude-` 开头的插件名会被当成冒充 Anthropic 自己的插件。
+- 测试和正式跑怎么装插件：这个冲刺把市场改成从本地仓库目录注册，开发时指向工作树，合并后指向仓库根目录；DoD“能装能跑”在 Review 前用它验，不推送。现在的注册来自 GitHub（`seapawn1/ClaudeDream`），同名市场不能并存，要先移除；改注册由 PO 做或当面批准。从 GitHub 安装留到 PBI-009 或 PO 决定推送时再验（Master 定，PO 授权，11-09 经 Developer 会话转达）。
 
 **PBI-001 读会话记录**
 - 定了：
@@ -85,7 +86,7 @@ PO 选定（2026-11-09）。PBI-006 不选：cookbook 本身没有水位，只�
   1. Workflow 工具起的 agent 能不能限制工具，不能就改用子代理；
   2. 插件命令在 `claude -p` 下能不能跑；
   3. fork 出来的会话记录（包括 fork 型子代理）带不带父会话的内容；
-  4. 能不能从 `claude-dream-dev` 市场把插件装进桌面端（桌面端没有 `/plugin` 命令，要用界面上的插件浏览器）；
+  4. 能不能从 `claude-dream` 市场把插件装进桌面端（桌面端没有 `/plugin` 命令，要用界面上的插件浏览器）；
   5. 做梦命令和它起的子代理在桌面端能不能跑；
   6. 桌面端的登录和模型设置与 CLI（走中转）不同，两边都要能跑；
   7. 没设 `autoMemoryDirectory` 的项目，记忆写到 `~/.claude/projects/<目录>/memory/` 会不会被 `.claude` 目录的保护拦住。
@@ -166,5 +167,6 @@ Go-ahead: 2026-11-09 01:48，PO 在 Master 会话里放行，精化随之结束�
 | 2026-11-09 | Master 核对 6aed640，How 审核通过；PO 放行 | 放行范围见 3.1 最后一行 | PO 在 Master 会话里说“放行吧” | Developer 从第 1 项开始 |
 | 2026-11-09 | 第 1 项完成：PBI-003 的 CLI 部分。试验插件 `probe-plugin/`，从 `C:\Users\seapawn\AppData\Local\Temp\claude\dream-probe` 用 `claude -p --plugin-dir` 跑（Claude Code 2.1.319） | 结论：①插件子代理的 `tools:` 白名单生效，用 Agent 工具派、或在 workflow 里用 `agentType` 都一样，只拿到 Read、Write、Glob、Grep，没有 shell 和网络工具；workflow 的 `agentType` 能指定插件子代理。②插件命令在 `claude -p` 下能跑；插件 workflow 在 `-p` 下要加 `--allowedTools Workflow`，否则报 `Review dynamic workflow before running`（交互模式会弹批准卡片）。③`--fork-session` 出来的会话原样复制父会话消息（同 uuid，51% 正文重复）；fork 型子代理和 workflow 里的 agent 不复制父会话内容（0 条父会话 uuid，父会话里的标记串 0 次）。⑦agent 写 `~/.claude/projects/*/memory/` 会被当成“敏感文件”拦下，默认和 acceptEdits 模式都拦，hook 放行也没用，只有 bypass 能写；写工作目录之外的普通路径（如 `S:/SeaPawn-Memory`）默认要批准，但插件 PreToolUse hook 返回 allow 就不弹提示直接写。另：插件 hook 对子代理和 workflow 里的 agent 都触发，输入里有 `agent_id` 和 `agent_type`；hook 返回 deny 拦得住 shell 和越界写入；Windows 上 shell 工具叫 PowerShell。编排方式定为插件 workflow 加 `agentType`（关键选择第 2 条不变）；关键选择第 4 条改为“agent 只改暂存副本、核对后由脚本写回”，第 5 条随之调整，理由见 3.1 | `~/.claude-dream/probe/hooklog.jsonl`；探针会话在 `~/.claude/projects/C--Users-seapawn-AppData-Local-Temp-claude-dream-probe/`（含 `5acd296b…/subagents/agent-a2b77c05….meta.json`：`"agentType":"fork"`）；workflow 里 agent 的记录在 `<会话>/subagents/workflows/<runId>/agent-*.jsonl`，旁边的 `.meta.json` 写着 `agentType` | 第 2 项：插件骨架、PBI-012、桌面端冒烟测试。注意：探针目录的会话是测试会话，正式跑要排除；写回时若真实文件在留副本之后又被别处改过，不覆盖，列出来交 PO |
 | 2026-11-09 | 第 2 项进行中：插件骨架 `plugins/claude-dream/`（plugin.json；`dream`、`check`、`smoke` 三个技能；冒烟 workflow `smoke-run`；冒烟子代理；做梦守卫 hook `scripts/guard.py`；`scripts/common.py`；单元测试 8 个）；`.claude-plugin/marketplace.json` 登记插件 | 用技能（`skills/*/SKILL.md`）而不是旧式命令：能用 `!` 注入在模型开口之前跑脚本，还能用 `${CLAUDE_SESSION_ID}`；技能都设 `disable-model-invocation: true`，不让 Claude 自己触发做梦。workflow 名和技能名不能相同：插件 workflow 也注册成 `/插件名:名字`，同名时 workflow 盖过技能（第一次冒烟就撞上了），所以 workflow 叫 `smoke-run`。守卫 hook 只在 `~/.claude-dream/active/<会话>.json` 存在时生效 | 单元测试 8/8 通过；CLI 默认权限模式下 `/claude-dream:dream`：默认读 `~/.claude/projects`（145 个项目目录、281 个主会话），带 `--projects-dir` 只读指定目录（1、1），PBI-012 验收通过；CLI 冒烟（`claude -p --allowedTools Workflow`）全部通过：注入跑了起始脚本、脚本能写探针项目的默认记忆目录、workflow 里 `agentType` 只有 Read/Write/Glob/Grep、`sonnet` 解析为 claude-sonnet-5-5、`haiku` 为 claude-haiku-5-5、守卫放行工作目录内写入、拦下目录外写入、放行 lead 跑插件脚本，结果见 `~/.claude-dream/smoke/last-result.md`；探针目录已登记进 `~/.claude-dream/registry.jsonl` | 阻塞，等 PO：①`claude plugin validate` 报插件名 `claude-dream` 是保留名（第三方不能以 `claude-` 开头），要 PO 定新名字；缺 LICENSE（只影响将来提交官方目录），许可证请 PO 定；②PO 把 `claude-dream-dev` 改成本地目录登记、装插件；③PO 在桌面端跑冒烟 |
+| 2026-11-09 | PO 定名字和许可证：市场 `claude-dream`，插件 `dreaming`，MIT | 原插件名 `claude-dream` 过不了 validate（`claude-` 开头算冒充 Anthropic 的插件，不过照样能装能用）。市场名要改，DoD“能装能跑”里写的市场名随之改成 `claude-dream`，措辞不变；PO 原话是“Claude-Dream”，按 kebab-case 统一成小写。Master 改了产品日志、2.2、CLAUDE.md、README；3.1 和插件文件由 Developer 改；Go-ahead 那一行是放行时的原文，不改 | Master 在临时目录用 `claude plugin validate` 验过：市场名 `claude-dream` 加插件名 `dreaming` 通过，只有两条缺描述、缺作者的警告 | Developer 改名后，PO 注册 `claude-dream` 并跑 `/dreaming:smoke` |
 
 ## 4. Review

@@ -12,7 +12,7 @@
 
 ## 目录约定
 
-- `.claude-plugin/marketplace.json`：插件市场注册（`claude-dream-dev`），插件列表暂空，新插件做出来后再登记。
+- `.claude-plugin/marketplace.json`：插件市场 `claude-dream`（2026-11-09 由 `claude-dream-dev` 改名）；插件 `dreaming` 在 Sprint 01 开发中。
 - `references/`：外部方案原料，只放原料不放结论；部分内容是 2026-07 的快照，使用前对照官方现状复核。
 - `docs/`：讨论底稿与设计文档。
 
