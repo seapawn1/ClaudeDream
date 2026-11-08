@@ -13,7 +13,7 @@
 | 0.3 | 同上 | `claude plugin list` | `dreaming@claude-dream` 一行显示 `Version: 0.2.0`；`C:\Users\seapawn\.claude\plugins\cache\claude-dream\dreaming\0.2.0` 存在 |
 | 0.4 | 桌面端 | 在 dream-probe 目录**新开**一个会话（已开着的会话还是旧代码） | 输入 `/dreaming:check` 时，参数提示里有 `--memory-from` |
 
-第 9、10 项进行期间，Developer 不再改 `plugins/dreaming/` 的代码，改了要重做 0.1～0.4。
+第 9、10 项进行期间，Developer 不再改 `plugins/dreaming/` 的代码。万一改了，先把 `plugins/dreaming/.claude-plugin/plugin.json` 的版本号升一级（比如 0.2.1），再重做 0.1～0.4：版本号不变，`claude plugin update` 会认为已是最新，不会重新复制到缓存，桌面端跑的还是旧代码。
 
 ## 1. 第 9 项：桌面端演练（PO，在 0.4 开的会话里，一条做完再敲下一条）
 
