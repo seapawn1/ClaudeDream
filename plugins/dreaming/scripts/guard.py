@@ -43,10 +43,40 @@ def decide(data, state):
     return None, None
 
 
-def main():
+def _log(state, rec):
+    rec = dict(rec, ts=time.strftime("%Y-%m-%dT%H:%M:%S"))
     try:
-        data = json.loads(sys.stdin.read() or "{}")
-    except Exception:
+        with open(os.path.join(state["workdir"], "hooklog.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _any_active_state():
+    """The one active run, when the hook input cannot be read to find the session."""
+    try:
+        names = [n for n in os.listdir(common.ACTIVE_DIR) if n.endswith(".json")]
+    except OSError:
+        return None
+    return common.active_state(names[0][:-5]) if len(names) == 1 else None
+
+
+def main():
+    # Read bytes and decode UTF-8 explicitly. On Windows, text-mode stdin uses the console code
+    # page, so a tool input with Chinese text failed to decode, the hook gave no answer, and the
+    # write fell through to a permission prompt (found in work item 6).
+    raw = sys.stdin.buffer.read()
+    try:
+        data = json.loads(raw.decode("utf-8", errors="replace") or "{}")
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        state = _any_active_state()
+        if state:  # a dream run is active but this call cannot be read: block it and say so
+            _log(state, {"tool": None, "decision": "deny", "error": "unreadable hook input"})
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "permissionDecision": "deny",
+                "permissionDecisionReason": "ClaudeDream: unreadable hook input"}}))
         return 0
     state = common.active_state(data.get("session_id"))
     if not state:
@@ -54,7 +84,6 @@ def main():
     decision, reason = decide(data, state)
     tin = data.get("tool_input") or {}
     rec = {
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "agent_id": data.get("agent_id"),
         "agent_type": data.get("agent_type"),
         "tool": data.get("tool_name"),
@@ -62,11 +91,7 @@ def main():
         "command": tin.get("command"),
         "decision": decision,
     }
-    try:
-        with open(os.path.join(state["workdir"], "hooklog.jsonl"), "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
+    _log(state, rec)
     if decision:
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",

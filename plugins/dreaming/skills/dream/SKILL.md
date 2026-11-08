@@ -7,7 +7,6 @@ allowed-tools:
   - Bash(python *)
   - PowerShell(python *)
   - Workflow
-  - Read
   - Read(~/.claude-dream/**)
 ---
 

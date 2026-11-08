@@ -4,7 +4,7 @@ import os
 import time
 
 HOME = os.path.expanduser("~")
-DREAM_HOME = os.path.join(HOME, ".claude-dream")
+DREAM_HOME = os.environ.get("CLAUDE_DREAM_HOME") or os.path.join(HOME, ".claude-dream")  # env: tests
 RUNS_DIR = os.path.join(DREAM_HOME, "runs")
 ACTIVE_DIR = os.path.join(DREAM_HOME, "active")
 REGISTRY = os.path.join(DREAM_HOME, "registry.jsonl")

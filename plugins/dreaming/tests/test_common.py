@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -60,6 +61,28 @@ class Guard(unittest.TestCase):
 
     def test_reads_untouched(self):
         self.assertIsNone(self.d(tool_name="Read", agent_id="a1", tool_input={"file_path": "C:/anything"}))
+
+
+class GuardProcess(unittest.TestCase):
+    """The hook as Claude Code runs it: a separate process reading UTF-8 bytes on stdin."""
+
+    def test_chinese_tool_input_is_decided_not_dropped(self):
+        import subprocess
+        home = tempfile.mkdtemp()
+        work = os.path.join(home, "runs", "r1")
+        os.makedirs(work)
+        env = dict(os.environ, CLAUDE_DREAM_HOME=home)
+        with mock.patch.object(common, "ACTIVE_DIR", os.path.join(home, "active")):
+            common.activate("s1", work, [work], "C:/plugins/dreaming")
+        inp = json.dumps({"session_id": "s1", "agent_id": "a1", "tool_name": "Edit", "tool_input": {
+            "file_path": os.path.join(work, "x.md"), "old_string": "我", "new_string": "记忆"}},
+            ensure_ascii=False).encode("utf-8")
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "guard.py")
+        out = subprocess.run([sys.executable, "-I", script], input=inp, capture_output=True, env=env)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"], "allow")
+        with open(os.path.join(work, "hooklog.jsonl"), encoding="utf-8") as f:
+            self.assertEqual(json.loads(f.readline())["decision"], "allow")
 
 
 if __name__ == "__main__":
