@@ -35,9 +35,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BATCH = 8
 VERDICTS = {"valid": "有效", "possibly_stale": "可能过时", "wrong": "错误", "conflict": "CONFLICT", "unknown": "无法判断"}
 STALE = ("possibly_stale", "wrong")
-# PBI-004 pass line: after the dream, the entries that existed before it count fewer stale or wrong
-# verdicts than before. MARGIN is how many fewer; 0 until the PO fixes it in 2.2 from the measured noise.
-MARGIN = 0
+# PBI-004 pass line (2.2 item 4, PO 11-09, rule B): only the old entries the dream edited or moved
+# count; the old entries it left unchanged are the same run's control group, and any change in their
+# verdicts is noise. Passed when the changed entries' drop in stale-or-wrong (per entry) is clearly
+# larger than the unchanged entries' fluctuation (share of them that flipped between stale-or-wrong and
+# the rest). How much larger the PO fixes in 2.2 after the noise is measured on the desktop (item 9);
+# until then B_MIN_DIFF is None and the comparison gives the numbers without a verdict.
+B_MIN_DIFF = None
 fwd = dream.fwd
 
 
@@ -89,11 +93,27 @@ def git_log(root, out):
 
 # ---------- start ----------
 
+def memory_sources(spec):
+    """--memory-from RUN_ID[:base|:stage]: check another copy of the memory instead of the real dirs --
+    a dream run's staged result (stage, the default) or its starting copy (base), or an earlier check's
+    snapshot. Returns {normcase(memory dir): (memory dir, copy to check)}."""
+    rid, _, side = spec.partition(":")
+    with open(os.path.join(common.RUNS_DIR, rid, "run.json"), encoding="utf-8") as f:
+        run = json.load(f)
+    if run.get("kind") == "check":
+        return {os.path.normcase(g["memory_dir"]): (g["memory_dir"], g["snapshot"]) for g in run["groups"]}
+    side = side or "stage"
+    if side not in ("base", "stage"):
+        raise ValueError(f"--memory-from {spec}: the side is base or stage")
+    return {os.path.normcase(g["memory_dir"]): (g["memory_dir"], g[side]) for g in run["groups"]}
+
+
 def start_cmd(a):
     started = time.time()
     old = common.active_state(a.session_id)
     if old:
         print(f"note: an unfinished run in this session is abandoned: {old['workdir']}")
+    sources = memory_sources(a.memory_from) if a.memory_from else None
     run_id, workdir = common.new_run("check", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
                      prep.SEGMENT_CHARS, set(a.session) if a.session else None)
@@ -119,11 +139,16 @@ def start_cmd(a):
     for mem, g in sorted(found.items()):
         if any(x in os.path.normpath(mem).split(os.sep) for x in dream.PROTECTED):
             continue
-        if not os.path.isdir(mem):
+        source = mem
+        if sources is not None:
+            if os.path.normcase(mem) not in sources:
+                continue  # checking another run's copies: only the dirs it has
+            source = sources[os.path.normcase(mem)][1]
+        if not os.path.isdir(source):
             continue  # no memory yet: nothing to check
         key = routing.sanitize(os.path.normpath(mem))[-120:]
         snapshot = os.path.join(workdir, "snapshot", key)
-        shutil.copytree(mem, snapshot)
+        shutil.copytree(source, snapshot)
         entries, stubs = list_entries(snapshot)
         if not entries:
             continue
@@ -139,11 +164,12 @@ def start_cmd(a):
             batches.append({"id": f"{key}#{n // BATCH + 1}", "key": key, "snapshot": fwd(snapshot),
                             "files": files[n:n + BATCH], "roots": [fwd(r) for r in roots],
                             "transcripts": transcripts, "context": fwd(context), "today": today})
-        groups.append({"key": key, "memory_dir": mem, "snapshot": fwd(snapshot), "roots": roots,
+        groups.append({"key": key, "memory_dir": mem, "source": fwd(source), "snapshot": fwd(snapshot), "roots": roots,
                        "project_dirs": sorted(g["project_dirs"]), "entries": entries, "stubs": stubs,
                        "format": memcheck.check_dir(snapshot)})
     run = {"run_id": run_id, "kind": "check", "session_id": a.session_id, "started_at": started,
            "workdir": workdir, "projects_dir": m["projects_dir"], "against": a.against, "today": today,
+           "memory_from": a.memory_from,
            "groups": groups, "batches": batches}
     wb.save(os.path.join(workdir, "run.json"), run)
     if not batches:
@@ -288,6 +314,7 @@ def finish_cmd(a):
                         e["session"] = s
             verdicts[g["key"]][f] = dict(j, checked=True)
     report = {"run_id": run["run_id"], "kind": "check", "today": run["today"], "projects_dir": run["projects_dir"],
+              "memory_from": run.get("memory_from"),
               "hook_log": hooks, "failed_batches": failed, "groups": []}
     for g in run["groups"]:
         rows = []
@@ -339,7 +366,7 @@ def pick_against(run, against):
 def compare(before, after):
     """PBI-004: the entries that existed before, each at its place after (same file, or where its
     MOVED TO stub points); the pass line; agreement on unchanged entries (the noise); new entries apart."""
-    out = {"before_run": before["run_id"], "after_run": after["run_id"], "margin": MARGIN, "groups": []}
+    out = {"before_run": before["run_id"], "after_run": after["run_id"], "b_min_diff": B_MIN_DIFF, "groups": []}
     tot = collections.Counter()
     a_groups = {os.path.normcase(g["memory_dir"]): g for g in after["groups"]}
     for bg in before["groups"]:
@@ -376,6 +403,7 @@ def compare(before, after):
             "unchanged": len(unchanged), "unchanged_same_verdict": sum(1 for r in unchanged if r["before"] == r["after"]),
             "unchanged_stale_before": sum(1 for r in unchanged if r["before"] in STALE),
             "unchanged_stale_after": sum(1 for r in unchanged if r["after"] in STALE),
+            "unchanged_flips": sum(1 for r in unchanged if (r["before"] in STALE) != (r["after"] in STALE)),
             "changed": len(changed), "changed_stale_before": sum(1 for r in changed if r["before"] in STALE),
             "changed_stale_after": sum(1 for r in changed if r["after"] in STALE),
             "new_entries": len(new), "new_checked": len(new_checked),
@@ -386,9 +414,16 @@ def compare(before, after):
         out["groups"].append(dict(c, memory_dir=bg["memory_dir"], rows=rows,
                                   changed_verdicts=[r for r in unchanged if r["before"] != r["after"]]))
     tot = dict(tot)
-    tot["passed"] = tot.get("compared", 0) > 0 and tot.get("after_stale", 0) < tot.get("before_stale", 0) - MARGIN
-    tot["unchanged_agreement"] = (round(tot["unchanged_same_verdict"] / tot["unchanged"], 3)
-                                  if tot.get("unchanged") else None)
+    n_ch, n_un = tot.get("changed", 0), tot.get("unchanged", 0)
+    tot["unchanged_agreement"] = round(tot["unchanged_same_verdict"] / n_un, 3) if n_un else None
+    tot["changed_drop_rate"] = (round((tot["changed_stale_before"] - tot["changed_stale_after"]) / n_ch, 3)
+                                if n_ch else None)
+    tot["unchanged_flip_rate"] = round(tot["unchanged_flips"] / n_un, 3) if n_un else None
+    tot["unchanged_net_drop_rate"] = (round((tot["unchanged_stale_before"] - tot["unchanged_stale_after"]) / n_un, 3)
+                                      if n_un else None)
+    tot["b_diff"] = (round(tot["changed_drop_rate"] - tot["unchanged_flip_rate"], 3)
+                     if n_ch and n_un else None)
+    tot["passed"] = None if B_MIN_DIFF is None or tot["b_diff"] is None else tot["b_diff"] > B_MIN_DIFF
     out["total"] = tot
     return out
 
@@ -408,14 +443,16 @@ def compare_cmd(a):
 
 def print_comparison(c):
     t = c["total"]
-    print(f"compared with {c['before_run']}: {t.get('compared', 0)} entries checked in both runs")
-    print(f"  stale or wrong among them: before {t.get('before_stale', 0)}, now {t.get('after_stale', 0)}; "
-          f"pass line (fewer than before, margin {c['margin']}): {'PASSED' if t['passed'] else 'not passed'}")
-    print(f"  unchanged entries: {t.get('unchanged', 0)}, same verdict: {t.get('unchanged_same_verdict', 0)} "
-          f"(agreement {t['unchanged_agreement']}); stale or wrong among them: "
-          f"{t.get('unchanged_stale_before', 0)} -> {t.get('unchanged_stale_after', 0)}")
-    print(f"  entries the dream changed (edited or moved): {t.get('changed', 0)}; stale or wrong among them: "
-          f"{t.get('changed_stale_before', 0)} -> {t.get('changed_stale_after', 0)}")
+    verdict = {None: "no verdict yet (threshold not fixed, or no changed or no unchanged entries)",
+               True: "PASSED", False: "not passed"}[t["passed"]]
+    print(f"compared with {c['before_run']}: {t.get('compared', 0)} old entries checked in both runs")
+    print(f"  changed by the dream (edited or moved): {t.get('changed', 0)}; stale or wrong "
+          f"{t.get('changed_stale_before', 0)} -> {t.get('changed_stale_after', 0)}; drop rate {t['changed_drop_rate']}")
+    print(f"  unchanged (control): {t.get('unchanged', 0)}; stale or wrong "
+          f"{t.get('unchanged_stale_before', 0)} -> {t.get('unchanged_stale_after', 0)}; flipped {t.get('unchanged_flips', 0)} "
+          f"(flip rate {t['unchanged_flip_rate']}); same verdict {t.get('unchanged_same_verdict', 0)} (agreement {t['unchanged_agreement']})")
+    print(f"  pass line B: drop rate - flip rate = {t['b_diff']}, must exceed {c['b_min_diff']}: {verdict}")
+    print(f"  all old entries (old rule, void): stale or wrong {t.get('before_stale', 0)} -> {t.get('after_stale', 0)}")
     print(f"  new entries: {t.get('new_entries', 0)}, checked {t.get('new_checked', 0)}, stale or wrong {t.get('new_stale', 0)}")
     lost = [f"{g['memory_dir']}: {x}" for g in c["groups"] for x in g["lost"]]
     print(f"  entries with no whereabouts: {len(lost)}" + ("".join(f"\n    {x}" for x in lost[:20])))
@@ -444,16 +481,25 @@ def _cell(s, n=300):
 def render_md(report):
     L = [f"# 体检报告 {report['run_id']}", "",
          f"日期 {report['today']}。只出报告，没有改任何记忆文件。结论经脚本复核：引用的原文不在所引文件里的证据不算；"
-         "没有核实得了的证据，结论记为“无法判断”；“错误”缺新值、日期或出处的，记为“可能过时”。", ""]
+         "没有核实得了的证据，结论记为“无法判断”；“错误”缺新值、日期或出处的，记为“可能过时”。"
+         "引文核对只证明引文确实在所引文件里，不证明 checker 的推理对。"
+         + (f"检查的不是真实记忆目录，而是 {report['memory_from']} 里的副本。" if report.get("memory_from") else ""), ""]
     if "comparison" in report:
         c, t = report["comparison"], report["comparison"]["total"]
         L += ["## 与上次体检对比", "",
-              f"上次：{c['before_run']}。两次都检查到的老条目 {t.get('compared', 0)} 条；其中“可能过时”加“错误”：上次 "
-              f"{t.get('before_stale', 0)}，这次 {t.get('after_stale', 0)}；及格线（比上次少，余量 {c['margin']}）："
-              f"{'通过' if t['passed'] else '未通过'}。",
-              f"没改过的条目 {t.get('unchanged', 0)} 条，两次结论相同 {t.get('unchanged_same_verdict', 0)} 条"
-              f"（一致率 {t['unchanged_agreement']}），其中可能过时或错误 {t.get('unchanged_stale_before', 0)} → {t.get('unchanged_stale_after', 0)}；"
-              f"本轮改过或移走的条目 {t.get('changed', 0)} 条，其中可能过时或错误 {t.get('changed_stale_before', 0)} → {t.get('changed_stale_after', 0)}。新增条目 {t.get('new_entries', 0)} 条，其中可能过时或错误 {t.get('new_stale', 0)} 条。",
+              f"上次：{c['before_run']}。两次都检查到的老条目 {t.get('compared', 0)} 条。",
+              "",
+              "| 老条目 | 条数 | “可能过时”加“错误”（上次 → 这次） | 比例 |",
+              "| --- | --- | --- | --- |",
+              f"| 改过或移走的 | {t.get('changed', 0)} | {t.get('changed_stale_before', 0)} → {t.get('changed_stale_after', 0)} "
+              f"| 下降比例 {t['changed_drop_rate']}（每条平均） |",
+              f"| 没改过的（对照） | {t.get('unchanged', 0)} | {t.get('unchanged_stale_before', 0)} → {t.get('unchanged_stale_after', 0)} "
+              f"| 波动比例 {t['unchanged_flip_rate']}（在两类之间翻转的 {t.get('unchanged_flips', 0)} 条）；结论完全相同的占 {t['unchanged_agreement']} |",
+              "",
+              f"及格线 B（2.2 PBI-004 第 4 条）：下降比例减波动比例 = {t['b_diff']}，要大于 {c['b_min_diff']}："
+              + {None: "未判（门槛待 PO 定，或缺改过的、没改过的条目）", True: "通过", False: "未通过"}[t["passed"]] + "。",
+              f"新增条目 {t.get('new_entries', 0)} 条，其中可能过时或错误 {t.get('new_stale', 0)} 条（单独报告，不设及格线）。"
+              f"全部老条目合计 {t.get('before_stale', 0)} → {t.get('after_stale', 0)}（原第 2 条的口径，已作废，仅供参考）。",
               f"找不到下落的条目：{t.get('lost', 0)} 条。", ""]
         for g in c["groups"]:
             for x in g["lost"]:
@@ -492,6 +538,9 @@ def main(argv):
     s.add_argument("--project", action="append", default=None)
     s.add_argument("--session", action="append", default=None)
     s.add_argument("--against", default=None, help="the earlier check run to compare with; 'none' for no comparison")
+    s.add_argument("--memory-from", default=None,
+                   help="RUN_ID[:base|:stage]: check a dream run's staged result (or starting copy), or an earlier "
+                        "check's snapshot, instead of the real memory dirs")
     f = sub.add_parser("finish")
     f.add_argument("session_id")
     f.add_argument("--against", default=None)

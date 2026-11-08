@@ -101,25 +101,55 @@ class Compare(unittest.TestCase):
                          {"a.md": ("a.md", "edited"), "b.md": ("n.md", "moved"), "c.md": ("c.md", "unchanged")})
         self.assertEqual(sorted(g["lost"]), ["d.md", "e.md"])
         self.assertEqual((t["before_stale"], t["after_stale"]), (2, 1))  # a, b before; c after
-        self.assertTrue(t["passed"])
         self.assertEqual((t["unchanged"], t["unchanged_same_verdict"], t["unchanged_agreement"]), (1, 0, 0.0))
+        self.assertEqual((t["changed_drop_rate"], t["unchanged_flip_rate"], t["b_diff"]), (1.0, 1.0, 0.0))
+        self.assertIsNone(t["passed"])  # threshold not fixed yet
         self.assertEqual((t["new_entries"], t["new_stale"]), (2, 1))
         self.assertEqual((t["changed"], t["changed_stale_before"], t["changed_stale_after"]), (2, 2, 0))
 
-    def test_same_count_does_not_pass_and_margin_applies(self):
-        before = report("check-1", "M", [entry("a.md", "possibly_stale"), entry("b.md", "possibly_stale")])
-        same = report("check-2", "M", [entry("a.md", "possibly_stale"), entry("b.md", "possibly_stale")])
-        self.assertFalse(check.compare(before, same)["total"]["passed"])
-        one_less = report("check-2", "M", [entry("a.md", "valid"), entry("b.md", "possibly_stale")])
-        self.assertTrue(check.compare(before, one_less)["total"]["passed"])
-        with mock.patch.object(check, "MARGIN", 1):
-            self.assertFalse(check.compare(before, one_less)["total"]["passed"])
+    def test_rule_b_changed_against_unchanged(self):
+        # four edited entries, three of them stale before and one after; four unchanged, one flips
+        before = report("check-1", "M", [entry(f"c{i}.md", "possibly_stale" if i < 3 else "valid", f"c{i}") for i in range(4)]
+                        + [entry(f"u{i}.md", "wrong" if i == 0 else "valid", f"u{i}") for i in range(4)])
+        after = report("check-2", "M", [entry(f"c{i}.md", "possibly_stale" if i == 0 else "valid", f"c{i}x") for i in range(4)]
+                       + [entry(f"u{i}.md", "valid", f"u{i}") for i in range(4)])
+        t = check.compare(before, after)["total"]
+        self.assertEqual((t["changed"], t["changed_stale_before"], t["changed_stale_after"]), (4, 3, 1))
+        self.assertEqual((t["changed_drop_rate"], t["unchanged_flips"], t["unchanged_flip_rate"]), (0.5, 1, 0.25))
+        self.assertEqual((t["b_diff"], t["unchanged_net_drop_rate"]), (0.25, 0.25))
+        self.assertIsNone(t["passed"])
+        with mock.patch.object(check, "B_MIN_DIFF", 0.2):
+            self.assertTrue(check.compare(before, after)["total"]["passed"])
+        with mock.patch.object(check, "B_MIN_DIFF", 0.3):
+            self.assertFalse(check.compare(before, after)["total"]["passed"])
+        only_unchanged = report("check-2", "M", [entry(f"c{i}.md", "valid", f"c{i}") for i in range(4)])
+        with mock.patch.object(check, "B_MIN_DIFF", 0.0):
+            self.assertIsNone(check.compare(before, only_unchanged)["total"]["passed"])  # nothing changed: no verdict
 
     def test_entries_not_checked_in_one_run_are_left_out(self):
         before = report("check-1", "M", [entry("a.md", "possibly_stale"), entry("b.md", "valid")])
         after = report("check-2", "M", [entry("a.md", None, checked=False), entry("b.md", "valid")])
         t = check.compare(before, after)["total"]
         self.assertEqual((t["compared"], t["not_checked_in_one_run"], t["before_stale"]), (1, 1, 0))
+
+
+class MemoryFrom(unittest.TestCase):
+    def test_dream_stage_or_base_and_check_snapshot(self):
+        runs = tempfile.mkdtemp()
+        try:
+            write(os.path.join(runs, "dream-1", "run.json"),
+                  '{"groups": [{"memory_dir": "M:\\\\mem", "base": "B", "stage": "S"}]}')
+            write(os.path.join(runs, "check-1", "run.json"),
+                  '{"kind": "check", "groups": [{"memory_dir": "M:\\\\mem", "snapshot": "P"}]}')
+            with mock.patch.object(check.common, "RUNS_DIR", runs):
+                key = os.path.normcase("M:\\mem")
+                self.assertEqual(check.memory_sources("dream-1")[key], ("M:\\mem", "S"))
+                self.assertEqual(check.memory_sources("dream-1:base")[key][1], "B")
+                self.assertEqual(check.memory_sources("check-1")[key][1], "P")
+                with self.assertRaises(ValueError):
+                    check.memory_sources("dream-1:other")
+        finally:
+            shutil.rmtree(runs, ignore_errors=True)
 
 
 class WorkflowDirs(unittest.TestCase):
