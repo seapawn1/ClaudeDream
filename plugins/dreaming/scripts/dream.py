@@ -12,7 +12,8 @@ finish: check each directory before anything touches the real memory -- every pa
 the directory organized (from the workflow's own journal), native format of every file the run
 added or changed, MEMORY.md within 200 lines and 25KB, every file that existed at the start still
 findable (kept, edited, or moved with a stub), what the hook log shows -- then write back the
-directories that passed (unless --sandbox), keeping a rollback copy. Agent self-reports are never
+directories that passed (unless --sandbox), keeping a rollback copy; a directory with any file
+changed elsewhere during the run is not written back at all. Agent self-reports are never
 evidence: the organizer's list of changes is checked against the diff and the hook log.
 restore: put a run's rollback copies back.
 """
@@ -248,11 +249,16 @@ def finish_cmd(a):
         c["written_back"] = False
         if c["passed"] and not run["sandbox"]:
             res = wb.apply(g["base"], g["stage"], g["memory_dir"], os.path.join(workdir, "backup", g["key"]))
-            c.update(written_back=True, written=res["written"], conflicts=res["conflicts"])
-            g["after"] = res["after"]
+            c.update(written_back=res["written_back"], written=res["written"], conflicts=res["conflicts"])
+            if res["written_back"]:
+                g["after"] = res["after"]
+            else:
+                c["not_written_back"] = {
+                    "why": "whole directory not written back: files the run would write were changed elsewhere during the run",
+                    "conflicts": res["conflicts"], "undone": res.get("undone", []), "staged_result": g["stage"]}
         report["groups"].append(c)
     wb.save(os.path.join(workdir, "run.json"), run)
-    report["complete"] = all(c["passed"] for c in report["groups"])
+    report["complete"] = all(c["passed"] and (run["sandbox"] or c["written_back"]) for c in report["groups"])
     wb.save(os.path.join(workdir, "run-report.json"), report)
     print(f"run {run['run_id']}: {'all checks passed' if report['complete'] else 'SOME CHECKS FAILED'}"
           f"{' (sandbox: nothing written back)' if run['sandbox'] else ''}")
@@ -274,7 +280,11 @@ def finish_cmd(a):
         for x in c["moved_with_missing_lines"][:5]:
             print(f"    moved file with lines not found in its target: {x['file']} -> {x['target']} ({x['not_found']}/{x['lines']})")
         if c["written_back"]:
-            print(f"    written back: {len(c['written'])} files; left alone (changed elsewhere during the run): {c['conflicts'] or 'none'}")
+            print(f"    written back: {len(c['written'])} files")
+        elif "not_written_back" in c:
+            nw = c["not_written_back"]
+            print(f"    WHOLE DIRECTORY NOT WRITTEN BACK: changed elsewhere during the run: {', '.join(nw['conflicts'][:10])}; "
+                  f"the staged result is kept at {nw['staged_result']} for the PO to decide")
     print(f"report: {fwd(os.path.join(workdir, 'run-report.json'))}")
     if any(c["written_back"] for c in report["groups"]):
         print(f"to undo: /dreaming:restore {run['run_id']}")

@@ -4,8 +4,9 @@ Per memory directory a run keeps three copies in its work dir:
   base/<key>    the real directory as it was when the run started (never touched);
   stage/<key>   the copy the agents worked on;
   backup/<key>  the real directory right before write-back (the rollback copy).
-Write-back changes a real file only if it still equals its base copy: a file someone else changed
-during the run is left alone and listed. Files are never deleted by write-back.
+Write-back is per directory, all or nothing: if any file the run would write was changed elsewhere
+during the run, nothing in that directory is written and the conflicts are listed. Files are never
+deleted by write-back.
 Restore puts the backup back, byte for byte, but first lists every file that changed after
 write-back other than by this run, and leaves those alone unless forced.
 """
@@ -124,28 +125,47 @@ def claims_vs_diff(changes, diff, attempts):
     return contradicted
 
 
+def _sha(path):
+    if not os.path.isfile(path):
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def apply(base, stage, real, backup):
-    """Write the staged directory back. Returns what was written and what was left alone."""
+    """Write the staged directory back as a whole, or not at all.
+
+    A file the run would write but that someone else changed (or created) since the run started is
+    a conflict. One conflict and nothing in the directory is written: a half-written directory --
+    new files and MOVED TO stubs in, MEMORY.md still the old one -- is worse than none. The staged
+    result stays in the run's work dir for the PO to decide on. Each file is checked again right
+    before it is copied; a conflict that appears mid-way undoes what was already written."""
     b, s, r = tree(base), tree(stage), tree(real)
+    todo = sorted(rel for rel, h in s.items() if b.get(rel) != h)
+    conflicts = [rel for rel in todo if r.get(rel) != b.get(rel)]
+    if conflicts:
+        return {"written_back": False, "written": [], "conflicts": conflicts, "after": None}
     if os.path.exists(backup):
         shutil.rmtree(backup)
     if os.path.isdir(real):
         shutil.copytree(real, backup)
     else:
         os.makedirs(backup)
-    written, conflicts = [], []
-    for rel, h in sorted(s.items()):
-        if b.get(rel) == h:
-            continue  # unchanged by the run
-        if r.get(rel) != b.get(rel):
-            conflicts.append(rel)  # changed elsewhere since the run started (or created elsewhere)
-            continue
+    written = []
+    for rel in todo:
         dst = os.path.join(real, rel)
+        if _sha(dst) != b.get(rel):  # changed elsewhere while this loop ran: undo, write nothing
+            for w in reversed(written):
+                if os.path.isfile(os.path.join(backup, w)):
+                    shutil.copy2(os.path.join(backup, w), os.path.join(real, w))
+                else:
+                    os.remove(os.path.join(real, w))
+            return {"written_back": False, "written": [], "conflicts": [rel], "after": None,
+                    "undone": written}
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(os.path.join(stage, rel), dst)
         written.append(rel)
-    after = tree(real)
-    return {"written": written, "conflicts": conflicts, "after": after}
+    return {"written_back": True, "written": written, "conflicts": [], "after": tree(real)}
 
 
 def restore(real, backup, after, force=False):

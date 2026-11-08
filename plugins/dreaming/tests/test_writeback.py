@@ -51,17 +51,47 @@ class Writeback(unittest.TestCase):
         self.assertIn("a.md", d["lost"])
         self.assertEqual(d["moved_with_missing_lines"][0]["file"], "old.md")
 
-    def test_apply_leaves_concurrent_changes_and_restore_is_exact(self):
-        write(self.real, "a.md", FM.format(n="a") + "edited by another session\n")
+    def test_apply_and_restore_is_exact(self):
+        before = wb.tree(self.real)
         res = wb.apply(self.base, self.stage, self.real, self.backup)
-        self.assertEqual(res["conflicts"], ["a.md"])
-        self.assertIn("b.md", res["written"])
-        with open(os.path.join(self.real, "a.md"), encoding="utf-8") as f:
-            self.assertIn("edited by another session", f.read())
-        before = wb.tree(self.backup)
+        self.assertTrue(res["written_back"])
+        self.assertEqual(res["written"], ["MEMORY.md", "a.md", "b.md", "old.md"])
+        self.assertEqual(wb.tree(self.real), wb.tree(self.stage))
         r = wb.restore(self.real, self.backup, res["after"])
         self.assertTrue(r["restored"] and r["identical"])
         self.assertEqual(wb.tree(self.real), before)
+
+    def test_index_conflict_writes_nothing_in_the_directory(self):
+        # native auto memory in another session added a line to MEMORY.md during the run
+        write(self.real, "MEMORY.md", "# Memory Index\n- [A](a.md) — a\n- [Old](old.md) — o\n- [N](n.md) — n\n")
+        before = wb.tree(self.real)
+        res = wb.apply(self.base, self.stage, self.real, self.backup)
+        self.assertFalse(res["written_back"])
+        self.assertEqual(res["conflicts"], ["MEMORY.md"])
+        self.assertEqual(res["written"], [])
+        self.assertEqual(wb.tree(self.real), before)
+
+    def test_conflict_mid_write_undoes_what_was_written(self):
+        real_copy2, calls = wb.shutil.copy2, []
+
+        def copy2(src, dst):  # another session edits old.md right after the first file is written
+            if not calls:
+                write(self.real, "old.md", FM.format(n="old") + "edited by another session\n")
+            calls.append(dst)
+            return real_copy2(src, dst)
+        before = wb.tree(self.real)
+        wb.shutil.copy2 = copy2
+        try:
+            res = wb.apply(self.base, self.stage, self.real, self.backup)
+        finally:
+            wb.shutil.copy2 = real_copy2
+        self.assertFalse(res["written_back"])
+        self.assertEqual(res["conflicts"], ["old.md"])
+        self.assertEqual(res["undone"], ["MEMORY.md", "a.md", "b.md"])
+        now = wb.tree(self.real)
+        self.assertNotIn("b.md", now)
+        self.assertEqual({k: v for k, v in now.items() if k != "old.md"},
+                         {k: v for k, v in before.items() if k != "old.md"})
 
     def test_restore_refuses_after_foreign_change(self):
         res = wb.apply(self.base, self.stage, self.real, self.backup)
