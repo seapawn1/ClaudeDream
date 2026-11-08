@@ -158,6 +158,7 @@ def convert(e, owners, out_dir, budget, ledger):
     mem, rule = routing.memory_dir(info["cwd"])
     e.update(memory_dir=mem, route_rule=rule)
     parts = sg.pack(threads, budget, first_summary)
+    e["_ac3"] = sg.check_carried(parts, first_summary)
     base_notes = [
         f"A Claude Code session started in {info['cwd']} (git branch {info['branch']}), "
         f"from {info['created']} to {info['updated']}.",
@@ -202,6 +203,9 @@ def check(entries, budget):
         for p in e["parts"]:
             if p["chars"] > budget + sg.MAX_SUMMARY + 4_000:
                 problems.append(f"{p['file']}: {p['chars']} chars over the budget")
+    for e in entries:
+        for prob in e.pop("_ac3", ()):
+            problems.append(f"{e['id']}: {prob}")
     owners_seen = {}
     for e in entries:
         for u in e.get("_rendered_uuids", ()):

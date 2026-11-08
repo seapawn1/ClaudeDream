@@ -170,6 +170,9 @@ class Pack(unittest.TestCase):
         later = [p for p in parts if p["carried"]]
         self.assertTrue(later)  # a size cut after the compaction carries SUMMARY-1
         self.assertTrue(all("SUMMARY-1" in es[0]["text"] for p in later for _, es in p["sections"][:1]))
+        self.assertEqual(sg.check_carried(parts), [])
+        later[0]["sections"].pop(0)  # drop the carried copy: the check must notice
+        self.assertTrue(sg.check_carried(parts))
 
     def test_long_tool_result_is_cut(self):
         stats = tx.new_stats()

@@ -99,6 +99,30 @@ def summary_event(text):
             "text": tx.block("EVENT compact_summary:", _wrap(text))}
 
 
+def check_carried(parts, first_summary=None):
+    """PBI-001 acceptance criterion 3, recomputed from the parts themselves: every part after a
+    compaction opens with the latest summary before it (its own boundary, or a carried copy).
+    Returns a list of problems."""
+    problems, latest = [], first_summary
+    for k, p in enumerate(parts, 1):
+        evs = [e for _, es in p["sections"] for e in es]
+        carried = [e for e in evs if e["kind"] == "carried_summary"]
+        real = [e for e in evs if e["kind"] != "carried_summary"]
+        if real and real[0]["kind"] == "compact_boundary":
+            if carried:
+                problems.append(f"part {k}: starts at a compaction but also carries a summary")
+        elif latest is not None:
+            want = summary_event(latest)["body"]
+            if len(carried) != 1 or carried[0]["body"] != want or evs[0] is not carried[0]:
+                problems.append(f"part {k}: does not open with the latest compaction summary")
+        elif carried:
+            problems.append(f"part {k}: carries a summary although none came before it")
+        for e in real:
+            if e["kind"] == "compact_summary":
+                latest = e["body"]
+    return problems
+
+
 def pack(threads, budget, first_summary=None):
     """threads: [(header, [event])] -> parts: [{"sections": [(header, [event])], "carried": bool, "chars": int}].
 
