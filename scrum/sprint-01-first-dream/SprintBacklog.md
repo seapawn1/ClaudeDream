@@ -110,7 +110,7 @@ PO 选定（2026-11-09）。PBI-006 不选：cookbook 本身没有水位，只�
 
 **“用得上”的验法**：PO 正式跑完以后开新会话，看 agent 是否用上了整理后的记忆、不用重讲，由 PO 判断。
 
-**还没完成**：Developer 已复述，提出的五点已定（见上）；还差 PO 说精化结束。
+**精化结束**：Developer 已复述，提出的五点已定（见上）；PO 2026-11-09 放行，精化随之结束。
 
 ## 3. How
 
@@ -151,7 +151,7 @@ PO 选定（2026-11-09）。PBI-006 不选：cookbook 本身没有水位，只�
 - **待 PO**：`claude-dream-dev` 改成从本地目录登记（开发时指向工作树，合并后指向仓库根目录），要先移除现在的 GitHub 登记。这是改 PO 的 Claude Code 配置，由 PO 本人做或当面批准，放在第 2 项开头。
 - PBI-003 里如果有做不到的项，和 PO 定替代做法。
 
-Go-ahead: （待 PO）
+Go-ahead: 2026-11-09 01:48，PO 在 Master 会话里放行，精化随之结束。范围：只在工作树分支 `worktree-sprint-01-first-dream` 上提交；合并、打 tag 到 Review 时再定；不推送。冲刺中 PO 本人要做三件事：第 2 项开头把 `claude-dream-dev` 改成本地目录注册并跑桌面端冒烟测试，第 9 项在桌面端触发沙盒演练，第 10 项在桌面端正式跑
 
 ### 3.2 Notes
 
@@ -163,5 +163,6 @@ Go-ahead: （待 PO）
 | 2026-11-09 | Developer 写 3.1 How（8 项） | 编排优先用插件自带的 workflow（插件能带 `workflows/`；最多同时 16 个 agent，每轮最多 1000 个，到用量上限会暂停等重置；脚本本身不能碰文件和 shell）；测试只写沙盒，只有 PO 的正式跑写真实记忆 | 实测：`~/.claude/projects` 下 451 个 jsonl、378 MB，消息正文 6640 万字符，其中 3410 万是 fork 重复；本机有 Python 3.13、Node 26。文档：workflows 页“Behavior and limits”“Distribute a workflow in a plugin”；memory 页“Storage location”（默认记忆目录按 git 仓库算，worktree 和子目录共用一个） | Master 审 How，PO 放行 |
 | 2026-11-09 | 发现 `.worktreeinclude` 还写着旧路径 `reference/`（现为 `references/`） | 收尾时一并改；不影响本冲刺，工作树里 `references/` 是 git 跟踪的 | `.worktreeinclude` | 收尾时改 |
 | 2026-11-09 | Master 审 How（970124a），Developer 按意见改 3.1 | 照改三处：A 桌面端提前验——第 2 项改成桌面端冒烟测试（最小 workflow、限工具子代理、hook、python 脚本），新增第 9 项桌面端沙盒演练；B 第 7 项量出噪声后判断及格线要不要留余量，要调报 PO，在正式跑前写死进 2.2；E 测试和沙盒运行产生的会话也算做梦会话，写进第 3、10 项的 Done when。建议三处也采纳：C 运行说明请 PO 关掉别的会话，恢复前列出别处的改动；D 渲染副本每条命令跑完就删，回滚副本等 PO 验收后删；F 第 3、4 项各拆成两项，共 10 项 | Master 会话的消息；workflows 页的可用范围（付费计划、API 和几家云平台） | Master 核对，PO 确认精化结束并放行 |
+| 2026-11-09 | Master 核对 6aed640，How 审核通过；PO 放行 | 放行范围见 3.1 最后一行 | PO 在 Master 会话里说“放行吧” | Developer 从第 1 项开始 |
 
 ## 4. Review
