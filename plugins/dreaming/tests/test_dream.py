@@ -1,3 +1,6 @@
+import io
+import contextlib
+import collections
 import json
 import os
 import shutil
@@ -102,23 +105,115 @@ class Journal(unittest.TestCase):
         self.assertFalse(dream.hook_evidence(old[:1], "W", n, ids)["ok"])
 
 
+FM = "---\nname: {n}\ndescription: d\nmetadata:\n  type: project\n---\n\n"
+
+
+def memdir(path, files, index_lines=None):
+    """A memory dir: files {name: text}; MEMORY.md lists every file unless index_lines says otherwise."""
+    write(os.path.join(path, "MEMORY.md"),
+          "# Memory Index\n" + "\n".join(index_lines or [f"- [{n}]({n}) — h" for n in files if n.endswith(".md")]) + "\n")
+    for n, t in files.items():
+        write(os.path.join(path, n), t)
+
+
 class CheckGroup(unittest.TestCase):
-    def test_problem_line_names_the_file_and_the_reason(self):
-        tmp = tempfile.mkdtemp()
-        try:
-            fm = "---\nname: {n}\ndescription: d\nmetadata:\n  type: project\n---\n\n"
-            base, stage = os.path.join(tmp, "base"), os.path.join(tmp, "stage")
-            write(os.path.join(base, "MEMORY.md"), "# Memory Index\n- [A](a.md) — a\n")
-            write(os.path.join(base, "a.md"), fm.format(n="a") + "fact\n")
-            write(os.path.join(stage, "MEMORY.md"), "# Memory Index\n- [A](a.md) — a\n- [Big](big.md) — b\n")
-            write(os.path.join(stage, "a.md"), fm.format(n="a") + "fact\n")
-            write(os.path.join(stage, "big.md"), fm.format(n="big") + ("x" * 100 + "\n") * 1100)
-            g = {"key": "G", "memory_dir": "M", "base": base, "stage": stage, "parts": []}
-            c = dream.check_group(g, {"organize G": {"index_entries": 2, "changes": []}}, {}, True)
-            self.assertFalse(c["passed"])
-            self.assertTrue(any("big.md: over 100KB" in p for p in c["problems"]), c["problems"])
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.base, self.stage = os.path.join(self.tmp, "base"), os.path.join(self.tmp, "stage")
+        memdir(self.base, {"a.md": FM.format(n="a") + "fact\n"})
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def group(self, parts=()):
+        return {"key": "G", "memory_dir": "M", "base": self.base, "stage": self.stage,
+                "parts": [{"id": i, "path": "x"} for i in parts]}
+
+    def test_size_and_format_problems_are_reported_and_do_not_block(self):
+        memdir(self.stage, {"a.md": FM.format(n="a") + "fact\n",
+                            "big.md": FM.format(n="big") + ("x" * 100 + "\n") * 1100,
+                            "bare.md": "no frontmatter\n"},
+               index_lines=[f"- [e{i}](e{i}.md) — h" for i in range(210)]
+               + ["- [A](a.md) — a", "- [Big](big.md) — b", "- [Bare](bare.md) — c"])
+        for i in range(210):
+            write(os.path.join(self.stage, f"e{i}.md"), FM.format(n=f"e{i}") + "f\n")
+        c = dream.check_group(self.group(), {"organize G": {"index_entries": 2, "changes": []}}, {}, True)
+        self.assertTrue(c["passed"])
+        self.assertEqual(c["problems"], [])
+        kinds = collections.Counter(r["kind"] for r in c["reported"])
+        self.assertEqual((kinds["file-over-100KB"], kinds["file-format"], kinds["index-over-limit"]), (1, 1, 1))
+        text = {r["file"]: dream.describe_reported(r) for r in c["reported"]}
+        self.assertRegex(text["big.md"], r"^big\.md \(1\d\d KB\): over the 100KB limit")
+        self.assertRegex(text["MEMORY.md"], r"^MEMORY\.md \(21\d lines, [\d,]+ bytes\): over what Claude Code loads")
+        self.assertEqual(text["bare.md"], "bare.md (0 KB): no frontmatter")
+
+    def test_safety_problems_block(self):
+        memdir(self.stage, {"b.md": FM.format(n="b") + "new\n"})  # a.md is gone without a stub
+        c = dream.check_group(self.group(parts=["s.p001"]), {"organize G": {"index_entries": 1, "changes": []}}, {}, True)
+        self.assertFalse(c["passed"])
+        joined = " ".join(c["problems"])
+        self.assertIn("1 parts have no analyzer result", joined)
+        self.assertIn("cannot be found: a.md", joined)
+
+    def test_no_organizer_result_is_only_reported(self):
+        memdir(self.stage, {"a.md": FM.format(n="a") + "fact\n"})
+        c = dream.check_group(self.group(), {}, {}, False)
+        self.assertTrue(c["passed"])
+        self.assertEqual([r["kind"] for r in c["reported"]], ["not-organized"])
+
+
+class Finish(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        home = os.path.join(self.tmp, "home")
+        self.patches = [mock.patch.object(common, "DREAM_HOME", home),
+                        mock.patch.object(common, "RUNS_DIR", os.path.join(home, "runs")),
+                        mock.patch.object(common, "ACTIVE_DIR", os.path.join(home, "active")),
+                        mock.patch.object(common, "REGISTRY", os.path.join(home, "registry.jsonl")),
+                        mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self.tmp})]
+        for pt in self.patches:
+            pt.start()
+        self.work = os.path.join(home, "runs", "dream-1")
+        groups = []
+        for key in ("OK", "BAD"):
+            real = os.path.join(self.tmp, "real", key)
+            memdir(real, {"a.md": FM.format(n="a") + "fact\n", "old.md": FM.format(n="old") + "kept\n"})
+            for side in ("base", "stage"):
+                shutil.copytree(real, os.path.join(self.work, side, key))
+            groups.append({"key": key, "memory_dir": real, "base": os.path.join(self.work, "base", key),
+                           "stage": os.path.join(self.work, "stage", key), "parts": []})
+        # OK: the run added a file over 100KB and listed it: reported, written back all the same
+        memdir(groups[0]["stage"], {"a.md": FM.format(n="a") + "fact\nmore\n", "old.md": FM.format(n="old") + "kept\n",
+                                    "big.md": FM.format(n="big") + ("x" * 100 + "\n") * 1100})
+        # BAD: old.md vanished without a stub: not written back
+        os.remove(os.path.join(groups[1]["stage"], "old.md"))
+        write(os.path.join(groups[1]["stage"], "a.md"), FM.format(n="a") + "fact\nmore\n")
+        self.real_ok, self.real_bad = groups[0]["memory_dir"], groups[1]["memory_dir"]
+        write(os.path.join(self.work, "run.json"), json.dumps(
+            {"run_id": "dream-1", "session_id": "s1", "sandbox": False, "started_at": time.time() - 100,
+             "workdir": self.work, "groups": groups}))
+        common.activate("s1", self.work, [self.work], "R")
+
+    def tearDown(self):
+        for pt in self.patches:
+            pt.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_reported_problems_are_written_back_and_safety_problems_are_not(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = dream.main(["finish", "s1"])
+        text = out.getvalue()
+        self.assertEqual(rc, 1)  # one directory was blocked
+        self.assertTrue(os.path.exists(os.path.join(self.real_ok, "big.md")))  # written back
+        self.assertIn("more", open(os.path.join(self.real_ok, "a.md"), encoding="utf-8").read())
+        self.assertNotIn("more", open(os.path.join(self.real_bad, "a.md"), encoding="utf-8").read())  # untouched
+        self.assertRegex(text, r"REPORTED, written back anyway: big\.md \(\d+ KB\): over the 100KB limit")
+        self.assertRegex(text, r"PROBLEM \(this directory is not written back\): 1 files that existed at the start cannot be found: old\.md")
+        self.assertIn("SOME CHECKS FAILED", text)
+        report = json.load(open(os.path.join(self.work, "run-report.json"), encoding="utf-8"))
+        self.assertEqual([g["written_back"] for g in report["groups"]], [True, False])
+        self.assertGreaterEqual(report["reported_problems"], 1)
 
 
 class Continue(unittest.TestCase):
@@ -196,7 +291,7 @@ class Continue(unittest.TestCase):
         self.assertFalse(dream.organized(g, runs))  # but it came before b was analyzed again
         self.assertTrue(dream.organized(g, runs[:1]))
         c = dream.check_group(dict(g, base=self.tmp, stage=self.tmp), r, {}, dream.organized(g, runs))
-        self.assertIn("not organized", c["problems"])
+        self.assertEqual([r["kind"] for r in c["reported"]], ["not-organized"])  # reported, not a reason to block
         # continuing plans the organizer alone
         write(os.path.join(self.work, "run.json"), json.dumps(self.run))
         self.assertEqual(dream.main(["start", "s3", "--continue", "dream-1"]), 0)

@@ -29,7 +29,11 @@ function analyzeTask(part, dir) {
 }
 
 function organizeTask(dir) {
-  return `The analyzers have finished adding this run's facts to the memory directory at ${dir}. Organize that directory as your instructions say, and report your changes.`
+  return `The analyzers have finished adding this run's facts to the memory directory at ${dir}. Organize that directory as your instructions say, and report your changes.` +
+    // Added by ClaudeDream (not in the cookbook): the analyzers tend to put a dated update line under an
+    // older statement it replaces and leave that statement standing; the organizer's own rule says to
+    // keep the current value and note what it replaced.
+    ` Analyzers often added a dated update line below an older statement that it replaces, and left the older statement standing. Wherever a later line, in the same file or in another, replaces or corrects an earlier statement, rewrite the earlier statement so that the file reads as the current understanding, and keep what it replaced as one short line with its date and source, as your rules say. Do not leave a replaced statement standing as if it were current, and do not drop a fact that is still true.`
 }
 
 async function runGroup(g) {

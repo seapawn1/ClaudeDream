@@ -24,7 +24,7 @@
 | 9.1 | `/dreaming:check --memory-from check-20261109-035849 --against check-20261109-035849 --project S--ClaudeDream --project S--ClaudeDream--claude-worktrees-sprint-01-first-dream --project S--IDEO-Scrum` | 5 分钟 | 末尾有 `check check-…: complete`。查的是第 7 项那份 25 条记忆的快照，不是现在的记忆；顺带和第 7 项 CLI 上的结论比 |
 | 9.2 | `/dreaming:check --memory-from check-20261109-035849 --project S--ClaudeDream --project S--ClaudeDream--claude-worktrees-sprint-01-first-dream --project S--IDEO-Scrum` | 5 分钟 | 同上，并多出 `compared with check-…` 一段（自动和 9.1 比） |
 | 9.3 | 同 9.2，原样再敲一次 | 5 分钟 | 同上（自动和 9.2 比） |
-| 9.4 | `/dreaming:dream --session 4b0764eb-f5e6-40c0-96b4-b9b92bc45cb5 --session 4f2a4d7f-5369-4491-b3aa-a55834dc5e8e --session e4c1071e-2296-4484-8666-bc9d602af995 --sandbox` | 15 分钟 | 末尾有 `run dream-…: all checks passed (sandbox: nothing written back)`。这是 IDEO-Scrum 的 3 个小会话，共 5 段；沙盒，不写回。记下 `run dream-…` 这个编号，下面用 |
+| 9.4 | `/dreaming:dream --session 4b0764eb-f5e6-40c0-96b4-b9b92bc45cb5 --session 4f2a4d7f-5369-4491-b3aa-a55834dc5e8e --session e4c1071e-2296-4484-8666-bc9d602af995 --sandbox` | 15 分钟 | 末尾有 `run dream-…: all safety checks passed`（后面可能跟一句 `N size or format problems reported below`，再跟 `(sandbox: nothing written back)`）。这是 IDEO-Scrum 的 3 个小会话，共 5 段；沙盒，不写回。记下 `run dream-…` 这个编号，下面用 |
 | 9.5 | `/dreaming:check --memory-from <9.4 的编号>:base --project S--IDEO-Scrum --against none` | 5 分钟 | `complete`。查的是做梦前的 IDEO-Scrum 记忆 |
 | 9.6 | `/dreaming:check --memory-from <9.4 的编号> --project S--IDEO-Scrum` | 5 分钟 | `complete`，并和 9.5 比：输出里有 `pass line B` 一行 |
 
@@ -37,7 +37,7 @@
 | 步 | 敲什么 | 大约多久 | 看到什么才算对 |
 | --- | --- | --- | --- |
 | 10.1 | `/dreaming:check --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 15 分钟（约 130 条记忆、17 个 checker） | `complete`。这是做梦前的体检 |
-| 10.2 | `/dreaming:dream --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 2 小时 10 分（310 个 analyzer、7 个 organizer；按第 8 项 CLI 实测 193 段用了 79 分钟，即每分钟 2.4 段推算；跳过 b1d91409 则只有约 206 段，约 1 小时 25 分；桌面端的速度以第 9 项为准） | `all checks passed`，每个目录一行 `written back: N files`；末尾提示 `to undo: /dreaming:restore dream-…` |
+| 10.2 | `/dreaming:dream --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 2 小时 10 分（310 个 analyzer、7 个 organizer；按第 8 项 CLI 实测 193 段用了 79 分钟，即每分钟 2.4 段推算；跳过 b1d91409 则只有约 206 段，约 1 小时 25 分；桌面端的速度以第 9 项为准） | `all safety checks passed`（后面可能跟 `N size or format problems reported below`），每个目录一行 `written back: N files`；末尾提示 `to undo: /dreaming:restore dream-…` |
 | 10.3 | `/dreaming:check --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 20 分钟（做梦后条目会变多） | `complete`，并自动和 10.1 比：`pass line B` 一行就是“记忆新鲜”的结果 |
 
 `--skip-project` 跳过名字里含这段文字的项目目录：`ideo-s10-` 是 IDEO-Scrum 第 10 冲刺体验测试的临时目录，`-tmp-trig-` 是同一批测试的后台任务目录（trig-work 和 trig-smoke-s10）。跳过以后约 310 段，写 7 个记忆目录。
@@ -51,8 +51,9 @@
 - 电脑睡眠：做梦会停在那里，醒来后看会话里还在不在跑；不在跑就照上一条接着跑。所以开跑前把睡眠关掉，或者把“接通电源后睡眠”设成“从不”。
 - 体检（10.1、10.3）断了：重新敲同一条命令即可，十几分钟。
 
-**出问题时**：
-- 10.2 打出 `SOME CHECKS FAILED`：没通过核对的目录一个文件都没写，原样留着；把输出发给 Developer。
+**出问题时**：10.2 的输出把问题分成两类。
+- 安全类：这个目录一个文件都不写，原样留着，暂存结果留在 `runs\dream-…\stage\`。输出里是 `PROBLEM (this directory is not written back)` 开头的行，开头一行是 `SOME CHECKS FAILED`。这类问题有：有段没分析出结果；开跑前就有的记忆文件找不到了或被删；hook 核对不过（agent 用了 shell 或网络，或写到了工作目录外）；写回时发现文件被别处改过。把输出发给 Developer。
+- 超限和格式类：不拦，目录照样写回。输出里是 `REPORTED, written back anyway` 开头的行，逐条写文件名、实际大小或行数、原因：`MEMORY.md` 超过 200 行或 25 KB（超出的部分，新会话开头看不到）；单个文件超过 100 KB；这一轮新增或改过的文件格式不对；整理环节没出结果。这一轮不自动修，留到下个冲刺。你看过觉得不行，敲 `/dreaming:restore` 整体撤销。
 - 写回后想撤销：敲 `/dreaming:restore`，恢复最近一次写回前的样子；写回后又被改过的文件，它会列出来，不会覆盖，除非加 `--force`。
 - 报告在 `C:\Users\seapawn\.claude-dream\runs\<编号>\`：体检看 `check-report.md`，做梦看 `run-report.json`。
 

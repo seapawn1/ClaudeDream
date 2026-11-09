@@ -11,12 +11,16 @@ start: prepare the transcripts (prepare.py); per target memory directory keep a 
 guard on. With --continue, pick up an unfinished run, in the same session or a new one: only the
 parts and directories that have no result yet go into the new workflow; the work dir, the staged
 copies and the rendered transcripts are the run's own.
-finish: check each directory before anything touches the real memory -- every part analyzed and
-the directory organized (from the workflow's own journal), native format of every file the run
-added or changed, MEMORY.md within 200 lines and 25KB, every file that existed at the start still
-findable (kept, edited, or moved with a stub), what the hook log shows -- then write back the
-directories that passed (unless --sandbox), keeping a rollback copy; a directory with any file
-changed elsewhere during the run is not written back at all. Agent self-reports are never
+finish: check each directory before anything touches the real memory, in two classes.
+Safety problems block the directory, which is then not written back at all: a part with no analyzer
+result, a file that existed at the start that cannot be found or was removed, what the hook log
+shows (a shell, network or out-of-bounds write that was not blocked, or write calls it missed), a
+file that someone else changed during the run (found when writing back). Size and format problems
+do not block; the directory is written back all the same and each one is listed with its file,
+actual size or line count and reason: MEMORY.md over 200 lines or 25KB, a file over 100KB, a file
+the run added or changed that is not in the native format, an index line or entry that is wrong, no
+organizer result. Directories that passed are written back (unless --sandbox), keeping a rollback
+copy. Agent self-reports are never
 evidence: the organizer's list of changes is checked against the diff and the hook log.
 restore: put a run's rollback copies back.
 """
@@ -384,20 +388,30 @@ def check_group(g, results, attempts, is_organized=True):
     fmt_touched = {f: p for f, p in fmt["files"].items() if f in touched}
     index_probs = [p for p in fmt["index"] if "MEMORY.md" in touched or "over" in p]
     contradicted = wb.claims_vs_diff((org or {}).get("changes") if isinstance(org, dict) else [], diff, attempts)
-    problems = []
+    # safety problems: the directory is not written back
+    blocking = []
     if missing:
-        problems.append(f"{len(missing)} parts have no analyzer result")
-    if not org:
-        problems.append("not organized")
-    if fmt_touched:
-        shown = "; ".join(f"{f}: {', '.join(p[:2])}" for f, p in list(fmt_touched.items())[:5])
-        problems.append(f"{len(fmt_touched)} files the run added or changed are not in the native format ({shown})")
-    if index_probs:
-        problems.append("MEMORY.md: " + "; ".join(index_probs[:3]))
+        blocking.append(f"{len(missing)} parts have no analyzer result")
     if diff["lost"]:
-        problems.append(f"{len(diff['lost'])} files that existed at the start cannot be found: {', '.join(diff['lost'][:5])}")
+        blocking.append(f"{len(diff['lost'])} files that existed at the start cannot be found: {', '.join(diff['lost'][:5])}")
     if diff["removed"]:
-        problems.append(f"{len(diff['removed'])} files were removed")
+        blocking.append(f"{len(diff['removed'])} files were removed")
+    # size and format problems: reported, the directory is written back all the same
+    reported = []
+    if not org:
+        reported.append({"kind": "not-organized", "file": None, "why": "the organizer gave no result"})
+    for f, probs in fmt_touched.items():
+        size = os.path.getsize(os.path.join(g["stage"], f)) if os.path.exists(os.path.join(g["stage"], f)) else None
+        for p in probs:
+            reported.append({"kind": "file-over-100KB" if p == "over 100KB" else "file-format", "file": f,
+                             "bytes": size, "why": "over the 100KB limit for one memory file" if p == "over 100KB" else p})
+    for p in index_probs:
+        if p.startswith("MEMORY.md is "):
+            reported.append({"kind": "index-over-limit", "file": "MEMORY.md", "lines": fmt["stats"].get("lines"),
+                             "bytes": fmt["stats"].get("bytes"),
+                             "why": "over what Claude Code loads at session start (200 lines or 25,600 bytes); the rest is not seen"})
+        else:
+            reported.append({"kind": "index-format", "file": "MEMORY.md", "why": p})
     return {
         "memory_dir": g["memory_dir"], "parts": len(g["parts"]), "analyzed": len(g["parts"]) - len(missing),
         "missing_parts": missing, "organized": bool(org),
@@ -409,8 +423,20 @@ def check_group(g, results, attempts, is_organized=True):
         "whereabouts": diff["whereabouts"], "moved_with_missing_lines": diff["moved_with_missing_lines"],
         "format_problems_in_changed_files": fmt_touched,
         "format_problems_untouched": {f: p for f, p in fmt["files"].items() if f not in touched},
-        "index": fmt["stats"], "problems": problems, "passed": not problems,
+        "index": fmt["stats"], "problems": blocking, "reported": reported, "passed": not blocking,
     }
+
+
+def describe_reported(r):
+    """One size or format problem as a line: the file, its actual size or line count, the reason."""
+    where = r.get("file") or "(directory)"
+    if r.get("lines") is not None and r.get("bytes") is not None:
+        size = f" ({r['lines']} lines, {r['bytes']:,} bytes)"
+    elif r.get("bytes") is not None:
+        size = f" ({r['bytes'] / 1024:.0f} KB)"
+    else:
+        size = ""
+    return f"{where}{size}: {r['why']}"
 
 
 def finish_cmd(a):
@@ -447,9 +473,13 @@ def finish_cmd(a):
         report["groups"].append(c)
     wb.save(os.path.join(workdir, "run.json"), run)
     report["complete"] = all(c["passed"] and (run["sandbox"] or c["written_back"]) for c in report["groups"])
+    n_reported = sum(len(c["reported"]) for c in report["groups"])
+    report["reported_problems"] = n_reported
     wb.save(os.path.join(workdir, "run-report.json"), report)
     shutil.rmtree(os.path.join(workdir, "transcripts"), ignore_errors=True)  # rendered copies may hold secrets
-    print(f"run {run['run_id']}: {'all checks passed' if report['complete'] else 'SOME CHECKS FAILED'}"
+    verdict = ("SOME CHECKS FAILED" if not report["complete"] else
+               "all safety checks passed" + (f", {n_reported} size or format problems reported below" if n_reported else ""))
+    print(f"run {run['run_id']}: {verdict}"
           f"{' (sandbox: nothing written back)' if run['sandbox'] else ''}")
     print(f"hook log: {hooks['calls']} calls, lead ran only plugin scripts={hooks['lead_ran_only_plugin_scripts']}, "
           f"blocked agent shell={hooks['agent_shell_attempts_blocked']}, blocked network/MCP={hooks['network_or_mcp_attempts_blocked']}, "
@@ -464,7 +494,9 @@ def finish_cmd(a):
               f"+{len(d['added'])} new, {len(d['modified'])} changed, {moved} moved, "
               f"MEMORY.md {c['index'].get('lines')} lines/{c['index'].get('bytes')} bytes")
         for p in c["problems"]:
-            print(f"    PROBLEM: {p}")
+            print(f"    PROBLEM (this directory is not written back): {p}")
+        for r in c["reported"]:
+            print(f"    REPORTED{', written back anyway' if c['passed'] and not run['sandbox'] else ''}: {describe_reported(r)}")
         for x in c["self_report_contradicted"][:5]:
             print(f"    organizer claim not borne out ({x['why']}): {str(x['claim'])[:140]}")
         for x in c["moved_with_missing_lines"][:5]:
