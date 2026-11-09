@@ -11,8 +11,11 @@
 | 文件/目录 | 内容 |
 |---|---|
 | `.claude-plugin/marketplace.json` | 插件市场注册（`claude-dream`） |
+| `plugins/dreaming/` | 插件 `dreaming`，也就是产品本身；`NOTICE` 注明改编自 cookbook 的出处 |
+| `scrum/` | Scrum 工作：产品日志 `ProductBacklog.md`；`documents/` 放已结束冲刺的日志和背景材料 |
 | `references/` | 外部方案原料，见 [references/README.md](references/README.md) |
-| `docs/` | 讨论底稿与设计文档 |
+| `docs/` | 讨论底稿与设计文档；运行说明见 [docs/run-notes.md](docs/run-notes.md) |
+| `tools/` | 开发和验收用的脚本，不随插件发布 |
 | `CLAUDE.md` | 项目指令（每次会话自动加载），含当前阶段 |
 | `.worktreeinclude` | 建 worktree 时从主检出复制的文件清单 |
 | `.env` / `.claude/seapawn.md` | 本地私人文件，不可阅读 |

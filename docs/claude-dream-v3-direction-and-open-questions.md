@@ -50,7 +50,7 @@
 | cookbook 成本：11 份 283KB 花 $0.36、2.5 分钟；50 份约 12MB 约 $8、10 分钟（列表价） | cookbook 正文 | 11-07 |
 | 本机最近 30 天 39 个 jsonl（含 `subagents/` 下 3 个），共 106MB；21,180 条消息里 5,908 条（约 28%）出现在不止一个文件：fork 会把父会话历史连同消息 uuid 原样复制 | 本机实测 | 11-07 |
 | auto-memory 的「技能维护」块（`tengu_gorse_fathom`）本机为 false，只改已有项目技能 | 本机缓存；07-16 笔记 | 10-25 |
-| `MEMORY.md` 每次会话只加载前 200 行或 25KB，超出不加载也不报错 | 官方文档 memory 页 | SM 10-24 |
+| `MEMORY.md` 每次会话只加载前 200 行或 25KB，超出不加载也不报错（11-09 复核：从 v2.1.210 起，Claude 写完 `MEMORY.md` 后若超限，写照样成功，但 Claude Code 会报错，要 Claude 当场压回上限内；这个提醒给 Claude，不给用户） | 官方文档 memory 页；errors 页 memory-index-is-over-its-read-limit | SM 10-24；Master 11-09 |
 | 对话记录默认本地只留 30 天（`cleanupPeriodDays`），桌面端会话另有 `desktopSessionCleanupPeriodDays`。做梦要在过期前提炼，或把保留期调长 | 官方文档 data-usage、settings 页 | SM 10-24 |
 | 桌面端定时任务要求应用开着、机器醒着 | 官方文档 | SM 10-24 |
 | 桌面端会话记录搜索工具：SM 两次测试零命中；10-25 用它搜「ClaudeDream」有命中。覆盖范围不明，不能靠它做全文回忆 | 实测 | 10-24、10-25 |

@@ -1,6 +1,11 @@
-"""Sprint 01 working file: builds plugins/dreaming/agents/{analyzer,organizer}.md from the cookbook's
-prompts (references/dreaming-cookbook/example_data/memory_distill/prompts/) with a fixed list of
-changes, so every change from the original is visible here. Run from the repository root."""
+"""Provenance record of the plugin's two adapted agents: builds plugins/dreaming/agents/{analyzer,organizer}.md from
+the prompts of Anthropic's "Dreaming with a dynamic workflow" cookbook (MIT, see the plugin's NOTICE;
+references/dreaming-cookbook/example_data/memory_distill/prompts/) with a fixed list of changes, so every change from
+the original is visible here. Change those two prompts here, not by hand in agents/: the output equals the committed
+files (checked on 2026-11-09). checker.md is new and is not built from the cookbook.
+
+  python -I tools/build_agents.py        (run from the repository root)
+"""
 import os
 
 SRC = "references/dreaming-cookbook/example_data/memory_distill/prompts"

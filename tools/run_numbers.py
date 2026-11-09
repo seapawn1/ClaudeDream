@@ -1,13 +1,14 @@
-"""Sprint 01 working file: the numbers of a CLI or desktop run, from its own records (lead and agent models,
-agents, minutes, tokens, write calls by tool_use id, tool errors, hook evidence). Item 9 and item 8 figures in 3.2
-come from here. Run from the repository root; run ids are check-... or dream-... names under ~/.claude-dream/runs.
+"""The numbers of a CLI or desktop run, from its own records (lead and agent models, agents, minutes, tokens, write
+calls by tool_use id, tool errors, hook evidence). Write calls are counted the way the product counts them
+(dream.agent_activity: once per tool_use id, apart from the calls Claude Code's input checks refused). Run ids are
+check-... or dream-... names under ~/.claude-dream/runs. The Sprint 01 Review figures come from here.
 
-  python -I scrum/sprint-01-first-dream/run_numbers.py check-20261109-133655 dream-20261109-140922 ...
+  python -I tools/run_numbers.py check-20261109-133655 dream-20261109-140922 ...
 """
 import collections, glob, json, os, re, sys
 from datetime import datetime
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "plugins", "dreaming", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "plugins", "dreaming", "scripts"))
 import common, dream
 
 MODEL = re.compile(r'"model":"([^"]+)"')
@@ -105,5 +106,6 @@ def one(rid):
         print("  (no report file yet)")
 
 
-for rid in sys.argv[1:]:
-    one(rid)
+if __name__ == "__main__":
+    for rid in sys.argv[1:]:
+        one(rid)
