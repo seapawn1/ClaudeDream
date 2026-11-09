@@ -3,7 +3,7 @@ name: check
 description: ClaudeDream health check - check each memory against the project's current state and report stale or wrong entries, with evidence. Changes no memory file. Run only when the user asks for it.
 disable-model-invocation: true
 model: sonnet
-argument-hint: "[--projects-dir <path>] [--project <dir>]... [--skip-project <text>]... [--skip-session <id>]... [--against <check-run-id>|none] [--memory-from <run-id>[:base|:stage]]"
+argument-hint: "[--projects-dir <path>] [--config-dir <path>] [--project <dir>]... [--skip-project <text>]... [--skip-session <id>]... [--against <check-run-id>|none] [--memory-from <run-id>[:base|:stage]]"
 allowed-tools:
   - Bash(python *)
   - PowerShell(python *)

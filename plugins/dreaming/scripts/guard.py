@@ -2,7 +2,8 @@
 
 During a run:
 - agents (subagents and workflow agents) may not use a shell;
-- the lead may run only this plugin's own scripts with python;
+- the lead may run only this plugin's own scripts with python (common.lead_script_command: no -c or -m, no
+  shell syntax that chains, redirects or substitutes);
 - nobody may use network tools or MCP tools;
 - Write/Edit/MultiEdit/NotebookEdit are allowed only inside the run's write roots
   (allowed explicitly, so no permission prompt), and denied everywhere else.
@@ -28,9 +29,7 @@ def decide(data, state):
     if tool in SHELL:
         if agent:
             return "deny", "ClaudeDream: agents may not use a shell during a dream run"
-        cmd = (tin.get("command") or "").replace("\\", "/").lower()
-        scripts = (os.path.join(state["plugin_root"], "scripts") + "/").replace("\\", "/").lower()
-        if cmd.lstrip().startswith("python") and scripts in cmd and not any(c in cmd for c in ";&|`$("):
+        if common.lead_script_command(tin.get("command"), os.path.join(state["plugin_root"], "scripts")):
             return "allow", "ClaudeDream: lead runs a plugin script"
         return "deny", "ClaudeDream: the lead may only run the plugin's own scripts during a dream run"
     if tool in NETWORK or tool.startswith("mcp__"):

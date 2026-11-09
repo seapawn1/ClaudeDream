@@ -3,6 +3,7 @@ import contextlib
 import collections
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -199,6 +200,19 @@ class Finish(unittest.TestCase):
             pt.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def test_a_torn_hook_log_line_keeps_the_directory_from_being_written_back_and_says_so(self):
+        with open(os.path.join(self.work, "hooklog.jsonl"), "w", encoding="utf-8", newline="") as f:
+            f.write("ull}\r\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            dream.main(["finish", "s1"])
+        text = out.getvalue()
+        self.assertFalse(os.path.exists(os.path.join(self.real_ok, "big.md")))  # nothing was written back
+        self.assertIn("the hook log has 1 line(s) that could not be read, so the evidence is incomplete", text)
+        report = json.load(open(os.path.join(self.work, "run-report.json"), encoding="utf-8"))
+        self.assertEqual([g["written_back"] for g in report["groups"]], [False, False])
+        self.assertEqual(report["hook_log"]["unreadable_log_lines"], 1)
+
     def test_a_lead_command_the_guard_blocked_does_not_stop_the_write_back(self):
         with open(os.path.join(self.work, "hooklog.jsonl"), "w", encoding="utf-8") as f:
             f.write(json.dumps({"tool": "Bash", "decision": "deny", "command": "ls -la /somewhere"}) + "\n")
@@ -230,6 +244,63 @@ class Finish(unittest.TestCase):
         report = json.load(open(os.path.join(self.work, "run-report.json"), encoding="utf-8"))
         self.assertEqual([g["written_back"] for g in report["groups"]], [True, False])
         self.assertGreaterEqual(report["reported_problems"], 1)
+
+    def test_the_undo_line_works_when_typed_as_printed(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            dream.main(["finish", "s1"])
+        lines = [x for x in out.getvalue().splitlines() if x.startswith("to undo: ")]
+        self.assertEqual(len(lines), 1)
+        typed = lines[0][len("to undo: "):]  # what the user types
+        self.assertTrue(typed.startswith("/dreaming:restore "))
+        arguments = shlex.split(typed[len("/dreaming:restore "):])  # what the skill hands the script as $ARGUMENTS
+        self.assertTrue(os.path.exists(os.path.join(self.real_ok, "big.md")))  # the directory was written back
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = dream.main(["restore", "s1"] + arguments)
+        self.assertEqual(rc, 0)
+        self.assertIn("restored", out.getvalue())
+        self.assertIn("identical to before the run=True", out.getvalue())
+        self.assertFalse(os.path.exists(os.path.join(self.real_ok, "big.md")))
+        self.assertNotIn("more", open(os.path.join(self.real_ok, "a.md"), encoding="utf-8").read())
+
+    def test_the_bare_run_id_the_older_undo_line_printed_still_restores(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            dream.main(["finish", "s1"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = dream.main(["restore", "s1", "dream-1"])
+        self.assertEqual(rc, 0)
+        self.assertIn("identical to before the run=True", out.getvalue())
+        self.assertFalse(os.path.exists(os.path.join(self.real_ok, "big.md")))
+
+
+class RestoreArguments(unittest.TestCase):
+    """The run to undo can be given as --run ID or as a bare ID, with --force before or after it."""
+
+    @staticmethod
+    def parsed(argv):
+        seen = []
+        with mock.patch.object(dream, "restore_cmd", lambda a: seen.append(a) or 0):
+            rc = dream.main(argv)
+        return rc, seen[0]
+
+    def test_every_form_names_the_same_run(self):
+        for args, run, force in ((["dream-1"], "dream-1", False), (["--run", "dream-1"], "dream-1", False),
+                                 (["dream-1", "--force"], "dream-1", True), (["--force", "dream-1"], "dream-1", True),
+                                 (["--run", "dream-1", "--force"], "dream-1", True), (["--run", "dream-1", "dream-1"], "dream-1", False),
+                                 ([], None, False), (["--force"], None, True)):
+            with self.subTest(args=args):
+                rc, a = self.parsed(["restore", "s1"] + args)
+                self.assertEqual((rc, a.run, a.force), (0, run, force))
+
+    def test_two_different_runs_and_a_bare_run_id_for_other_commands_are_refused(self):
+        for argv in (["restore", "s1", "--run", "dream-1", "dream-2"], ["finish", "s1", "dream-1"],
+                     ["start", "s1", "dream-1"], ["plan", "s1", "dream-1"]):
+            with self.subTest(argv=argv):
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
+                    dream.main(argv)
+                self.assertEqual(cm.exception.code, 2)
 
 
 class HookEvidence(unittest.TestCase):

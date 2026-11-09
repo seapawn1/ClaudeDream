@@ -1,6 +1,6 @@
 """ClaudeDream health check (PBI-004), run by the lead of /dreaming:check. Reports only.
 
-  python check.py start  <session_id> [--projects-dir PATH] [--project DIR]... [--session ID]... [--against RUN_ID|none]
+  python check.py start  <session_id> [--projects-dir PATH] [--config-dir PATH] [--project DIR]... [--session ID]... [--against RUN_ID|none]
   python check.py finish <session_id>
   python check.py compare <before_run_id> <after_run_id>
 
@@ -37,11 +37,11 @@ VERDICTS = {"valid": "有效", "possibly_stale": "可能过时", "wrong": "错�
 STALE = ("possibly_stale", "wrong")
 # PBI-004 pass line (2.2 item 4, PO 11-09, rule B): only the old entries the dream edited or moved
 # count; the old entries it left unchanged are the same run's control group, and any change in their
-# verdicts is noise. Passed when the changed entries' drop in stale-or-wrong (per entry) is clearly
-# larger than the unchanged entries' fluctuation (share of them that flipped between stale-or-wrong and
-# the rest). How much larger the PO fixes in 2.2 after the noise is measured on the desktop (item 9);
-# until then B_MIN_DIFF is None and the comparison gives the numbers without a verdict.
-B_MIN_DIFF = None
+# verdicts is noise. Passed when the changed entries' drop rate in stale-or-wrong (per entry) exceeds the
+# unchanged entries' flip rate (share of them that flipped between stale-or-wrong and the rest) by more than
+# B_MIN_DIFF; with fewer than B_MIN_CHANGED changed old entries there is not enough data to say (PO, 2.2).
+B_MIN_DIFF = 0.0
+B_MIN_CHANGED = 30
 fwd = dream.fwd
 
 
@@ -117,8 +117,10 @@ def start_cmd(a):
     sources = memory_sources(a.memory_from) if a.memory_from else None
     run_id, workdir = common.new_run("check", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
-                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project, a.skip_session)
+                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project, a.skip_session,
+                     a.config_dir)
     print(f"run: {run_id}\nworkdir: {workdir}\nsessions found: {m['sessions_found']} {m['counts']}")
+    print(common.routing_line(m["routing"]))
     if not m["checks"]["passed"]:
         print("prepare checks FAILED; nothing started:")
         for p in m["checks"]["problems"]:
@@ -169,7 +171,8 @@ def start_cmd(a):
                        "project_dirs": sorted(g["project_dirs"]), "entries": entries, "stubs": stubs,
                        "format": memcheck.check_dir(snapshot)})
     run = {"run_id": run_id, "kind": "check", "session_id": a.session_id, "started_at": started,
-           "workdir": workdir, "projects_dir": m["projects_dir"], "against": a.against, "today": today,
+           "workdir": workdir, "projects_dir": m["projects_dir"], "routing": m["routing"], "against": a.against,
+           "today": today,
            "memory_from": a.memory_from,
            "groups": groups, "batches": batches}
     wb.save(os.path.join(workdir, "run.json"), run)
@@ -315,7 +318,7 @@ def finish_cmd(a):
                         e["session"] = s
             verdicts[g["key"]][f] = dict(j, checked=True)
     report = {"run_id": run["run_id"], "kind": "check", "today": run["today"], "projects_dir": run["projects_dir"],
-              "memory_from": run.get("memory_from"),
+              "memory_from": run.get("memory_from"), "routing": run.get("routing"),
               "hook_log": hooks, "failed_batches": failed, "groups": []}
     for g in run["groups"]:
         rows = []
@@ -367,7 +370,7 @@ def pick_against(run, against):
 def compare(before, after):
     """PBI-004: the entries that existed before, each at its place after (same file, or where its
     MOVED TO stub points); the pass line; agreement on unchanged entries (the noise); new entries apart."""
-    out = {"before_run": before["run_id"], "after_run": after["run_id"], "b_min_diff": B_MIN_DIFF, "groups": []}
+    out = {"before_run": before["run_id"], "after_run": after["run_id"], "b_min_diff": B_MIN_DIFF, "b_min_changed": B_MIN_CHANGED, "groups": []}
     tot = collections.Counter()
     a_groups = {os.path.normcase(g["memory_dir"]): g for g in after["groups"]}
     for bg in before["groups"]:
@@ -424,7 +427,13 @@ def compare(before, after):
                                       if n_un else None)
     tot["b_diff"] = (round(tot["changed_drop_rate"] - tot["unchanged_flip_rate"], 3)
                      if n_ch and n_un else None)
-    tot["passed"] = None if B_MIN_DIFF is None or tot["b_diff"] is None else tot["b_diff"] > B_MIN_DIFF
+    if not n_ch or not n_un:
+        tot["verdict"], tot["passed"] = "no changed or no unchanged old entries", None
+    elif n_ch < B_MIN_CHANGED:
+        tot["verdict"], tot["passed"] = "not enough data", None
+    else:
+        tot["passed"] = tot["b_diff"] > B_MIN_DIFF
+        tot["verdict"] = "passed" if tot["passed"] else "not passed"
     out["total"] = tot
     return out
 
@@ -444,15 +453,18 @@ def compare_cmd(a):
 
 def print_comparison(c):
     t = c["total"]
-    verdict = {None: "no verdict yet (threshold not fixed, or no changed or no unchanged entries)",
-               True: "PASSED", False: "not passed"}[t["passed"]]
+    verdict = {"passed": "PASSED", "not passed": "not passed",
+               "not enough data": f"not enough data ({t.get('changed', 0)} changed old entries, {c['b_min_changed']} needed)"
+               }.get(t["verdict"], t["verdict"])
     print(f"compared with {c['before_run']}: {t.get('compared', 0)} old entries checked in both runs")
     print(f"  changed by the dream (edited or moved): {t.get('changed', 0)}; stale or wrong "
           f"{t.get('changed_stale_before', 0)} -> {t.get('changed_stale_after', 0)}; drop rate {t['changed_drop_rate']}")
     print(f"  unchanged (control): {t.get('unchanged', 0)}; stale or wrong "
           f"{t.get('unchanged_stale_before', 0)} -> {t.get('unchanged_stale_after', 0)}; flipped {t.get('unchanged_flips', 0)} "
           f"(flip rate {t['unchanged_flip_rate']}); same verdict {t.get('unchanged_same_verdict', 0)} (agreement {t['unchanged_agreement']})")
-    print(f"  pass line B: drop rate - flip rate = {t['b_diff']}, must exceed {c['b_min_diff']}: {verdict}")
+    print(f"  pass line B: drop rate - flip rate = {t['b_diff']}, must exceed {c['b_min_diff']}, with at least "
+          f"{c['b_min_changed']} changed old entries: {verdict}")
+    print("  (rule set by the PO on 11-09, see 2.2 in the sprint log)")
     print(f"  all old entries (old rule, void): stale or wrong {t.get('before_stale', 0)} -> {t.get('after_stale', 0)}")
     print(f"  new entries: {t.get('new_entries', 0)}, checked {t.get('new_checked', 0)}, stale or wrong {t.get('new_stale', 0)}")
     lost = [f"{g['memory_dir']}: {x}" for g in c["groups"] for x in g["lost"]]
@@ -462,6 +474,7 @@ def print_comparison(c):
 def print_summary(report, hooks, writes, workdir):
     print(f"check {report['run_id']}: {'complete' if report['complete'] else 'INCOMPLETE'}"
           f"{'; failed batches: ' + ', '.join(report['failed_batches']) if report['failed_batches'] else ''}")
+    print(common.routing_line(report.get("routing")))
     print(dream.blocked_line(hooks))
     for p in dream.hook_problems(hooks):
         print(f"HOOK PROBLEM: {p}")
@@ -488,7 +501,8 @@ def render_md(report):
          "没有核实得了的证据，结论记为“无法判断”；“错误”缺新值、日期或出处的，记为“可能过时”。"
          "引文核对只证明引文确实在所引文件里，不证明 checker 的推理对。"
          + (f"检查的不是真实记忆目录，而是 {report['memory_from']} 里的副本。" if report.get("memory_from") else "")
-         + (report["hook_log"]["lead_blocked_note"] + "。" if report["hook_log"].get("lead_blocked_note") else ""), ""]
+         + (report["hook_log"]["lead_blocked_note"] + "。" if report["hook_log"].get("lead_blocked_note") else "")
+         + (f"记忆路由用的配置目录：{report['routing']['config_dir']}（来自 {report['routing']['source']}）。" if report.get("routing") else ""), ""]
     if "comparison" in report:
         c, t = report["comparison"], report["comparison"]["total"]
         L += ["## 与上次体检对比", "",
@@ -501,8 +515,11 @@ def render_md(report):
               f"| 没改过的（对照） | {t.get('unchanged', 0)} | {t.get('unchanged_stale_before', 0)} → {t.get('unchanged_stale_after', 0)} "
               f"| 波动比例 {t['unchanged_flip_rate']}（在两类之间翻转的 {t.get('unchanged_flips', 0)} 条）；结论完全相同的占 {t['unchanged_agreement']} |",
               "",
-              f"及格线 B（2.2 PBI-004 第 4 条）：下降比例减波动比例 = {t['b_diff']}，要大于 {c['b_min_diff']}："
-              + {None: "未判（门槛待 PO 定，或缺改过的、没改过的条目）", True: "通过", False: "未通过"}[t["passed"]] + "。",
+              f"及格线 B（2.2 PBI-004 第 4 条）：下降比例减波动比例 = {t['b_diff']}，要大于 {c['b_min_diff']}，"
+              f"改过的老条目至少 {c['b_min_changed']} 条才下结论："
+              + {"passed": "通过", "not passed": "未通过",
+                 "not enough data": f"数据不足（改过的老条目 {t.get('changed', 0)} 条）"}.get(t["verdict"], "未判（缺改过的或没改过的条目）")
+              + "。（PO 11-09 定，见冲刺日志 2.2）",
               f"新增条目 {t.get('new_entries', 0)} 条，其中可能过时或错误 {t.get('new_stale', 0)} 条（单独报告，不设及格线）。"
               f"全部老条目合计 {t.get('before_stale', 0)} → {t.get('after_stale', 0)}（原第 2 条的口径，已作废，仅供参考）。",
               f"找不到下落的条目：{t.get('lost', 0)} 条。", ""]
@@ -540,6 +557,9 @@ def main(argv):
     s = sub.add_parser("start")
     s.add_argument("session_id")
     s.add_argument("--projects-dir", default=None)
+    s.add_argument("--config-dir", default=None,
+                   help="the Claude Code config dir whose settings and default memory location apply; default: the "
+                        "parent of --projects-dir when that is named projects, else the current config dir")
     s.add_argument("--project", action="append", default=None)
     s.add_argument("--session", action="append", default=None)
     s.add_argument("--skip-project", action="append", default=None,

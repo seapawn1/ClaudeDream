@@ -1,6 +1,7 @@
 """Shared paths and helpers for the ClaudeDream plugin scripts (stdlib only)."""
 import json
 import os
+import shlex
 import time
 
 HOME = os.path.expanduser("~")
@@ -16,14 +17,43 @@ def config_dir():
     return os.path.abspath(os.path.expanduser(env)) if env else os.path.join(HOME, ".claude")
 
 
-def resolve_projects_dir(arg=None):
+def resolve_projects_dir(arg=None, config_dir_arg=None):
     """PBI-012: the one directory to read session transcripts from.
 
-    With an argument, only that directory; without one, <config dir>/projects.
+    --projects-dir, if given, and only that directory; else <--config-dir>/projects; else
+    <current config dir>/projects.
     """
     if arg:
         return os.path.abspath(os.path.expanduser(arg))
+    if config_dir_arg:
+        return os.path.join(os.path.abspath(os.path.expanduser(config_dir_arg)), "projects")
     return os.path.join(config_dir(), "projects")
+
+
+def routing_config_dir(projects_arg=None, config_dir_arg=None):
+    """PBI-012: the config dir memory routing uses, and where that came from.
+
+    A project without autoMemoryDirectory keeps its memory under <config dir>/projects/<path>/memory, and the
+    user-level settings are <config dir>/settings.json. When the transcripts come from another account's (or
+    another place's) config dir, the memory belongs there too:
+      1. --config-dir, if given;
+      2. else the parent of --projects-dir, when that directory is named "projects";
+      3. else the current config dir (what it was before --projects-dir could point elsewhere).
+    Returns (path, source) with source "--config-dir", "parent of --projects-dir" or "current config dir"."""
+    if config_dir_arg:
+        return os.path.abspath(os.path.expanduser(config_dir_arg)), "--config-dir"
+    if projects_arg:
+        p = os.path.abspath(os.path.expanduser(projects_arg))
+        if os.path.normcase(os.path.basename(p)) == "projects":
+            return os.path.dirname(p), "parent of --projects-dir"
+    return config_dir(), "current config dir"
+
+
+def routing_line(routing):
+    """The one line that says where memory is resolved from, for the start and finish output."""
+    if not routing:
+        return "memory routing: not recorded (the run was started by an older version)"
+    return f"memory routing: config dir {routing['config_dir']} (from {routing['source']})"
 
 
 def now_stamp():
@@ -79,6 +109,61 @@ def active_state(session_id):
         return None
     with open(p, encoding="utf-8") as f:
         return json.load(f)
+
+
+_PYTHON = ("python", "python.exe", "python3", "python3.exe", "py", "py.exe")
+_OPTIONS = {"-I", "-u", "-B", "-E", "-s", "-S", "-O", "-OO", "-q"}  # -X takes a value, handled in the loop
+
+
+def _shell_syntax(cmd):
+    """True if the command has shell syntax that could chain, redirect or substitute commands: a line break or
+    one of ; & | < > ` $ anywhere (both shells expand $ and ` inside double quotes), parentheses outside
+    quotes, or a quote left open. Parentheses inside quotes are plain text (a path like Program Files (x86))."""
+    quote = None
+    for ch in cmd:
+        if ch in "\n\r;&|<>`$":
+            return True
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch in "()":
+            return True
+    return quote is not None
+
+
+def lead_script_command(command, scripts_dir=None, known=None):
+    """The one rule for a shell command the lead of a run may run: python, only harmless options, and a script
+    of the plugin, with arguments. With scripts_dir (the guard): the script is a .py file directly in that
+    directory. Without it (the evidence check, which reads logs written under any install path): a .py file in
+    a directory named scripts, whose name is in `known` when that is given."""
+    cmd = (command or "").strip()
+    if not cmd or _shell_syntax(cmd):
+        return False
+    try:
+        parts = shlex.split(cmd.replace("\\", "/"))
+    except ValueError:
+        return False
+    if not parts or os.path.basename(parts[0]).lower() not in _PYTHON:
+        return False
+    i = 1
+    while i < len(parts) and parts[i].startswith("-"):
+        if parts[i] == "-X" and i + 1 < len(parts):
+            i += 2
+            continue
+        if parts[i] not in _OPTIONS:
+            return False
+        i += 1
+    if i >= len(parts):
+        return False
+    script = os.path.normcase(os.path.normpath(parts[i]))
+    name, folder = os.path.basename(script), os.path.dirname(script)
+    if not name.endswith(".py"):
+        return False
+    if scripts_dir is not None:
+        return folder == os.path.normcase(os.path.normpath(scripts_dir))
+    return os.path.basename(folder) == "scripts" and (known is None or name in known)
 
 
 def within(path, roots):

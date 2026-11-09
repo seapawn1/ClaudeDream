@@ -45,14 +45,14 @@ Master 定（PO 纠正：验收不打折扣，时间长就缩小范围，但要�
 | 步 | 敲什么 | 大约多久 | 看到什么才算对 |
 | --- | --- | --- | --- |
 | 10.1 | `/dreaming:check --project S--IDEO-Scrum --against none` | 5 分钟 | `complete`。这是做梦前的体检，查的是真实记忆 |
-| 10.2 | `/dreaming:dream --session 4b0764eb-f5e6-40c0-96b4-b9b92bc45cb5 --session 4f2a4d7f-5369-4491-b3aa-a55834dc5e8e --session e4c1071e-2296-4484-8666-bc9d602af995` | 11 分钟 | `all safety checks passed`，一行 `written back: N files`，末尾提示 `to undo: /dreaming:restore dream-…`。**不加 `--sandbox`，这次真的写** |
+| 10.2 | `/dreaming:dream --session 4b0764eb-f5e6-40c0-96b4-b9b92bc45cb5 --session 4f2a4d7f-5369-4491-b3aa-a55834dc5e8e --session e4c1071e-2296-4484-8666-bc9d602af995` | 11 分钟 | `all safety checks passed`，一行 `written back: N files`，末尾提示 `to undo: /dreaming:restore --run dream-…`（0.2.2 及以前打印的是不带 `--run` 的，照着敲会报错；0.2.3 改了，不带 `--run` 单写运行编号也认）。**不加 `--sandbox`，这次真的写** |
 | 10.3 | `/dreaming:check --project S--IDEO-Scrum` | 6 分钟 | `complete`，自动和 10.1 比，有 `pass line B` 一行 |
 
 每条都先跑脚本，再弹 workflow 的批准卡片（选 Once），最后再跑脚本，打出一段英文结果。
 
 **10.3 之后（PO）**
 - 看写了什么：`git -C S:\SeaPawn-Memory status --short -- memory/IDEO-Scrum`，`??` 开头的是新增的文件（9.4 沙盒新增了 12 个），`M` 开头的是改过的文件。改过的文件用 `git -C S:\SeaPawn-Memory diff -- memory/IDEO-Scrum` 看；新增的文件 `git diff` 看不到（没跟踪），直接打开看，或者看 `run-report.json` 里列出的新增清单。不用 `git add -N`，免得动 PO 的 git 索引。
-- 留下，还是撤销：留下就什么都不用敲，提交由 PO 定（写回不提交 git）。撤销敲 `/dreaming:restore`，输出里应有 `identical to before the run=True`；再看一次 `git status --short -- memory/IDEO-Scrum`，应该和 10.1 之前一样（没有输出）。撤销以后告诉 Developer，我用开跑前拍的快照逐字节核对。
+- 留下，还是撤销：留下就什么都不用敲，提交由 PO 定（写回不提交 git）。撤销照 dream 输出最后一行 `to undo:` 之后的那条敲（`/dreaming:restore --run dream-…`；什么参数都不带，就撤销最近一次写回的运行），输出里应有 `identical to before the run=True`；再看一次 `git status --short -- memory/IDEO-Scrum`，应该和 10.1 之前一样（没有输出）。撤销以后告诉 Developer，我用开跑前拍的快照逐字节核对。
 
 **批次是 8 段，不是 5 段**：只选这 3 个会话时，4b0764eb 的父会话 547dd439 不在范围里，它们共有的 1171 条消息就归 4b0764eb，所以从 1 段变成 4 段（397,136 字符）。内容没错，只是多渲染了父会话的那一截。这个副作用记进了 Review 清单。
 

@@ -1,6 +1,6 @@
 """ClaudeDream entry script, run by the lead of /dreaming:dream and by /dreaming:restore.
 
-  python dream.py start   <session_id> [--projects-dir PATH] [--project DIR]... [--skip-project TEXT]... [--session ID]... [--sandbox]
+  python dream.py start   <session_id> [--projects-dir PATH] [--config-dir PATH] [--project DIR]... [--skip-project TEXT]... [--session ID]... [--sandbox]
   python dream.py start   <session_id> --continue RUN_ID
   python dream.py finish  <session_id>
   python dream.py restore <session_id> [--run RUN_ID] [--force]
@@ -29,7 +29,6 @@ import collections
 import glob
 import json
 import os
-import shlex
 import shutil
 import sys
 import time
@@ -51,13 +50,15 @@ def fwd(p):
 
 
 def plan_cmd(a):
-    projects = common.resolve_projects_dir(a.projects_dir)
+    projects = common.resolve_projects_dir(a.projects_dir, a.config_dir)
     if not os.path.isdir(projects):
         print(f"projects dir not found: {projects}")
         return 2
+    route_dir, route_source = common.routing_config_dir(a.projects_dir, a.config_dir)
     mains = glob.glob(os.path.join(projects, "*", "*.jsonl"))
     print(f"projects_dir: {projects}")
-    print(f"source: {'--projects-dir' if a.projects_dir else 'default (config dir)'}")
+    print(f"source: {'--projects-dir' if a.projects_dir else '--config-dir' if a.config_dir else 'default (config dir)'}")
+    print(common.routing_line({"config_dir": route_dir, "source": route_source}))
     print(f"project dirs with sessions: {len({os.path.dirname(m) for m in mains})}")
     print(f"main sessions: {len(mains)}")
     return 0
@@ -198,6 +199,7 @@ def continue_cmd(a, started):
     wb.save(path, run)
     print(f"run: {run['run_id']} (continued)\nworkdir: {workdir}\n"
           f"mode: {'sandbox (nothing is written back)' if run['sandbox'] else 'write back'}")
+    print(common.routing_line(run.get("routing")))
     print(f"parts analyzed before: {done_parts}/{total_parts}; left: {total_parts - done_parts}; "
           f"memory dirs still to organize: {len(todo)}")
     if not todo:
@@ -222,8 +224,10 @@ def start_cmd(a):
         shutil.rmtree(os.path.join(old["workdir"], "transcripts"), ignore_errors=True)  # may hold secrets
     run_id, workdir = common.new_run("dream", a.session_id)
     m = prep.prepare(workdir, a.projects_dir, set(a.project) if a.project else None,
-                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project, a.skip_session)
+                     prep.SEGMENT_CHARS, set(a.session) if a.session else None, a.skip_project, a.skip_session,
+                     a.config_dir)
     print(f"run: {run_id}\nworkdir: {workdir}\nmode: {'sandbox (nothing is written back)' if a.sandbox else 'write back'}")
+    print(common.routing_line(m["routing"]))
     print(f"sessions found: {m['sessions_found']} {m['counts']}; parts: {m['parts']}")
     if not m["checks"]["passed"]:
         print("prepare checks FAILED; nothing started:")
@@ -253,7 +257,7 @@ def start_cmd(a):
         g["parts"].sort(key=lambda p: (p["created"], p["id"]))
         plan.append({"key": key, "memory_dir": mem, "base": fwd(base), "stage": fwd(stage),
                      "parts": [{"id": p["id"], "path": p["path"]} for p in g["parts"]]})
-    run = {"run_id": run_id, "session_id": a.session_id, "sandbox": bool(a.sandbox),
+    run = {"run_id": run_id, "session_id": a.session_id, "sandbox": bool(a.sandbox), "routing": m["routing"],
            "started_at": started, "workdir": workdir, "groups": plan}
     wb.save(os.path.join(workdir, "run.json"), run)
     wf_path = write_workflow(workdir, plan)
@@ -344,40 +348,30 @@ def agent_activity(session_id, since=None):
     return dict(per_file), len(executed), executed
 
 
+TORN_LINE = "unreadable hook log line"
+
+
 def load_hooklog(workdir):
     p = os.path.join(workdir, "hooklog.jsonl")
     if not os.path.exists(p):
         return []
-    with open(p, encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+    out = []
+    with open(p, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                out.append(json.loads(line))
+            except ValueError:  # a torn line: concurrent hooks can overwrite each other's append on Windows
+                out.append({"tool": None, "decision": None, "error": TORN_LINE, "raw": line.strip()[:80]})
+    return out
 
 
 def is_plugin_script(command):
-    """A lead shell command that runs a script file of this plugin with python: no shell syntax that could
-    chain or substitute commands, no -c or -m, and the first argument that is not an option is a script of
-    this plugin: a file named like one in its scripts directory, inside a directory named scripts (any install
-    path: a run continued on another install still passes). guard.decide, which allows or blocks the call at
-    run time, pins this plugin's own directory with a looser rule: python, the scripts path somewhere in the
-    command, none of ; & | ` $(."""
-    cmd = (command or "").strip()
-    if not cmd or any(c in cmd for c in ";&|`$(\n\r"):
-        return False
-    try:
-        parts = shlex.split(cmd.replace("\\", "/"))
-    except ValueError:
-        return False
-    if not parts or os.path.basename(parts[0]).lower() not in ("python", "python.exe", "python3", "python3.exe", "py", "py.exe"):
-        return False
-    i = 1
-    while i < len(parts) and parts[i].startswith("-"):
-        if parts[i] in ("-c", "-m"):
-            return False
-        i += 1
-    if i >= len(parts):
-        return False
-    script = os.path.normcase(os.path.normpath(parts[i]))
-    return (os.path.basename(os.path.dirname(script)) == "scripts"
-            and os.path.basename(script) in {n.lower() for n in os.listdir(HERE) if n.endswith(".py")})
+    """A lead shell command that runs a script of this plugin with python: the same rule the guard applies when
+    it allows the call (common.lead_script_command), but for the logged command of any install path, so a run
+    continued on another install still checks out. The script must be named like one of this plugin's scripts."""
+    return common.lead_script_command(command, None, {n.lower() for n in os.listdir(HERE) if n.endswith(".py")})
 
 
 def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
@@ -398,6 +392,7 @@ def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
     allowed_outside = [r for r in writes if r.get("decision") == "allow" and not common.within(r.get("path"), [workdir])]
     lead_ok = not lead_not_plugin
     not_blocked = [r for r in agent_shell + network if r.get("decision") != "deny"]
+    torn = [r for r in log if r.get("error") == TORN_LINE]
     agent_writes = [r for r in writes if r.get("agent_id")]
     if executed_ids is not None and agent_writes and all(r.get("tool_use_id") for r in agent_writes):
         missing = sorted(set(executed_ids) - {r["tool_use_id"] for r in agent_writes})
@@ -414,8 +409,8 @@ def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
         "writes": len(writes), "writes_allowed_outside_workdir": len(allowed_outside),
         "write_calls_in_agent_transcripts": transcript_writes,
         "write_calls_missing_from_hook_log": len(missing), "missing_ids": missing[:10],
-        "unreadable_inputs": sum(1 for r in log if r.get("error")),
-        "ok": lead_ok and not allowed_outside and not not_blocked and not missing,
+        "unreadable_inputs": sum(1 for r in log if r.get("error")), "unreadable_log_lines": len(torn),
+        "ok": lead_ok and not allowed_outside and not not_blocked and not missing and not torn,
     }
 
 
@@ -433,6 +428,9 @@ def hook_problems(hooks):
     if hooks["write_calls_missing_from_hook_log"]:
         out.append(f"{hooks['write_calls_missing_from_hook_log']} write call(s) in the agents' transcripts are missing "
                    f"from the hook log")
+    if hooks["unreadable_log_lines"]:
+        out.append(f"the hook log has {hooks['unreadable_log_lines']} line(s) that could not be read, so the evidence is "
+                   f"incomplete")
     return out
 
 
@@ -519,7 +517,8 @@ def finish_cmd(a):
     log = load_hooklog(workdir)
     attempts, transcript_writes, executed = run_activity(run)
     hooks = hook_evidence(log, workdir, transcript_writes, executed)
-    report = {"run_id": run["run_id"], "sandbox": run["sandbox"], "hook_log": hooks, "groups": []}
+    report = {"run_id": run["run_id"], "sandbox": run["sandbox"], "routing": run.get("routing"),
+              "hook_log": hooks, "groups": []}
     for g in run["groups"]:
         c = check_group(g, results, attempts, organized(g, runs))
         if not hooks["ok"]:
@@ -546,6 +545,7 @@ def finish_cmd(a):
                "all safety checks passed" + (f", {n_reported} size or format problems reported below" if n_reported else ""))
     print(f"run {run['run_id']}: {verdict}"
           f"{' (sandbox: nothing written back)' if run['sandbox'] else ''}")
+    print(common.routing_line(run.get("routing")))
     print(blocked_line(hooks))
     print(f"hook log: {hooks['calls']} calls, lead ran only plugin scripts={hooks['lead_ran_only_plugin_scripts']}, "
           f"blocked agent shell={hooks['agent_shell_attempts_blocked']}, blocked network/MCP={hooks['network_or_mcp_attempts_blocked']}, "
@@ -575,7 +575,7 @@ def finish_cmd(a):
                   f"the staged result is kept at {nw['staged_result']} for the PO to decide")
     print(f"report: {fwd(os.path.join(workdir, 'run-report.json'))}")
     if any(c["written_back"] for c in report["groups"]):
-        print(f"to undo: /dreaming:restore {run['run_id']}")
+        print(f"to undo: /dreaming:restore --run {run['run_id']}")
     return 0 if report["complete"] else 1
 
 
@@ -609,8 +609,13 @@ def main(argv):
     ap = argparse.ArgumentParser(prog="dream.py")
     ap.add_argument("command", choices=["plan", "start", "finish", "restore"])
     ap.add_argument("session_id")
+    ap.add_argument("run_id", nargs="?", default=None,
+                    help="restore only: the run to undo, the same as --run (older versions printed the 'to undo:' line this way)")
     ap.add_argument("--projects-dir", default=None,
                     help="where to read session transcripts; default: <Claude Code config dir>/projects")
+    ap.add_argument("--config-dir", default=None,
+                    help="the Claude Code config dir whose settings and default memory location apply; default: the "
+                         "parent of --projects-dir when that is named projects, else the current config dir")
     ap.add_argument("--project", action="append", default=None)
     ap.add_argument("--session", action="append", default=None)
     ap.add_argument("--skip-project", action="append", default=None,
@@ -622,7 +627,13 @@ def main(argv):
     ap.add_argument("--force", action="store_true", help="restore: overwrite files changed after write-back")
     ap.add_argument("--continue", dest="continue_run", default=None,
                     help="start: pick up this unfinished run (same session or a new one); parts already analyzed are not redone")
-    a = ap.parse_args(argv)
+    a = ap.parse_intermixed_args(argv)  # a bare run id and the options may come in any order
+    if a.run_id:
+        if a.command != "restore":
+            ap.error(f"a bare run id is only for restore, not for {a.command}")
+        if a.run and a.run != a.run_id:
+            ap.error(f"restore got two different runs: --run {a.run} and {a.run_id}")
+        a.run = a.run_id
     return {"plan": plan_cmd, "start": start_cmd, "finish": finish_cmd, "restore": restore_cmd}[a.command](a)
 
 

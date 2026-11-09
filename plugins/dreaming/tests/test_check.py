@@ -105,7 +105,7 @@ class Compare(unittest.TestCase):
         self.assertEqual((t["before_stale"], t["after_stale"]), (2, 1))  # a, b before; c after
         self.assertEqual((t["unchanged"], t["unchanged_same_verdict"], t["unchanged_agreement"]), (1, 0, 0.0))
         self.assertEqual((t["changed_drop_rate"], t["unchanged_flip_rate"], t["b_diff"]), (1.0, 1.0, 0.0))
-        self.assertIsNone(t["passed"])  # threshold not fixed yet
+        self.assertEqual(t["verdict"], "not enough data")  # 2 changed old entries, 30 needed
         self.assertEqual((t["new_entries"], t["new_stale"]), (2, 1))
         self.assertEqual((t["changed"], t["changed_stale_before"], t["changed_stale_after"]), (2, 2, 0))
 
@@ -119,13 +119,13 @@ class Compare(unittest.TestCase):
         self.assertEqual((t["changed"], t["changed_stale_before"], t["changed_stale_after"]), (4, 3, 1))
         self.assertEqual((t["changed_drop_rate"], t["unchanged_flips"], t["unchanged_flip_rate"]), (0.5, 1, 0.25))
         self.assertEqual((t["b_diff"], t["unchanged_net_drop_rate"]), (0.25, 0.25))
-        self.assertIsNone(t["passed"])
-        with mock.patch.object(check, "B_MIN_DIFF", 0.2):
+        self.assertEqual(t["verdict"], "not enough data")
+        with mock.patch.object(check, "B_MIN_DIFF", 0.2), mock.patch.object(check, "B_MIN_CHANGED", 1):
             self.assertTrue(check.compare(before, after)["total"]["passed"])
-        with mock.patch.object(check, "B_MIN_DIFF", 0.3):
+        with mock.patch.object(check, "B_MIN_DIFF", 0.3), mock.patch.object(check, "B_MIN_CHANGED", 1):
             self.assertFalse(check.compare(before, after)["total"]["passed"])
         only_unchanged = report("check-2", "M", [entry(f"c{i}.md", "valid", f"c{i}") for i in range(4)])
-        with mock.patch.object(check, "B_MIN_DIFF", 0.0):
+        with mock.patch.object(check, "B_MIN_DIFF", 0.0), mock.patch.object(check, "B_MIN_CHANGED", 1):
             self.assertIsNone(check.compare(before, only_unchanged)["total"]["passed"])  # nothing changed: no verdict
 
     def test_entries_not_checked_in_one_run_are_left_out(self):
@@ -133,6 +133,41 @@ class Compare(unittest.TestCase):
         after = report("check-2", "M", [entry("a.md", None, checked=False), entry("b.md", "valid")])
         t = check.compare(before, after)["total"]
         self.assertEqual((t["compared"], t["not_checked_in_one_run"], t["before_stale"]), (1, 1, 0))
+
+
+class PassLine(unittest.TestCase):
+    """2.2 PBI-004 item 4 (PO): passed when drop rate - flip rate > 0; fewer than 30 changed old entries: not enough data."""
+
+    def runs(self, n_changed, drop_each):
+        before = report("check-1", "M", [entry(f"c{i}.md", "possibly_stale", f"c{i}") for i in range(n_changed)]
+                        + [entry(f"u{i}.md", "valid", f"u{i}") for i in range(30)])
+        after = report("check-2", "M", [entry(f"c{i}.md", "valid" if drop_each else "possibly_stale", f"c{i}x") for i in range(n_changed)]
+                       + [entry(f"u{i}.md", "valid", f"u{i}") for i in range(30)])
+        return check.compare(before, after)
+
+    def test_with_30_changed_old_entries_the_difference_must_be_above_zero(self):
+        t = self.runs(30, True)["total"]
+        self.assertEqual((t["verdict"], t["passed"], t["b_diff"]), ("passed", True, 1.0))
+        t = self.runs(30, False)["total"]  # nothing got better, nothing flipped: the difference is 0.0, not above 0
+        self.assertEqual((t["verdict"], t["passed"], t["b_diff"]), ("not passed", False, 0.0))
+
+    def test_fewer_than_30_is_not_enough_data_whatever_the_numbers(self):
+        c = self.runs(29, True)
+        self.assertEqual((c["total"]["verdict"], c["total"]["passed"]), ("not enough data", None))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            check.print_comparison(c)
+        self.assertIn("pass line B: drop rate - flip rate = 1.0, must exceed 0.0, with at least 30 changed old entries: "
+                      "not enough data (29 changed old entries, 30 needed)", out.getvalue())
+        self.assertIn("(rule set by the PO on 11-09, see 2.2 in the sprint log)", out.getvalue())
+
+    def test_the_report_says_so_in_chinese(self):
+        c = self.runs(29, True)
+        rep_ = {"run_id": "check-2", "today": "2026-11-09", "memory_from": None, "groups": [], "comparison": c,
+                "hook_log": {"lead_blocked_note": None}}
+        md = check.render_md(rep_)
+        self.assertIn("数据不足（改过的老条目 29 条）", md)
+        self.assertIn("PO 11-09 定，见冲刺日志 2.2", md)
 
 
 class MemoryFrom(unittest.TestCase):

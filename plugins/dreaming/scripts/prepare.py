@@ -135,7 +135,7 @@ def scan(projects, only, reg_sessions, reg_dirs, ledger, sessions=None, skip=Non
     return found
 
 
-def convert(e, owners, out_dir, budget, ledger):
+def convert(e, owners, out_dir, budget, ledger, route_dir=None):
     """Pass 2: one session -> its parts on disk; returns the manifest entry."""
     records, _ = tx.read_records(e["path"])
     info = tx.session_info(records, e["path"])
@@ -174,7 +174,7 @@ def convert(e, owners, out_dir, budget, ledger):
         return dict(e, status="skipped", reason=reason, stats=dict(stats))
     if not info["cwd"]:
         return dict(e, status="skipped", reason="no working directory, cannot route", stats=dict(stats))
-    mem, rule = routing.memory_dir(info["cwd"])
+    mem, rule = routing.memory_dir(info["cwd"], route_dir)
     e.update(memory_dir=mem, route_rule=rule)
     parts = sg.pack(threads, budget, first_summary)
     e["_ac3"] = sg.check_carried(parts, first_summary)
@@ -234,8 +234,10 @@ def check(entries, budget):
     return problems
 
 
-def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, sessions=None, skip=None, skip_sessions=None):
-    projects = common.resolve_projects_dir(projects_dir)
+def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, sessions=None, skip=None, skip_sessions=None,
+            config_dir=None):
+    projects = common.resolve_projects_dir(projects_dir, config_dir)
+    route_dir, route_source = common.routing_config_dir(projects_dir, config_dir)
     files = transcript_files(projects, only, sessions)
     tx.reset_reads(files)
     reg_sessions, reg_dirs = load_registry()
@@ -249,7 +251,7 @@ def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, session
         if idx is None:
             entries.append(e)
             continue
-        e = convert(e, owners, os.path.join(workdir, "transcripts", e["project_dir"]), budget, ledger)
+        e = convert(e, owners, os.path.join(workdir, "transcripts", e["project_dir"]), budget, ledger, route_dir)
         e["_rendered_uuids"] = {u for u, _, _ in idx if owners.get(u) == e["id"]} if e["status"] == "converted" else set()
         entries.append(e)
     # number events so every placement can be checked
@@ -275,7 +277,7 @@ def prepare(workdir, projects_dir=None, only=None, budget=SEGMENT_CHARS, session
         "thinking_chars_not_exported": stats.get("thinking_chars", 0),
     }
     manifest = {
-        "projects_dir": projects, "segment_chars": budget, "sessions_found": len(entries),
+        "projects_dir": projects, "routing": {"config_dir": route_dir, "source": route_source}, "segment_chars": budget, "sessions_found": len(entries),
         "counts": dict(counts), "reasons": dict(reasons),
         "unknown_record_types": {k: v for k, v in stats.items() if k.startswith("unknown:")},
         "dedup_dropped_records": sum(sum(e.get("dedup_dropped", {}).values()) for e in entries),
@@ -296,6 +298,9 @@ def main(argv):
     ap = argparse.ArgumentParser(prog="prepare.py")
     ap.add_argument("workdir")
     ap.add_argument("--projects-dir", default=None)
+    ap.add_argument("--config-dir", default=None,
+                    help="the Claude Code config dir whose settings and default memory location apply "
+                         "(default: the parent of --projects-dir when that is named projects, else the current one)")
     ap.add_argument("--project", action="append", default=None, help="only this project dir (repeatable)")
     ap.add_argument("--session", action="append", default=None, help="only this session id (repeatable)")
     ap.add_argument("--segment-chars", type=int, default=SEGMENT_CHARS)
@@ -305,8 +310,9 @@ def main(argv):
                     help="skip the session whose id starts with this text (repeatable)")
     a = ap.parse_args(argv)
     m = prepare(a.workdir, a.projects_dir, set(a.project) if a.project else None, a.segment_chars,
-                set(a.session) if a.session else None, a.skip_project, a.skip_session)
+                set(a.session) if a.session else None, a.skip_project, a.skip_session, a.config_dir)
     print(f"projects_dir: {m['projects_dir']}")
+    print(common.routing_line(m["routing"]))
     print(f"sessions found: {m['sessions_found']}  {m['counts']}")
     for k, v in sorted(m["reasons"].items()):
         print(f"  {v:4d}  {k}")
