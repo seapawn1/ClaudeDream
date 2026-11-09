@@ -24,7 +24,7 @@
 | 9.1 | `/dreaming:check --memory-from check-20261109-035849 --against check-20261109-035849 --project S--ClaudeDream --project S--ClaudeDream--claude-worktrees-sprint-01-first-dream --project S--IDEO-Scrum` | 5 分钟 | 末尾有 `check check-…: complete`。查的是第 7 项那份 25 条记忆的快照，不是现在的记忆；顺带和第 7 项 CLI 上的结论比 |
 | 9.2 | `/dreaming:check --memory-from check-20261109-035849 --project S--ClaudeDream --project S--ClaudeDream--claude-worktrees-sprint-01-first-dream --project S--IDEO-Scrum` | 5 分钟 | 同上，并多出 `compared with check-…` 一段（自动和 9.1 比） |
 | 9.3 | 同 9.2，原样再敲一次 | 5 分钟 | 同上（自动和 9.2 比） |
-| 9.4 | `/dreaming:dream --session 4b0764eb-f5e6-40c0-96b4-b9b92bc45cb5 --session 4f2a4d7f-5369-4491-b3aa-a55834dc5e8e --session e4c1071e-2296-4484-8666-bc9d602af995 --sandbox` | 15 分钟 | 末尾有 `run dream-…: all safety checks passed`（后面可能跟一句 `N size or format problems reported below`，再跟 `(sandbox: nothing written back)`）。这是 IDEO-Scrum 的 3 个小会话，共 5 段；沙盒，不写回。记下 `run dream-…` 这个编号，下面用 |
+| 9.4 | `/dreaming:dream --session 4b0764eb-f5e6-40c0-96b4-b9b92bc45cb5 --session 4f2a4d7f-5369-4491-b3aa-a55834dc5e8e --session e4c1071e-2296-4484-8666-bc9d602af995 --sandbox` | 15 分钟 | 末尾有 `run dream-…: all safety checks passed`（后面可能跟一句 `N size or format problems reported below`，再跟 `(sandbox: nothing written back)`）。这是 IDEO-Scrum 的 3 个小会话，第 9 项实际跑时共 8 段（会话 4b0764eb 还在用，从 1 段长到了 4 段）；沙盒，不写回。记下 `run dream-…` 这个编号，下面用 |
 | 9.5 | `/dreaming:check --memory-from <9.4 的编号>:base --project S--IDEO-Scrum --against none` | 5 分钟 | `complete`。查的是做梦前的 IDEO-Scrum 记忆 |
 | 9.6 | `/dreaming:check --memory-from <9.4 的编号> --project S--IDEO-Scrum` | 5 分钟 | `complete`，并和 9.5 比：输出里有 `pass line B` 一行 |
 
@@ -43,7 +43,11 @@
 `--skip-project` 跳过名字里含这段文字的项目目录：`ideo-s10-` 是 IDEO-Scrum 第 10 冲刺体验测试的临时目录，`-tmp-trig-` 是同一批测试的后台任务目录（trig-work 和 trig-smoke-s10）。跳过以后约 310 段，写 7 个记忆目录。
 另有 `--skip-session <会话编号开头几位>`，跳过单个会话，默认不用。stakeholder 会话 b1d91409（竞品调研，104 段，约占正式跑字符的 38%）要不要跳过，PO 看过第 8 项 organizer 怎么处理那份 204 KB 的竞品清单以后再定；要跳过，就在 10.1～10.3 三条命令后面都加 `--skip-session b1d91409`。
 
-**开跑前的内存**：任务管理器“性能 → 内存”里的“可用”至少要有 4 GB。依据是第 8 项在 CLI 上的实测：续跑开始时可用 4.4 GB，27 分钟里最低降到 3.6 GB，跑做梦的那个 claude 进程自己最多占 0.76 GB；上一次是在可用只剩约 2.9 GB 时被系统停掉的。桌面端的进程另算，第 9 项由 Developer 在后台用 `scrum\sprint-01-first-dream\memwatch.py` 采样（PO 不用管），第 10 项前再核一次这个数。不够就关掉 VS Code、Chrome 和 Sprint 01 用不到的会话，关完再看一次。
+**开跑前的内存**：任务管理器“性能 → 内存”里的“可用”至少要有 5 GB，第 10 项开跑前先看一眼。依据是实测：
+- 后台任务被系统停掉过两次，被停时可用内存约 2.9 GB（第 8 项，CLI 跑 16 个 agent）和约 2.2 GB（第 9 项 9.5 开始时）；可用 2.8 GB 时没被停。线大约在 3 GB。
+- 从开跑到最低点，可用内存会掉约 1 GB（CLI 第 8 项 4.4 → 3.6 GB；桌面端 9.1 新开会话那一刻约 −1 GB）。
+- 做梦跑的 agent 本身占得不多：9.4 里 8 个 agent 同时干活，claude 进程合计 4.6 GB，比空闲时（4.7–5.0 GB）还低。占内存的是常驻程序：桌面端 2.3 GB 加它的引擎 1.0 GB、命令行会话（Master、Developer、stakeholder）1.8 GB、VS Code 2.2 GB、系统服务 2.0 GB、Chrome（开着的话）1.1 GB。
+- 所以：3 GB（被停的线）加 1 GB（下降）再留 1 GB 余量，取 5 GB。不够就关掉 VS Code、Chrome 和 Master、Developer 会话（第 10 项开跑前本来就要关），关完再看一次。
 
 **中途断了怎么办**（10.2 要跑两个多小时）：
 - 额度用完：workflow 会自己暂停，等额度恢复后接着跑。会话别关，什么都不用敲。
