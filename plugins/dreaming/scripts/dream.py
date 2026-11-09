@@ -390,7 +390,8 @@ def check_group(g, results, attempts, is_organized=True):
     if not org:
         problems.append("not organized")
     if fmt_touched:
-        problems.append(f"{len(fmt_touched)} files the run added or changed are not in the native format")
+        shown = "; ".join(f"{f}: {', '.join(p[:2])}" for f, p in list(fmt_touched.items())[:5])
+        problems.append(f"{len(fmt_touched)} files the run added or changed are not in the native format ({shown})")
     if index_probs:
         problems.append("MEMORY.md: " + "; ".join(index_probs[:3]))
     if diff["lost"]:

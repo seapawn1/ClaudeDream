@@ -1,7 +1,7 @@
 {
   "name": "dreaming",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Let Claude Code dream: look back over past sessions and consolidate memory. Based on Anthropic's \"Dreaming with a dynamic workflow\" cookbook.",
   "author": {
     "name": "SeaPawn"

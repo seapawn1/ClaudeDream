@@ -102,6 +102,25 @@ class Journal(unittest.TestCase):
         self.assertFalse(dream.hook_evidence(old[:1], "W", n, ids)["ok"])
 
 
+class CheckGroup(unittest.TestCase):
+    def test_problem_line_names_the_file_and_the_reason(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            fm = "---\nname: {n}\ndescription: d\nmetadata:\n  type: project\n---\n\n"
+            base, stage = os.path.join(tmp, "base"), os.path.join(tmp, "stage")
+            write(os.path.join(base, "MEMORY.md"), "# Memory Index\n- [A](a.md) — a\n")
+            write(os.path.join(base, "a.md"), fm.format(n="a") + "fact\n")
+            write(os.path.join(stage, "MEMORY.md"), "# Memory Index\n- [A](a.md) — a\n- [Big](big.md) — b\n")
+            write(os.path.join(stage, "a.md"), fm.format(n="a") + "fact\n")
+            write(os.path.join(stage, "big.md"), fm.format(n="big") + ("x" * 100 + "\n") * 1100)
+            g = {"key": "G", "memory_dir": "M", "base": base, "stage": stage, "parts": []}
+            c = dream.check_group(g, {"organize G": {"index_entries": 2, "changes": []}}, {}, True)
+            self.assertFalse(c["passed"])
+            self.assertTrue(any("big.md: over 100KB" in p for p in c["problems"]), c["problems"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class Continue(unittest.TestCase):
     def setUp(self):
         self.now = time.time()

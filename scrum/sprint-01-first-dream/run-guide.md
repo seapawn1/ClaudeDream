@@ -9,11 +9,11 @@
 | 步 | 在哪 | 敲什么 | 看到什么才算对 |
 | --- | --- | --- | --- |
 | 0.1 | 终端，`cd` 到 dream-probe 目录 | `claude plugin marketplace update claude-dream` | 不报错 |
-| 0.2 | 同上 | `claude plugin update dreaming@claude-dream --scope local` | 提示更新到 0.2.0（现在装的是 0.1.0，是第 2 项冒烟时的旧代码） |
-| 0.3 | 同上 | `claude plugin list` | `dreaming@claude-dream` 一行显示 `Version: 0.2.0`；`C:\Users\seapawn\.claude\plugins\cache\claude-dream\dreaming\0.2.0` 存在 |
+| 0.2 | 同上 | `claude plugin update dreaming@claude-dream --scope local` | 提示更新到 0.2.1（现在装的是 0.1.0，是第 2 项冒烟时的旧代码） |
+| 0.3 | 同上 | `claude plugin list` | `dreaming@claude-dream` 一行显示 `Version: 0.2.1`；`C:\Users\seapawn\.claude\plugins\cache\claude-dream\dreaming\0.2.1` 存在 |
 | 0.4 | 桌面端 | 在 dream-probe 目录**新开**一个会话（已开着的会话还是旧代码） | 输入 `/dreaming:check` 时，参数提示里有 `--memory-from` |
 
-第 9、10 项进行期间，Developer 不再改 `plugins/dreaming/` 的代码。万一改了，先把 `plugins/dreaming/.claude-plugin/plugin.json` 的版本号升一级（比如 0.2.1），再重做 0.1～0.4：版本号不变，`claude plugin update` 会认为已是最新，不会重新复制到缓存，桌面端跑的还是旧代码。
+第 9、10 项进行期间，Developer 不再改 `plugins/dreaming/` 的代码。万一改了，先把 `plugins/dreaming/.claude-plugin/plugin.json` 的版本号升一级（比如 0.2.2），再重做 0.1～0.4：版本号不变，`claude plugin update` 会认为已是最新，不会重新复制到缓存，桌面端跑的还是旧代码。
 
 ## 1. 第 9 项：桌面端演练（PO，在 0.4 开的会话里，一条做完再敲下一条）
 
@@ -37,13 +37,13 @@
 | 步 | 敲什么 | 大约多久 | 看到什么才算对 |
 | --- | --- | --- | --- |
 | 10.1 | `/dreaming:check --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 15 分钟（约 130 条记忆、17 个 checker） | `complete`。这是做梦前的体检 |
-| 10.2 | `/dreaming:dream --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 2 小时（310 个 analyzer、7 个 organizer；按第 8 项 CLI 实测每分钟约 2.7 个推算，桌面端以第 9 项为准） | `all checks passed`，每个目录一行 `written back: N files`；末尾提示 `to undo: /dreaming:restore dream-…` |
+| 10.2 | `/dreaming:dream --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 2 小时 10 分（310 个 analyzer、7 个 organizer；按第 8 项 CLI 实测 193 段用了 79 分钟，即每分钟 2.4 段推算；跳过 b1d91409 则只有约 206 段，约 1 小时 25 分；桌面端的速度以第 9 项为准） | `all checks passed`，每个目录一行 `written back: N files`；末尾提示 `to undo: /dreaming:restore dream-…` |
 | 10.3 | `/dreaming:check --skip-project ideo-s10- --skip-project -tmp-trig-` | 约 20 分钟（做梦后条目会变多） | `complete`，并自动和 10.1 比：`pass line B` 一行就是“记忆新鲜”的结果 |
 
 `--skip-project` 跳过名字里含这段文字的项目目录：`ideo-s10-` 是 IDEO-Scrum 第 10 冲刺体验测试的临时目录，`-tmp-trig-` 是同一批测试的后台任务目录（trig-work 和 trig-smoke-s10）。跳过以后约 310 段，写 7 个记忆目录。
 另有 `--skip-session <会话编号开头几位>`，跳过单个会话，默认不用。stakeholder 会话 b1d91409（竞品调研，104 段，约占正式跑字符的 38%）要不要跳过，PO 看过第 8 项 organizer 怎么处理那份 204 KB 的竞品清单以后再定；要跳过，就在 10.1～10.3 三条命令后面都加 `--skip-session b1d91409`。
 
-**开跑前的内存**：任务管理器“性能 → 内存”里的“可用”至少要有 ＿＿ GB（第 8 项续跑时实测后填）。不够就关掉 VS Code、Chrome 和 Sprint 01 用不到的会话，关完再看一次。
+**开跑前的内存**：任务管理器“性能 → 内存”里的“可用”至少要有 4 GB。依据是第 8 项在 CLI 上的实测：续跑开始时可用 4.4 GB，27 分钟里最低降到 3.6 GB，跑做梦的那个 claude 进程自己最多占 0.76 GB；上一次是在可用只剩约 2.9 GB 时被系统停掉的。桌面端的进程另算，第 9 项由 Developer 在后台用 `scrum\sprint-01-first-dream\memwatch.py` 采样（PO 不用管），第 10 项前再核一次这个数。不够就关掉 VS Code、Chrome 和 Sprint 01 用不到的会话，关完再看一次。
 
 **中途断了怎么办**（10.2 要跑两个多小时）：
 - 额度用完：workflow 会自己暂停，等额度恢复后接着跑。会话别关，什么都不用敲。
