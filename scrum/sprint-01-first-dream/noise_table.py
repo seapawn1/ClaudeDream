@@ -24,17 +24,30 @@ def load(rid):
 
 
 def model_of(rid):
-    """Which model answered the run's checkers, from their own transcripts."""
+    """Which model answered the run's checkers, from their own transcripts. A session can hold several
+    runs, so only the workflow dirs started before the run's report was written count, and only those
+    started after the run itself began."""
+    import dream
     with open(os.path.join(common.RUNS_DIR, rid, "run.json"), encoding="utf-8") as f:
         run = json.load(f)
-    import dream
-    import re
+    rep = os.path.join(common.RUNS_DIR, rid, "check-report.json")
+    upper = os.path.getmtime(rep) if os.path.exists(rep) else None
     models = set()
-    for d in dream.workflow_dirs(run["session_id"], run["started_at"]):
-        for n in os.listdir(d):
-            if n.startswith("agent-") and n.endswith(".jsonl"):
-                with open(os.path.join(d, n), encoding="utf-8", errors="replace") as f:
-                    models |= set(re.findall(r'"model":"([^"]+)"', f.read()))
+    for s in dream.run_sessions(run):
+        for d in dream.workflow_dirs(s["session_id"], s["started_at"]):
+            times = [os.path.getmtime(os.path.join(d, n)) for n in os.listdir(d)]
+            if upper and min(times) > upper:
+                continue
+            for n in os.listdir(d):
+                if n.startswith("agent-") and n.endswith(".jsonl"):
+                    # the model that answered: assistant messages only (the request records name the requested model)
+                    with open(os.path.join(d, n), encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            if '"model"' not in line:
+                                continue
+                            m = (json.loads(line).get("message") or {})
+                            if m.get("role") == "assistant" and m.get("model"):
+                                models.add(m["model"])
     return ", ".join(sorted(models)) or "?"
 
 
