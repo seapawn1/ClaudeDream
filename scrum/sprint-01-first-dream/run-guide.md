@@ -9,11 +9,13 @@
 | 步 | 在哪 | 敲什么 | 看到什么才算对 |
 | --- | --- | --- | --- |
 | 0.1 | 终端，`cd` 到 dream-probe 目录 | `claude plugin marketplace update claude-dream` | 不报错 |
-| 0.2 | 同上 | `claude plugin update dreaming@claude-dream --scope local` | 提示更新到 0.2.1（现在装的是 0.1.0，是第 2 项冒烟时的旧代码） |
-| 0.3 | 同上 | `claude plugin list` | `dreaming@claude-dream` 一行显示 `Version: 0.2.1`；`C:\Users\seapawn\.claude\plugins\cache\claude-dream\dreaming\0.2.1` 存在 |
+| 0.2 | 同上 | `claude plugin update dreaming@claude-dream --scope local` | 提示更新到 0.2.2（桌面端现在装的是 0.2.1：第 9 项和 10.1 用的是它；0.2.2 只改了 hook 核对对 lead 的判法，见下面的说明） |
+| 0.3 | 同上 | `claude plugin list` | `dreaming@claude-dream` 一行显示 `Version: 0.2.2`；`C:\Users\seapawn\.claude\plugins\cache\claude-dream\dreaming\0.2.2` 存在 |
 | 0.4 | 桌面端 | 在 dream-probe 目录**新开**一个会话（已开着的会话还是旧代码） | 输入 `/dreaming:check` 时，参数提示里有 `--memory-from` |
 
-第 9、10 项进行期间，Developer 不再改 `plugins/dreaming/` 的代码。万一改了，先把 `plugins/dreaming/.claude-plugin/plugin.json` 的版本号升一级（比如 0.2.2），再重做 0.1～0.4：版本号不变，`claude plugin update` 会认为已是最新，不会重新复制到缓存，桌面端跑的还是旧代码。
+**为什么要再更新一次（0.2.1 → 0.2.2）**：10.1 第一次判了 INCOMPLETE，因为桌面端的 lead 在等 workflow 时多跑了一条 `ls`，被守卫拦下了，但核对把被拦的命令也算成失败；对 10.2（真实写回）这会让整个目录不写回。0.2.2 把被守卫拦下的 lead 命令单独列出、不算失败；放行的 lead 命令仍须全部是插件脚本。更新完以后，10.2 在**新开的会话**里敲，已开着的会话还是旧代码。10.1 不用重跑（第二次 `check-20261109-152119` 是 complete，做梦前的基线）。
+
+第 9、10 项进行期间，Developer 不再改 `plugins/dreaming/` 的代码。万一改了，先把 `plugins/dreaming/.claude-plugin/plugin.json` 的版本号升一级（比如 0.2.3），再重做 0.1～0.4：版本号不变，`claude plugin update` 会认为已是最新，不会重新复制到缓存，桌面端跑的还是旧代码。
 
 ## 1. 第 9 项：桌面端演练（PO，在 0.4 开的会话里，一条做完再敲下一条）
 
