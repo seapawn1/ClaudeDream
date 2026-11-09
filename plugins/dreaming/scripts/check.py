@@ -462,6 +462,9 @@ def print_comparison(c):
 def print_summary(report, hooks, writes, workdir):
     print(f"check {report['run_id']}: {'complete' if report['complete'] else 'INCOMPLETE'}"
           f"{'; failed batches: ' + ', '.join(report['failed_batches']) if report['failed_batches'] else ''}")
+    print(dream.blocked_line(hooks))
+    for p in dream.hook_problems(hooks):
+        print(f"HOOK PROBLEM: {p}")
     print(f"hook log: {hooks['calls']} calls, lead ran only plugin scripts={hooks['lead_ran_only_plugin_scripts']}, "
           f"blocked agent shell={hooks['agent_shell_attempts_blocked']}, blocked network/MCP={hooks['network_or_mcp_attempts_blocked']}, "
           f"agent write calls={writes}")
@@ -484,7 +487,8 @@ def render_md(report):
          f"日期 {report['today']}。只出报告，没有改任何记忆文件。结论经脚本复核：引用的原文不在所引文件里的证据不算；"
          "没有核实得了的证据，结论记为“无法判断”；“错误”缺新值、日期或出处的，记为“可能过时”。"
          "引文核对只证明引文确实在所引文件里，不证明 checker 的推理对。"
-         + (f"检查的不是真实记忆目录，而是 {report['memory_from']} 里的副本。" if report.get("memory_from") else ""), ""]
+         + (f"检查的不是真实记忆目录，而是 {report['memory_from']} 里的副本。" if report.get("memory_from") else "")
+         + (report["hook_log"]["lead_blocked_note"] + "。" if report["hook_log"].get("lead_blocked_note") else ""), ""]
     if "comparison" in report:
         c, t = report["comparison"], report["comparison"]["total"]
         L += ["## 与上次体检对比", "",

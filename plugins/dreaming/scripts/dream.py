@@ -29,6 +29,7 @@ import collections
 import glob
 import json
 import os
+import shlex
 import shutil
 import sys
 import time
@@ -351,16 +352,52 @@ def load_hooklog(workdir):
         return [json.loads(line) for line in f if line.strip()]
 
 
+def is_plugin_script(command):
+    """A lead shell command that runs a script file of this plugin with python: no shell syntax that could
+    chain or substitute commands, no -c or -m, and the first argument that is not an option is a script of
+    this plugin: a file named like one in its scripts directory, inside a directory named scripts (any install
+    path: a run continued on another install still passes). guard.decide, which allows or blocks the call at
+    run time, pins this plugin's own directory with a looser rule: python, the scripts path somewhere in the
+    command, none of ; & | ` $(."""
+    cmd = (command or "").strip()
+    if not cmd or any(c in cmd for c in ";&|`$(\n\r"):
+        return False
+    try:
+        parts = shlex.split(cmd.replace("\\", "/"))
+    except ValueError:
+        return False
+    if not parts or os.path.basename(parts[0]).lower() not in ("python", "python.exe", "python3", "python3.exe", "py", "py.exe"):
+        return False
+    i = 1
+    while i < len(parts) and parts[i].startswith("-"):
+        if parts[i] in ("-c", "-m"):
+            return False
+        i += 1
+    if i >= len(parts):
+        return False
+    script = os.path.normcase(os.path.normpath(parts[i]))
+    return (os.path.basename(os.path.dirname(script)) == "scripts"
+            and os.path.basename(script) in {n.lower() for n in os.listdir(HERE) if n.endswith(".py")})
+
+
 def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
     """What the hook log shows for PBI-002 acceptance criterion 3, and whether it saw every write
     call the agents' transcripts show (a hook that fails to read its input decides nothing). With the
-    calls' ids (the guard logs tool_use_id), every executed write call must be in the log by id."""
-    lead_shell = [r.get("command") for r in log if not r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")]
+    calls' ids (the guard logs tool_use_id), every executed write call must be in the log by id.
+
+    The lead may run only plugin scripts. A lead command the guard blocked did not run: it is listed, and
+    does not fail the evidence. Every lead command that was not blocked must be a plugin script."""
+    lead_calls = [r for r in log if not r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")]
+    lead_shell = [r.get("command") for r in lead_calls]
+    lead_blocked = [r.get("command") for r in lead_calls if r.get("decision") == "deny"]
+    lead_not_plugin = [r.get("command") for r in lead_calls
+                       if r.get("decision") != "deny" and not is_plugin_script(r.get("command"))]
     agent_shell = [r for r in log if r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")]
     network = [r for r in log if r.get("tool") in ("WebFetch", "WebSearch") or str(r.get("tool", "")).startswith("mcp__")]
     writes = [r for r in log if r.get("tool") in ("Write", "Edit", "MultiEdit", "NotebookEdit")]
     allowed_outside = [r for r in writes if r.get("decision") == "allow" and not common.within(r.get("path"), [workdir])]
-    lead_ok = all(d == "allow" for d in (r.get("decision") for r in log if not r.get("agent_id") and r.get("tool") in ("Bash", "PowerShell")))
+    lead_ok = not lead_not_plugin
+    not_blocked = [r for r in agent_shell + network if r.get("decision") != "deny"]
     agent_writes = [r for r in writes if r.get("agent_id")]
     if executed_ids is not None and agent_writes and all(r.get("tool_use_id") for r in agent_writes):
         missing = sorted(set(executed_ids) - {r["tool_use_id"] for r in agent_writes})
@@ -369,14 +406,43 @@ def hook_evidence(log, workdir, transcript_writes, executed_ids=None):
     return {
         "calls": len(log), "decisions": dict(collections.Counter(str(r.get("decision")) for r in log)),
         "lead_shell_commands": lead_shell, "lead_ran_only_plugin_scripts": lead_ok,
+        "lead_commands_blocked": lead_blocked, "lead_commands_not_plugin_scripts": lead_not_plugin,
+        "lead_blocked_note": (f"lead 试过 {len(lead_blocked)} 条非插件命令，全被守卫拦下："
+                              + "；".join(str(c)[:80] for c in lead_blocked[:3])) if lead_blocked else None,
+        "agent_or_network_calls_not_blocked": len(not_blocked),
         "agent_shell_attempts_blocked": len(agent_shell), "network_or_mcp_attempts_blocked": len(network),
         "writes": len(writes), "writes_allowed_outside_workdir": len(allowed_outside),
         "write_calls_in_agent_transcripts": transcript_writes,
         "write_calls_missing_from_hook_log": len(missing), "missing_ids": missing[:10],
         "unreadable_inputs": sum(1 for r in log if r.get("error")),
-        "ok": lead_ok and not allowed_outside and all(r.get("decision") == "deny" for r in agent_shell + network)
-              and not missing,
+        "ok": lead_ok and not allowed_outside and not not_blocked and not missing,
     }
+
+
+def hook_problems(hooks):
+    """What the hook log shows that really is a problem, one line each; nothing for a blocked command."""
+    out = []
+    if hooks["lead_commands_not_plugin_scripts"]:
+        shown = "; ".join(str(c)[:80] for c in hooks["lead_commands_not_plugin_scripts"][:3])
+        out.append(f"the lead ran {len(hooks['lead_commands_not_plugin_scripts'])} shell command(s) that are not plugin "
+                   f"scripts and were not blocked: {shown}")
+    if hooks["writes_allowed_outside_workdir"]:
+        out.append(f"{hooks['writes_allowed_outside_workdir']} write(s) outside the work dir were allowed, not blocked")
+    if hooks["agent_or_network_calls_not_blocked"]:
+        out.append(f"{hooks['agent_or_network_calls_not_blocked']} agent shell, network or MCP call(s) were not blocked")
+    if hooks["write_calls_missing_from_hook_log"]:
+        out.append(f"{hooks['write_calls_missing_from_hook_log']} write call(s) in the agents' transcripts are missing "
+                   f"from the hook log")
+    return out
+
+
+def blocked_line(hooks):
+    """The lead's blocked commands: visible, and not a failure."""
+    b = hooks.get("lead_commands_blocked") or []
+    if not b:
+        return "lead shell commands blocked by the guard: none"
+    shown = "; ".join(str(c)[:80] for c in b[:3])
+    return f"lead tried {len(b)} shell command(s) that are not plugin scripts; the guard blocked all of them: {shown}"
 
 
 def check_group(g, results, attempts, is_organized=True):
@@ -457,8 +523,7 @@ def finish_cmd(a):
     for g in run["groups"]:
         c = check_group(g, results, attempts, organized(g, runs))
         if not hooks["ok"]:
-            c["problems"].append("the hook log shows a shell, network or out-of-bounds write that was not blocked, "
-                                 "or it missed write calls the agents' transcripts show")
+            c["problems"] += hook_problems(hooks) or ["the hook log does not check out"]
             c["passed"] = False
         c["written_back"] = False
         if c["passed"] and not run["sandbox"]:
@@ -481,6 +546,7 @@ def finish_cmd(a):
                "all safety checks passed" + (f", {n_reported} size or format problems reported below" if n_reported else ""))
     print(f"run {run['run_id']}: {verdict}"
           f"{' (sandbox: nothing written back)' if run['sandbox'] else ''}")
+    print(blocked_line(hooks))
     print(f"hook log: {hooks['calls']} calls, lead ran only plugin scripts={hooks['lead_ran_only_plugin_scripts']}, "
           f"blocked agent shell={hooks['agent_shell_attempts_blocked']}, blocked network/MCP={hooks['network_or_mcp_attempts_blocked']}, "
           f"writes allowed outside the work dir={hooks['writes_allowed_outside_workdir']}, "

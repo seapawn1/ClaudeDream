@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import shutil
 import sys
@@ -150,6 +152,32 @@ class MemoryFrom(unittest.TestCase):
                     check.memory_sources("dream-1:other")
         finally:
             shutil.rmtree(runs, ignore_errors=True)
+
+
+class HookLine(unittest.TestCase):
+    SCRIPT = 'python -I "S:/x/plugins/dreaming/scripts/check.py" finish "s1"'
+
+    def summary(self, log):
+        hooks = dream.hook_evidence(log, "W", 0)
+        report = {"run_id": "check-1", "complete": hooks["ok"], "failed_batches": [], "groups": [], "today": "2026-11-09",
+                  "memory_from": None, "hook_log": hooks}
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            check.print_summary(report, hooks, 0, "W")
+        return out.getvalue(), check.render_md(report)
+
+    def test_a_blocked_lead_command_is_shown_and_the_check_is_complete(self):
+        text, md = self.summary([{"tool": "Bash", "decision": "deny", "command": "ls -la x"},
+                                 {"tool": "Bash", "decision": "allow", "command": self.SCRIPT}])
+        self.assertIn("check check-1: complete", text)
+        self.assertIn("lead tried 1 shell command(s) that are not plugin scripts; the guard blocked all of them: ls -la x", text)
+        self.assertNotIn("HOOK PROBLEM", text)
+        self.assertIn("lead 试过 1 条非插件命令，全被守卫拦下：ls -la x", md)
+
+    def test_a_lead_command_that_was_not_blocked_makes_the_check_incomplete_and_says_why(self):
+        text, md = self.summary([{"tool": "Bash", "decision": "allow", "command": "rm -rf x"}])
+        self.assertIn("check check-1: INCOMPLETE", text)
+        self.assertIn("HOOK PROBLEM: the lead ran 1 shell command(s) that are not plugin scripts and were not blocked: rm -rf x", text)
 
 
 class WorkflowDirs(unittest.TestCase):

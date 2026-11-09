@@ -199,6 +199,22 @@ class Finish(unittest.TestCase):
             pt.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def test_a_lead_command_the_guard_blocked_does_not_stop_the_write_back(self):
+        with open(os.path.join(self.work, "hooklog.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"tool": "Bash", "decision": "deny", "command": "ls -la /somewhere"}) + "\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            dream.main(["finish", "s1"])
+        text = out.getvalue()
+        self.assertTrue(os.path.exists(os.path.join(self.real_ok, "big.md")))  # the OK directory was written back
+        self.assertIn("lead tried 1 shell command(s) that are not plugin scripts; the guard blocked all of them: "
+                      "ls -la /somewhere", text)
+        self.assertNotIn("were not blocked", text)
+        report = json.load(open(os.path.join(self.work, "run-report.json"), encoding="utf-8"))
+        self.assertTrue(report["hook_log"]["ok"])
+        self.assertEqual(report["hook_log"]["lead_commands_blocked"], ["ls -la /somewhere"])
+        self.assertIn("lead 试过 1 条非插件命令，全被守卫拦下", report["hook_log"]["lead_blocked_note"])
+
     def test_reported_problems_are_written_back_and_safety_problems_are_not(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -214,6 +230,65 @@ class Finish(unittest.TestCase):
         report = json.load(open(os.path.join(self.work, "run-report.json"), encoding="utf-8"))
         self.assertEqual([g["written_back"] for g in report["groups"]], [True, False])
         self.assertGreaterEqual(report["reported_problems"], 1)
+
+
+class HookEvidence(unittest.TestCase):
+    SCRIPT = 'python -I "S:/x/plugins/dreaming/scripts/dream.py" finish "s1"'
+
+    @staticmethod
+    def rec(tool, decision, **kw):
+        return dict({"tool": tool, "decision": decision}, **kw)
+
+    def test_a_lead_command_the_guard_blocked_is_listed_and_does_not_fail(self):
+        log = [self.rec("Bash", "deny", command="ls -la x; ls y"), self.rec("Bash", "allow", command=self.SCRIPT)]
+        h = dream.hook_evidence(log, "W", 0)
+        self.assertTrue(h["ok"])
+        self.assertTrue(h["lead_ran_only_plugin_scripts"])
+        self.assertEqual(h["lead_commands_blocked"], ["ls -la x; ls y"])
+        self.assertEqual(dream.hook_problems(h), [])
+        self.assertIn("lead tried 1 shell command(s) that are not plugin scripts; the guard blocked all of them: ls -la x; ls y",
+                      dream.blocked_line(h))
+        self.assertEqual(dream.blocked_line(dream.hook_evidence([], "W", 0)), "lead shell commands blocked by the guard: none")
+
+    def test_an_agent_shell_the_guard_blocked_is_fine_and_one_it_did_not_block_fails(self):
+        blocked = [self.rec("Bash", "deny", agent_id="a1", command="ls"), self.rec("mcp__x__y", "deny", agent_id="a1")]
+        self.assertTrue(dream.hook_evidence(blocked, "W", 0)["ok"])
+        loose = [self.rec("Bash", "allow", agent_id="a1", command="ls")]
+        h = dream.hook_evidence(loose, "W", 0)
+        self.assertFalse(h["ok"])
+        self.assertEqual(dream.hook_problems(h), ["1 agent shell, network or MCP call(s) were not blocked"])
+
+    def test_a_lead_command_that_was_not_blocked_but_is_not_a_plugin_script_fails(self):
+        for cmd in ("rm -rf /x", 'python -c "print(1)"', self.SCRIPT + " && ls", "ls " + self.SCRIPT):
+            h = dream.hook_evidence([self.rec("Bash", "allow", command=cmd)], "W", 0)
+            self.assertFalse(h["ok"], cmd)
+            self.assertFalse(h["lead_ran_only_plugin_scripts"], cmd)
+            self.assertIn("not plugin scripts and were not blocked", " ".join(dream.hook_problems(h)))
+
+    def test_a_lead_shell_call_the_guard_never_decided_on_fails(self):
+        h = dream.hook_evidence([self.rec("Bash", None, command="ls")], "W", 0)
+        self.assertFalse(h["ok"])
+
+    def test_the_problem_text_names_what_was_really_not_blocked(self):
+        log = [self.rec("Write", "allow", agent_id="a1", path="C:/elsewhere/x.md", tool_use_id="t1")]
+        h = dream.hook_evidence(log, "W", 2, {"t1", "t2"})
+        self.assertEqual(dream.hook_problems(h),
+                         ["1 write(s) outside the work dir were allowed, not blocked",
+                          "1 write call(s) in the agents' transcripts are missing from the hook log"])
+
+    def test_the_evidence_check_accepts_script_runs_and_rejects_everything_else(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(dream.__file__))).replace("\\", "/")
+        accepted = (f'python -I "{root}/scripts/dream.py" finish "s"', f'python "{root}/scripts/check.py" start x --project p',
+                    f"python -I {root}/scripts/dream.py start s --sandbox", f"python {root}/scripts/prepare.py w --session a",
+                    'python -I "C:/another/install/scripts/dream.py" finish "s"')  # a run continued on another install
+        rejected = ("ls", "rm -rf x", f"python -c 'import os' {root}/scripts/",  # the guard lets this one through: it only
+                    f"python -m http.server {root}/scripts/",                     # looks for the scripts path in the command
+                    f'python -I "{root}/scripts/dream.py" finish "$(whoami)"', f"python {root}/scripts/dream.py start s; rm -rf x",
+                    f"python {root}/scripts/nothere.py", "python", "python -I /elsewhere/notscripts/dream.py finish s")
+        for cmd in accepted:
+            self.assertTrue(dream.is_plugin_script(cmd), cmd)
+        for cmd in rejected:
+            self.assertFalse(dream.is_plugin_script(cmd), cmd)
 
 
 class Continue(unittest.TestCase):
